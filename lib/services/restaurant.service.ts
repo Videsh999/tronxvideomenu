@@ -7,7 +7,7 @@ import type {
   CreateRestaurantInput,
   UpdateRestaurantInput,
 } from "@/lib/validations";
-import { resolveDishAddonGroups } from "@/lib/dish-addons";
+import { toCustomerDish } from "@/lib/customer-dish-data";
 import { normalizeRestaurant } from "@/lib/restaurant-normalize";
 import type { RestaurantDeleteResult } from "@/lib/repositories/types";
 import { mediaRepository } from "@/lib/repositories/media.repository";
@@ -143,10 +143,7 @@ export class RestaurantService {
       addonRepository.findGroupsByRestaurantId(restaurant.id),
     ]);
 
-    const dishes = rawDishes.map((dish) => ({
-      ...dish,
-      addonGroups: resolveDishAddonGroups(dish, addonGroups),
-    }));
+    const dishes = rawDishes.map((dish) => toCustomerDish(dish, addonGroups));
 
     return {
       restaurant: normalizeRestaurant(restaurant),

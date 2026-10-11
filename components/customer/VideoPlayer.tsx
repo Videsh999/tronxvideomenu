@@ -25,6 +25,15 @@ function chooseActivePlayer() {
   candidates.forEach((candidate, id) => candidate.setActive(id === next));
 }
 
+function isHlsSource(url: string) {
+  return (
+    /\.m3u8(?:$|[?#])/i.test(url) ||
+    /(?:^|[/?])f_m3u8(?:[,/?]|$)/i.test(url) ||
+    /[?&](?:format|f)=m3u8(?:&|$)/i.test(url) ||
+    /\/hls\//i.test(url)
+  );
+}
+
 type VideoPlayerProps = {
   videoUrl: string;
   posterUrl?: string;
@@ -54,11 +63,13 @@ function VideoPlayer({
   const videoRef = useRef<HTMLVideoElement>(null);
   const idRef = useRef(Symbol("customer-video"));
   const hlsRef = useRef<HlsType | null>(null);
+  const sourceUrlRef = useRef<string | null>(null);
   const activeRef = useRef(false);
   const [isActive, setIsActive] = useState(false);
   const [viewportRatio, setViewportRatio] = useState(0);
   const [hasFinePointer, setHasFinePointer] = useState(false);
-  const [hasError, setHasError] = useState(false);
+  const [errorUrl, setErrorUrl] = useState<string | null>(null);
+  const hasError = errorUrl === videoUrl;
 
   const destroyHls = useCallback(() => {
     hlsRef.current?.destroy();
@@ -114,10 +125,15 @@ function VideoPlayer({
 
   const play = useCallback(() => {
     const video = videoRef.current;
-    if (!video || !activeRef.current || !autoPlay) return;
-    video.muted = true;
-    void video.play().catch(() => undefined);
-  }, [autoPlay]);
+    if (!video || !activeRef.current || !autoPlay || sourceUrlRef.current !== videoUrl) return;
+    void video.play().catch((error: unknown) => {
+      if (!activeRef.current || sourceUrlRef.current !== videoUrl) return;
+      const blockedAutoplay = error instanceof DOMException && error.name === "NotAllowedError";
+      // On cards, reveal the image fallback. The detail modal has native controls
+      // so the customer can start playback with a direct gesture.
+      if (!blockedAutoplay || !controls) setErrorUrl(videoUrl);
+    });
+  }, [autoPlay, controls, videoUrl]);
 
   const loadVideo = useCallback(async () => {
     const video = videoRef.current;
@@ -127,9 +143,13 @@ function VideoPlayer({
       return;
     }
 
-    const isHls = /\.m3u8|\/hls\/|format=m3u8/i.test(videoUrl);
+    const isHls = isHlsSource(videoUrl);
     try {
-      if (isHls && video.canPlayType("application/vnd.apple.mpegurl")) {
+      if (
+        isHls &&
+        (video.canPlayType("application/vnd.apple.mpegurl") ||
+          video.canPlayType("application/x-mpegURL"))
+      ) {
         video.src = videoUrl;
         play();
         return;
@@ -137,16 +157,20 @@ function VideoPlayer({
 
       if (isHls) {
         const Hls = (await import("hls.js")).default;
-        if (!activeRef.current || !Hls.isSupported()) return;
+        if (!activeRef.current || sourceUrlRef.current !== videoUrl) return;
+        if (!Hls.isSupported()) {
+          setErrorUrl(videoUrl);
+          return;
+        }
         const hls = new Hls({ enableWorker: true, maxBufferLength: 30 });
         hlsRef.current = hls;
         hls.loadSource(videoUrl);
         hls.attachMedia(video);
         hls.on(Hls.Events.MANIFEST_PARSED, play);
         hls.on(Hls.Events.ERROR, (_event, data) => {
-          if (!data.fatal) return;
+          if (!data.fatal || sourceUrlRef.current !== videoUrl) return;
           destroyHls();
-          setHasError(true);
+          setErrorUrl(videoUrl);
         });
         return;
       }
@@ -154,9 +178,24 @@ function VideoPlayer({
       video.src = videoUrl;
       play();
     } catch {
-      setHasError(true);
+      setErrorUrl(videoUrl);
     }
   }, [destroyHls, play, videoUrl]);
+
+  useEffect(() => {
+    destroyHls();
+    sourceUrlRef.current = videoUrl;
+    const video = videoRef.current;
+    if (video) {
+      video.pause();
+      video.removeAttribute("src");
+      video.load();
+    }
+    return () => {
+      if (sourceUrlRef.current === videoUrl) sourceUrlRef.current = null;
+      destroyHls();
+    };
+  }, [destroyHls, videoUrl]);
 
   useEffect(() => {
     if (!isActive || hasError) {
@@ -201,7 +240,9 @@ function VideoPlayer({
         aria-label={title ? `${title} video preview` : "Dish video preview"}
         className="h-full w-full object-contain"
         onCanPlay={play}
-        onError={() => setHasError(true)}
+        onError={() => {
+          if (sourceUrlRef.current === videoUrl) setErrorUrl(videoUrl);
+        }}
       />
     </div>
   );

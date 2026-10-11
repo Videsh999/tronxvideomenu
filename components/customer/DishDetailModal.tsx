@@ -238,7 +238,7 @@ export default function DishDetailModal({
                     autoPlay
                     muted
                     loop
-                    controls={false}
+                    controls
                     playbackPriority
                     className="absolute inset-0 rounded-2xl bg-[var(--restaurant-secondary)]"
                   />
@@ -377,7 +377,11 @@ export default function DishDetailModal({
 
                         {/* Add-on Options List */}
                         <div className="divide-y divide-[#f0e5dc] pt-1">
-                          {group.addons.map((addon) => {
+                          {group.addons.length === 0 ? (
+                            <p className="px-2 py-4 text-sm text-[var(--restaurant-text-muted)]">
+                              No options are available in this group right now.
+                            </p>
+                          ) : group.addons.map((addon) => {
                             const isSelected = currentSelections.includes(
                               addon.id,
                             );
