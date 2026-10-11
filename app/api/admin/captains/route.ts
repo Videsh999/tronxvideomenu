@@ -4,6 +4,7 @@ import { captainService } from "@/lib/services/captain.service";
 import { restaurantService } from "@/lib/services/restaurant.service";
 import { requireRestaurantFeature } from "@/lib/feature-access";
 import { createCaptainSchema } from "@/lib/validations";
+import { CredentialEncryptionConfigurationError } from "@/lib/security/credential-crypto";
 
 async function authorize() {
   const { admin, error } = await requireRestaurantAdmin();
@@ -35,6 +36,7 @@ export async function POST(request: Request) {
   } catch (cause) {
     const validation = cause && typeof cause === "object" && "issues" in cause;
     const duplicate = cause && typeof cause === "object" && "code" in cause && cause.code === 11000;
-    return NextResponse.json({ success: false, error: validation ? "Validation failed" : duplicate ? "A Captain with this email already exists for this restaurant." : cause instanceof Error ? cause.message : "Unable to create Captain" }, { status: validation ? 400 : duplicate ? 409 : 500 });
+    const encryptionUnavailable = cause instanceof CredentialEncryptionConfigurationError;
+    return NextResponse.json({ success: false, error: validation ? "Validation failed" : duplicate ? "A Captain with this email already exists for this restaurant." : encryptionUnavailable ? cause.message : "Unable to create Captain" }, { status: validation ? 400 : duplicate ? 409 : encryptionUnavailable ? 503 : 500 });
   }
 }

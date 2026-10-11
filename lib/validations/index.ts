@@ -297,6 +297,16 @@ export const captainLoginSchema = z.object({
   password: z.string().min(1).max(256),
   restaurantSlug: z.string().trim().min(1).max(120),
 });
+export const restaurantAdminLoginSchema = z.object({
+  email: z.string().trim().email().max(254),
+  password: z.string().min(1).max(256),
+  restaurantSlug: z.string().trim().min(1).max(120).optional(),
+});
+export const restaurantAdminCredentialSchema = z.object({
+  email: z.string().trim().email().max(254),
+  password: z.string().min(8).max(256),
+}).strict();
+export const restaurantAdminStatusSchema = z.object({ isActive: z.boolean() }).strict();
 export const createCaptainSchema = z.object({
   name: z.string().trim().min(2).max(100),
   email: z.string().trim().email().max(254),

@@ -4,6 +4,7 @@ import { captainService } from "@/lib/services/captain.service";
 import { restaurantService } from "@/lib/services/restaurant.service";
 import { requireRestaurantFeature } from "@/lib/feature-access";
 import { resetCaptainPasswordSchema } from "@/lib/validations";
+import { CredentialEncryptionConfigurationError } from "@/lib/security/credential-crypto";
 
 export async function POST(request: Request, context: { params: Promise<{ captainId: string }> }) {
   const { admin, error } = await requireRestaurantAdmin();
@@ -17,7 +18,8 @@ export async function POST(request: Request, context: { params: Promise<{ captai
     const { captainId } = await context.params;
     const captain = await captainService.resetPassword(admin.restaurantId, captainId, input.password);
     return captain ? NextResponse.json({ success: true, data: captain }) : NextResponse.json({ success: false, error: "Captain not found" }, { status: 404 });
-  } catch {
-    return NextResponse.json({ success: false, error: "Invalid password reset" }, { status: 400 });
+  } catch (cause) {
+    const encryptionUnavailable = cause instanceof CredentialEncryptionConfigurationError;
+    return NextResponse.json({ success: false, error: encryptionUnavailable ? cause.message : "Invalid password reset" }, { status: encryptionUnavailable ? 503 : 400 });
   }
 }

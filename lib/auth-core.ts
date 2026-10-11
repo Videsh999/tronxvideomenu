@@ -14,6 +14,8 @@ type SessionPayload = {
   role: SessionRole;
   captainId?: string;
   captainUpdatedAt?: string;
+  restaurantAdminAccountId?: string;
+  restaurantAdminUpdatedAt?: string;
   restaurantId?: string;
   restaurantSlug?: string;
   exp: number;
@@ -67,6 +69,8 @@ export async function createAdminSession(
   restaurantSlug?: string,
   captainId?: string,
   captainUpdatedAt?: string,
+  restaurantAdminAccountId?: string,
+  restaurantAdminUpdatedAt?: string,
 ): Promise<string> {
   const payload = encodeBase64Url(
     JSON.stringify({
@@ -76,6 +80,8 @@ export async function createAdminSession(
       restaurantSlug,
       captainId,
       captainUpdatedAt,
+      restaurantAdminAccountId,
+      restaurantAdminUpdatedAt,
       exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS,
     } satisfies SessionPayload),
   );

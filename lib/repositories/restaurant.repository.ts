@@ -4,10 +4,16 @@ import { connectToDatabase } from "@/lib/db/mongodb";
 import {
   AddonModel,
   AddonGroupModel,
+  CaptainModel,
   CategoryModel,
   DishModel,
   MediaModel,
+  OrderCounterModel,
+  OrderModel,
+  ReservationModel,
+  RestaurantAdminAccountModel,
   RestaurantModel,
+  TableModel,
 } from "@/lib/db/models";
 import { toDomain } from "@/lib/db/mongo-mappers";
 
@@ -106,7 +112,7 @@ export class RestaurantRepository implements IRestaurantRepository {
     if (!updated) return null;
 
     try {
-      await Promise.all([
+      const migrationResults = await Promise.allSettled([
         CategoryModel.updateMany(
           { restaurantId: id },
           { $set: { restaurantId: newSlug } },
@@ -123,7 +129,15 @@ export class RestaurantRepository implements IRestaurantRepository {
           { restaurantId: id },
           { $set: { restaurantId: newSlug } },
         ),
+        TableModel.updateMany({ restaurantId: id }, { $set: { restaurantId: newSlug } }),
+        OrderModel.updateMany({ restaurantId: id }, { $set: { restaurantId: newSlug } }),
+        OrderCounterModel.updateMany({ restaurantId: id }, { $set: { restaurantId: newSlug } }),
+        ReservationModel.updateMany({ restaurantId: id }, { $set: { restaurantId: newSlug } }),
+        CaptainModel.updateMany({ restaurantId: id }, { $set: { restaurantId: newSlug } }),
+        RestaurantAdminAccountModel.updateMany({ restaurantId: id }, { $set: { restaurantId: newSlug } }),
       ]);
+      const migrationFailure = migrationResults.find((result) => result.status === "rejected");
+      if (migrationFailure?.status === "rejected") throw migrationFailure.reason;
     } catch (error) {
       await Promise.allSettled([
         CategoryModel.updateMany(
@@ -142,6 +156,12 @@ export class RestaurantRepository implements IRestaurantRepository {
           { restaurantId: newSlug },
           { $set: { restaurantId: id } },
         ),
+        TableModel.updateMany({ restaurantId: newSlug }, { $set: { restaurantId: id } }),
+        OrderModel.updateMany({ restaurantId: newSlug }, { $set: { restaurantId: id } }),
+        OrderCounterModel.updateMany({ restaurantId: newSlug }, { $set: { restaurantId: id } }),
+        ReservationModel.updateMany({ restaurantId: newSlug }, { $set: { restaurantId: id } }),
+        CaptainModel.updateMany({ restaurantId: newSlug }, { $set: { restaurantId: id } }),
+        RestaurantAdminAccountModel.updateMany({ restaurantId: newSlug }, { $set: { restaurantId: id } }),
         RestaurantModel.updateOne(
           { id: newSlug },
           {

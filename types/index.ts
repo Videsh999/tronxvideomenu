@@ -18,12 +18,68 @@ export type Captain = {
   name: string;
   email: string;
   passwordHash: string;
+  passwordCiphertext?: string;
+  passwordIv?: string;
+  passwordAuthTag?: string;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
 };
 
-export type CaptainView = Omit<Captain, "passwordHash">;
+export type CaptainView = Omit<Captain, "passwordHash" | "passwordCiphertext" | "passwordIv" | "passwordAuthTag"> & {
+  passwordConfigured: boolean;
+};
+
+export type RestaurantAdminAccount = {
+  id: string;
+  restaurantId: string;
+  email: string;
+  passwordHash: string;
+  passwordCiphertext?: string;
+  passwordIv?: string;
+  passwordAuthTag?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type RestaurantAdminCredentialStatus = {
+  restaurantId: string;
+  email: string | null;
+  isActive: boolean | null;
+  passwordConfigured: boolean;
+  credentialSource: "DATABASE" | "LEGACY_ENV" | "NONE";
+  needsPasswordSetup: boolean;
+  databaseAccountExists: boolean;
+  databaseLoginReady: boolean;
+  legacyFallbackRequired: boolean;
+  encryptionKeyStatus: "READY" | "MISSING" | "INVALID";
+  readiness:
+    | "NO_DATABASE_ACCOUNT"
+    | "LEGACY_FALLBACK_REQUIRED"
+    | "DATABASE_LOGIN_CONFIGURATION_INVALID"
+    | "DATABASE_ACCOUNT_INACTIVE"
+    | "RESTAURANT_INACTIVE"
+    | "DATABASE_PASSWORD_RECORD_INCOMPLETE"
+    | "DATABASE_LOGIN_READY_PASSWORD_UNRECOVERABLE"
+    | "DATABASE_LOGIN_READY_ENCRYPTION_KEY_MISSING"
+    | "DATABASE_LOGIN_READY_ENCRYPTION_KEY_INVALID"
+    | "DATABASE_LOGIN_AND_RECOVERY_CHECK_REQUIRED";
+};
+
+export type RestaurantAdminCredentialVerification = {
+  verified: boolean;
+  result:
+    | "VERIFIED_DATABASE_LOGIN_AND_RECOVERY"
+    | "NO_DATABASE_ACCOUNT"
+    | "INVALID_PASSWORD_HASH"
+    | "ACCOUNT_INACTIVE"
+    | "RESTAURANT_INACTIVE"
+    | "PASSWORD_NOT_RECOVERABLE"
+    | "ENCRYPTION_KEY_MISSING"
+    | "ENCRYPTION_KEY_INVALID"
+    | "STORED_CREDENTIALS_DO_NOT_MATCH";
+};
 
 export type RestaurantSocialLinks = {
   instagram?: string;

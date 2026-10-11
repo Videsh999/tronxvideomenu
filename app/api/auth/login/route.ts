@@ -6,6 +6,8 @@ import {
   SESSION_TTL_SECONDS,
 } from "@/lib/auth-core";
 import { restaurantService } from "@/lib/services/restaurant.service";
+import { restaurantAdminService } from "@/lib/services/restaurant-admin.service";
+import { restaurantAdminLoginSchema } from "@/lib/validations";
 
 export const runtime = "nodejs";
 
@@ -24,28 +26,6 @@ function normalizeRestaurantId(value: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
-}
-
-function getRestaurantAdminConfigs() {
-  const restaurantConfigs = [
-    {
-      restaurantSlug:
-        process.env.MOAI_KITCHEN_ADMIN_RESTAURANT_SLUG || "moai-kitchen",
-      email: process.env.MOAI_KITCHEN_ADMIN_EMAIL,
-      password: process.env.MOAI_KITCHEN_ADMIN_PASSWORD,
-    },
-    {
-      restaurantSlug:
-        process.env.NATIVE_SOUTH_ADMIN_RESTAURANT_SLUG || "native-south",
-      email: process.env.NATIVE_SOUTH_ADMIN_EMAIL,
-      password: process.env.NATIVE_SOUTH_ADMIN_PASSWORD,
-    },
-  ];
-
-  return restaurantConfigs.filter(
-    (config): config is typeof config & { email: string; password: string } =>
-      Boolean(config.email && config.password),
-  );
 }
 
 export async function POST(request: Request) {
@@ -108,59 +88,49 @@ export async function POST(request: Request) {
       );
     }
 
-    const restaurantAdmins = getRestaurantAdminConfigs();
-    const matchingRestaurantAdmin = restaurantAdmins.find(
-      (config) =>
-        matchesSecret(email, config.email) &&
-        matchesSecret(password, config.password),
-    );
+    const parsedLogin = restaurantAdminLoginSchema.safeParse({ email, password, restaurantSlug });
+    if (!parsedLogin.success) {
+      return NextResponse.json({ success: false, error: "Invalid email or password" }, { status: 401 });
+    }
+    const normalizedEmail = parsedLogin.data.email;
+    const requestedRestaurantSlug = parsedLogin.data.restaurantSlug
+      ? normalizeRestaurantId(parsedLogin.data.restaurantSlug)
+      : undefined;
+    let identity;
+    if (requestedRestaurantSlug) {
+      const restaurant = await restaurantService.getBySlug(requestedRestaurantSlug);
+      identity = restaurant
+        ? await restaurantAdminService.authenticateForRestaurant(restaurant, normalizedEmail, parsedLogin.data.password)
+        : null;
+    } else {
+      identity = await restaurantAdminService.authenticateWithoutRestaurant(normalizedEmail, parsedLogin.data.password);
+    }
 
-    if (!matchingRestaurantAdmin) {
+    if (!identity) {
       return NextResponse.json(
         { success: false, error: "Invalid email or password" },
         { status: 401 },
       );
     }
 
-    const requestedRestaurantSlug =
-      typeof restaurantSlug === "string"
-        ? normalizeRestaurantId(restaurantSlug)
-        : matchingRestaurantAdmin.restaurantSlug;
-
-    if (
-      requestedRestaurantSlug &&
-      requestedRestaurantSlug !== matchingRestaurantAdmin.restaurantSlug
-    ) {
-      return NextResponse.json(
-        { success: false, error: "Restaurant access denied" },
-        { status: 403 },
-      );
-    }
-
-    const restaurant = await restaurantService.getBySlug(
-      matchingRestaurantAdmin.restaurantSlug,
-    );
-    if (!restaurant || restaurant.isActive === false) {
-      return NextResponse.json(
-        { success: false, error: "Restaurant access is unavailable" },
-        { status: 403 },
-      );
-    }
-
     const session = await createAdminSession(
-      email,
+      identity.email,
       authSecret,
       "RESTAURANT_ADMIN",
-      restaurant.id,
-      restaurant.slug,
+      identity.restaurantId,
+      identity.restaurantSlug,
+      undefined,
+      undefined,
+      identity.accountId,
+      identity.accountUpdatedAt,
     );
     const response = NextResponse.json({
       success: true,
       data: {
-        email,
+        email: identity.email,
         role: "RESTAURANT_ADMIN",
-        restaurantId: restaurant.id,
-        restaurantSlug: restaurant.slug,
+        restaurantId: identity.restaurantId,
+        restaurantSlug: identity.restaurantSlug,
       },
     });
     response.cookies.set({

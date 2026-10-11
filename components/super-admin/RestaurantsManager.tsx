@@ -4,11 +4,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { Restaurant } from "@/types";
+import type { RestaurantAdminCredentialStatus } from "@/types";
+import RestaurantAdminCredentials from "@/components/super-admin/RestaurantAdminCredentials";
 
 export default function RestaurantsManager({
   restaurants,
+  credentialStatuses,
 }: {
   restaurants: Restaurant[];
+  credentialStatuses: RestaurantAdminCredentialStatus[];
 }) {
   const router = useRouter();
   const [pendingId, setPendingId] = useState<string | null>(null);
@@ -138,6 +142,10 @@ export default function RestaurantsManager({
               Delete
             </button>
           </div>
+          {credentialStatuses.find((status) => status.restaurantId === restaurant.id) && <RestaurantAdminCredentials
+            initialStatus={credentialStatuses.find((status) => status.restaurantId === restaurant.id)!}
+            restaurantSlug={restaurant.slug}
+          />}
         </article>
       ))}
       {items.length === 0 ? (

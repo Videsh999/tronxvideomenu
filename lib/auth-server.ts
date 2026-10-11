@@ -6,6 +6,8 @@ import { CAPTAIN_SESSION_COOKIE, RESTAURANT_ADMIN_SESSION_COOKIE, SUPER_ADMIN_SE
 import { restaurantService } from "@/lib/services/restaurant.service";
 import { captainService } from "@/lib/services/captain.service";
 import { requireRestaurantFeature } from "@/lib/feature-access";
+import { restaurantAdminService } from "@/lib/services/restaurant-admin.service";
+import { restaurantAdminRepository } from "@/lib/repositories/restaurant-admin.repository";
 import type { FeatureKey } from "@/types";
 
 export type AdminContext = {
@@ -13,26 +15,48 @@ export type AdminContext = {
   role: "SUPER_ADMIN" | "RESTAURANT_ADMIN" | "CAPTAIN";
   restaurantId?: string;
   restaurantSlug?: string;
+  restaurantAdminAccountId?: string;
+  restaurantAdminUpdatedAt?: string;
 };
 
-async function getContextFromCookie(cookieName: string): Promise<AdminContext | null> {
+async function getContextFromCookie(cookieName: string, expectedRole: AdminContext["role"]): Promise<AdminContext | null> {
   const cookieStore = await cookies();
   const session = await readAdminSession(
     cookieStore.get(cookieName)?.value,
     process.env.AUTH_SECRET,
   );
-  if (!session) return null;
+  if (!session || session.role !== expectedRole) return null;
 
   return {
     email: session.email,
     role: session.role,
     restaurantId: session.restaurantId,
     restaurantSlug: session.restaurantSlug ?? session.restaurantId,
+    restaurantAdminAccountId: session.restaurantAdminAccountId,
+    restaurantAdminUpdatedAt: session.restaurantAdminUpdatedAt,
   };
 }
 
-export const getRestaurantAdminContext = () => getContextFromCookie(RESTAURANT_ADMIN_SESSION_COOKIE);
-export const getSuperAdminContext = () => getContextFromCookie(SUPER_ADMIN_SESSION_COOKIE);
+export async function getRestaurantAdminContext() {
+  const context = await getContextFromCookie(RESTAURANT_ADMIN_SESSION_COOKIE, "RESTAURANT_ADMIN");
+  if (!context || !context.restaurantId) return null;
+  if (context.restaurantAdminAccountId) {
+    if (!context.restaurantAdminUpdatedAt || !await restaurantAdminService.isSessionCurrent(
+      context.restaurantId,
+      context.restaurantAdminAccountId,
+      context.email,
+      context.restaurantAdminUpdatedAt,
+    )) return null;
+  } else {
+    // Older signed sessions may have been created before the account was
+    // migrated to MongoDB. Once a DB account exists, honor its active state.
+    const account = await restaurantAdminRepository.findByRestaurantId(context.restaurantId);
+    if (account && (!account.isActive || account.email !== context.email.trim().toLowerCase())) return null;
+  }
+  return context;
+}
+
+export const getSuperAdminContext = () => getContextFromCookie(SUPER_ADMIN_SESSION_COOKIE, "SUPER_ADMIN");
 
 export async function requireCaptain(requiredFeature?: FeatureKey) {
   const cookieStore = await cookies();

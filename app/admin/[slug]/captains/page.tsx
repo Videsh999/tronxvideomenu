@@ -14,5 +14,5 @@ export default async function CaptainsPage({ params }: { params: Promise<{ slug:
   if (!restaurant || restaurant.slug !== slug) redirect("/admin/login");
   const feature = requireRestaurantFeature(restaurant, "CAPTAIN_ACCESS");
   if (!feature.allowed) notFound();
-  return <CaptainManagement />;
+  return <CaptainManagement restaurantSlug={restaurant.slug} />;
 }

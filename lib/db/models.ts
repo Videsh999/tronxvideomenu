@@ -11,6 +11,7 @@ import type {
   RestaurantTheme,
   RestaurantWifiConfiguration,
   Captain,
+  RestaurantAdminAccount,
   Reservation,
 } from "@/types";
 
@@ -284,6 +285,9 @@ const captainSchema = new Schema<Captain>(
     name: { type: String, required: true },
     email: { type: String, required: true },
     passwordHash: { type: String, required: true, select: false },
+    passwordCiphertext: { type: String, select: false },
+    passwordIv: { type: String, select: false },
+    passwordAuthTag: { type: String, select: false },
     isActive: { type: Boolean, required: true, default: true },
     createdAt: { type: String, required: true },
     updatedAt: { type: String, required: true },
@@ -291,6 +295,22 @@ const captainSchema = new Schema<Captain>(
   { ...baseOptions, collection: "captains" },
 );
 captainSchema.index({ restaurantId: 1, email: 1 }, { unique: true });
+const restaurantAdminAccountSchema = new Schema<RestaurantAdminAccount>(
+  {
+    id: { type: String, required: true, unique: true, index: true },
+    restaurantId: { type: String, required: true },
+    email: { type: String, required: true, lowercase: true, trim: true },
+    passwordHash: { type: String, required: true, select: false },
+    passwordCiphertext: { type: String, select: false },
+    passwordIv: { type: String, select: false },
+    passwordAuthTag: { type: String, select: false },
+    isActive: { type: Boolean, required: true, default: true },
+    createdAt: { type: String, required: true },
+    updatedAt: { type: String, required: true },
+  },
+  { ...baseOptions, collection: "restaurantAdminAccounts" },
+);
+restaurantAdminAccountSchema.index({ restaurantId: 1 }, { unique: true });
 const reservationSchema = new Schema<Reservation>(
   {
     id: { type: String, required: true, unique: true, index: true },
@@ -345,6 +365,9 @@ export const OrderCounterModel =
 export const CaptainModel =
   mongoose.models.Captain ??
   mongoose.model<Captain>("Captain", captainSchema);
+export const RestaurantAdminAccountModel =
+  mongoose.models.RestaurantAdminAccount ??
+  mongoose.model<RestaurantAdminAccount>("RestaurantAdminAccount", restaurantAdminAccountSchema);
 export const ReservationModel =
   mongoose.models.Reservation ??
   mongoose.model<Reservation>("Reservation", reservationSchema);

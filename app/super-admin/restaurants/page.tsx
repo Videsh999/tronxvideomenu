@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import RestaurantsManager from "@/components/super-admin/RestaurantsManager";
 import { getSuperAdminContext } from "@/lib/auth-server";
 import { restaurantService } from "@/lib/services/restaurant.service";
+import { restaurantAdminService } from "@/lib/services/restaurant-admin.service";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +13,7 @@ export default async function SuperAdminRestaurantsPage() {
     redirect("/super-admin/login");
 
   const restaurants = await restaurantService.getAll();
+  const credentialStatuses = await restaurantAdminService.getCredentialStatuses(restaurants);
   return (
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
@@ -28,7 +30,7 @@ export default async function SuperAdminRestaurantsPage() {
           + Add Restaurant
         </Link>
       </header>
-      <RestaurantsManager restaurants={restaurants} />
+      <RestaurantsManager restaurants={restaurants} credentialStatuses={credentialStatuses} />
     </div>
   );
 }

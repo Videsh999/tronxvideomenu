@@ -9,13 +9,21 @@ const toCaptain = (value: unknown) => toDomain<Captain>(value);
 export class CaptainRepository {
   async findByRestaurantId(restaurantId: string) {
     await connectToDatabase();
-    const captains = await CaptainModel.find({ restaurantId }).sort({ name: 1 }).lean();
+    const captains = await CaptainModel.find({ restaurantId }).select("+passwordCiphertext +passwordIv +passwordAuthTag").sort({ name: 1 }).lean();
     return captains.map(toCaptain);
   }
 
   async findById(id: string) {
     await connectToDatabase();
-    const captain = await CaptainModel.findOne({ id }).select("+passwordHash").lean();
+    const captain = await CaptainModel.findOne({ id }).lean();
+    return captain ? toCaptain(captain) : null;
+  }
+
+  async findCredentialsByRestaurant(restaurantId: string, id: string) {
+    await connectToDatabase();
+    const captain = await CaptainModel.findOne({ restaurantId, id })
+      .select("+passwordCiphertext +passwordIv +passwordAuthTag")
+      .lean();
     return captain ? toCaptain(captain) : null;
   }
 
@@ -32,13 +40,13 @@ export class CaptainRepository {
     return toCaptain(captain.toObject());
   }
 
-  async updateForRestaurant(restaurantId: string, id: string, patch: Partial<Pick<Captain, "isActive" | "passwordHash">>) {
+  async updateForRestaurant(restaurantId: string, id: string, patch: Partial<Pick<Captain, "isActive" | "passwordHash" | "passwordCiphertext" | "passwordIv" | "passwordAuthTag">>) {
     await connectToDatabase();
     const captain = await CaptainModel.findOneAndUpdate(
       { restaurantId, id },
       { $set: { ...patch, updatedAt: new Date().toISOString() } },
       { new: true, runValidators: true },
-    ).select("+passwordHash").lean();
+    ).select("+passwordHash +passwordCiphertext +passwordIv +passwordAuthTag").lean();
     return captain ? toCaptain(captain) : null;
   }
 }

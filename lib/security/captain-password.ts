@@ -10,9 +10,14 @@ export async function hashCaptainPassword(password: string) {
   return `scrypt$${salt}$${derived.toString("hex")}`;
 }
 
-export async function verifyCaptainPassword(password: string, encoded: string) {
+export function isValidScryptPasswordHash(encoded: string) {
   const [algorithm, salt, hash] = encoded.split("$");
-  if (algorithm !== "scrypt" || !salt || !/^[a-f\d]{128}$/i.test(hash ?? "")) return false;
+  return algorithm === "scrypt" && Boolean(salt) && /^[a-f\d]{128}$/i.test(hash ?? "");
+}
+
+export async function verifyCaptainPassword(password: string, encoded: string) {
+  if (!isValidScryptPasswordHash(encoded)) return false;
+  const [, salt, hash] = encoded.split("$");
   const expected = Buffer.from(hash, "hex");
   const actual = (await scrypt(password, salt, expected.length)) as Buffer;
   return expected.length === actual.length && timingSafeEqual(expected, actual);
