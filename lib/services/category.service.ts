@@ -6,6 +6,8 @@ import type {
   UpdateCategoryInput,
 } from "@/lib/validations";
 
+import { dishRepository } from "@/lib/repositories/dish.repository";
+
 export class CategoryService {
   async getByRestaurantId(restaurantId: string): Promise<Category[]> {
     return categoryRepository.findByRestaurantId(restaurantId);
@@ -31,6 +33,10 @@ export class CategoryService {
   }
 
   async delete(id: string): Promise<boolean> {
+    const dishes = await dishRepository.findByCategoryId(id);
+    if (dishes.length > 0) {
+      throw new Error("Cannot delete category with active dishes. Reassign or delete dishes first.");
+    }
     return categoryRepository.delete(id);
   }
 }

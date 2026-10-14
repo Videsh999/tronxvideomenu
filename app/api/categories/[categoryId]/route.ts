@@ -101,9 +101,10 @@ export async function DELETE(
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to delete category";
+    const isConflict = message.includes("Cannot delete category with active dishes");
     return NextResponse.json(
       { success: false, error: message },
-      { status: 500 },
+      { status: isConflict ? 409 : 500 },
     );
   }
 }

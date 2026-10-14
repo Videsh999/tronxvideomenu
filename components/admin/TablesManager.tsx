@@ -1,11 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
 import type { RestaurantTable } from "@/types";
 import type { OrderSummary, TableStatus } from "@/types";
 import { api } from "@/lib/api";
 import { Copy, Download, Pencil, Plus, QrCode, Trash2 } from "lucide-react";
+
+import QRCode from "qrcode";
 
 export default function TablesManager({ initialTables, initialOrders = [], restaurantSlug, orderManagementEnabled = true, tableOrderingEnabled = true }: { initialTables: RestaurantTable[]; initialOrders?: OrderSummary[]; restaurantSlug: string; orderManagementEnabled?: boolean; tableOrderingEnabled?: boolean }) {
   const [tables, setTables] = useState(initialTables);
@@ -14,6 +16,7 @@ export default function TablesManager({ initialTables, initialOrders = [], resta
   const [label, setLabel] = useState("");
   const [capacity, setCapacity] = useState("4");
   const [qrTable, setQrTable] = useState<string | null>(null);
+  const [qrDataUrl, setQrDataUrl] = useState<string>("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [origin, setOrigin] = useState("");
@@ -39,11 +42,29 @@ export default function TablesManager({ initialTables, initialOrders = [], resta
     return () => window.removeEventListener("focus", updateOrigin);
   }, []);
   const menuUrl = useCallback((number: number) => `${origin}/menu/${encodeURIComponent(restaurantSlug)}?table=${number}`, [origin, restaurantSlug]);
-  const qrImageUrl = useMemo(() => {
+
+  useEffect(() => {
     const table = tables.find((entry) => entry.id === qrTable);
-    return table ? `https://api.qrserver.com/v1/create-qr-code/?size=280x280&margin=12&download=1&data=${encodeURIComponent(menuUrl(table.tableNumber))}` : "";
-  // Origin is intentionally read in the browser so printed codes use the current public host.
-  }, [qrTable, tables, menuUrl]);
+    if (!table || !origin) return;
+    let alive = true;
+    void QRCode.toDataURL(menuUrl(table.tableNumber), {
+      width: 280,
+      margin: 2,
+      color: {
+        dark: "#000000",
+        light: "#ffffff",
+      },
+    })
+      .then((url) => {
+        if (alive) setQrDataUrl(url);
+      })
+      .catch(() => {
+        if (alive) setQrDataUrl("");
+      });
+    return () => {
+      alive = false;
+    };
+  }, [menuUrl, origin, qrTable, tables]);
 
   const create = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault(); setBusy(true); setMessage("");
@@ -128,7 +149,7 @@ export default function TablesManager({ initialTables, initialOrders = [], resta
         <button onClick={() => void toggle(table)} className="h-9 rounded-lg border border-white/15 px-3 text-xs text-white/70 hover:bg-white/10">{table.isActive ? "Deactivate" : "Activate"}</button>
         <button onClick={() => void remove(table)} aria-label={`Delete table ${table.tableNumber}`} className="grid h-9 w-9 place-items-center rounded-lg border border-rose-400/20 text-rose-300 hover:bg-rose-400/10"><Trash2 className="h-4 w-4" /></button>
       </div>
-      {tableOrderingEnabled && qrTable === table.id && <div className="w-full border-t border-white/10 pt-4 sm:basis-full sm:flex sm:items-center sm:gap-5"><Image unoptimized src={qrImageUrl} alt={`QR code for Table ${table.tableNumber}`} width={180} height={180} referrerPolicy="no-referrer" className="rounded-xl bg-white p-2" /><div className="mt-3 min-w-0 sm:mt-0"><p className="font-semibold text-white">Table {table.tableNumber} QR</p>{!table.isActive && <p className="mt-1 text-xs text-amber-300">This table is inactive, so new orders are blocked.</p>}<a className="mt-2 block break-all text-xs text-sky-300 underline" href={menuUrl(table.tableNumber)} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">{menuUrl(table.tableNumber)}</a><a href={qrImageUrl} download={`table-${table.tableNumber}-qr.png`} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer" className="mt-3 inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-xs font-bold text-black"><Download className="h-4 w-4" />Download QR</a></div></div>}
+      {tableOrderingEnabled && qrTable === table.id && <div className="w-full border-t border-white/10 pt-4 sm:basis-full sm:flex sm:items-center sm:gap-5">{qrDataUrl ? <Image unoptimized src={qrDataUrl} alt={`QR code for Table ${table.tableNumber}`} width={180} height={180} className="rounded-xl bg-white p-2" /> : <div className="grid h-[180px] w-[180px] place-items-center rounded-xl bg-white/10 text-xs text-white/50">Generating QR...</div>}<div className="mt-3 min-w-0 sm:mt-0"><p className="font-semibold text-white">Table {table.tableNumber} QR</p>{!table.isActive && <p className="mt-1 text-xs text-amber-300">This table is inactive, so new orders are blocked.</p>}<a className="mt-2 block break-all text-xs text-sky-300 underline" href={menuUrl(table.tableNumber)} target="_blank" rel="noopener noreferrer">{menuUrl(table.tableNumber)}</a>{qrDataUrl && <a href={qrDataUrl} download={`table-${table.tableNumber}-qr.png`} className="mt-3 inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-xs font-bold text-black"><Download className="h-4 w-4" />Download QR</a>}</div></div>}
     </article>;
     })}</div>
     {tables.length === 0 && <p className="rounded-2xl border border-dashed border-white/15 p-10 text-center text-sm text-white/45">No tables created yet.</p>}

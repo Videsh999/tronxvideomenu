@@ -144,6 +144,22 @@ async function purgeLegacyRestaurantData(): Promise<void> {
 }
 
 async function seed(): Promise<void> {
+  const isProduction =
+    process.env.NODE_ENV === "production" ||
+    (process.env.MONGODB_URI &&
+      !process.env.MONGODB_URI.includes("localhost") &&
+      !process.env.MONGODB_URI.includes("127.0.0.1") &&
+      !process.env.MONGODB_URI.includes("test"));
+
+  if (isProduction && process.env.ALLOW_PRODUCTION_SEED !== "true") {
+    console.error(
+      "\n⛔ SAFEGUARD BLOCKED SEEDING:\n" +
+        "Attempted to run seed script against a production or non-local database.\n" +
+        "To explicitly proceed, you must set ALLOW_PRODUCTION_SEED=true in your environment.\n",
+    );
+    process.exit(1);
+  }
+
   await connectToDatabase();
   const now = new Date().toISOString();
 

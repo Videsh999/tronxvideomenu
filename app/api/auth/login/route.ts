@@ -28,6 +28,16 @@ function normalizeRestaurantId(value: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
+import { loginRateLimiter } from "@/lib/security/login-rate-limiter";
+
+function getClientIp(request: Request): string {
+  const forwarded = request.headers.get("x-forwarded-for");
+  if (forwarded) {
+    return forwarded.split(",")[0].trim();
+  }
+  return request.headers.get("x-real-ip") ?? "unknown-ip";
+}
+
 export async function POST(request: Request) {
   try {
     const { email, password, role, restaurantSlug } =
@@ -88,8 +98,29 @@ export async function POST(request: Request) {
       );
     }
 
+    const clientIp = getClientIp(request);
+    const normalizedAttemptEmail = email.trim().toLowerCase();
+    const rateLimitKey = `admin-login:${normalizedAttemptEmail}:${clientIp}`;
+
+    const rateLimit = await loginRateLimiter.check(rateLimitKey);
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Too many failed login attempts. Please try again in ${rateLimit.retryAfterSeconds ?? 900} seconds.`,
+        },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(rateLimit.retryAfterSeconds ?? 900),
+          },
+        },
+      );
+    }
+
     const parsedLogin = restaurantAdminLoginSchema.safeParse({ email, password, restaurantSlug });
     if (!parsedLogin.success) {
+      await loginRateLimiter.recordFailure(rateLimitKey);
       return NextResponse.json({ success: false, error: "Invalid email or password" }, { status: 401 });
     }
     const normalizedEmail = parsedLogin.data.email;
@@ -107,11 +138,14 @@ export async function POST(request: Request) {
     }
 
     if (!identity) {
+      await loginRateLimiter.recordFailure(rateLimitKey);
       return NextResponse.json(
         { success: false, error: "Invalid email or password" },
         { status: 401 },
       );
     }
+
+    await loginRateLimiter.reset(rateLimitKey);
 
     const session = await createAdminSession(
       identity.email,
