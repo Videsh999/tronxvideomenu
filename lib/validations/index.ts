@@ -79,7 +79,7 @@ export const restaurantAdminProfileSchema = updateRestaurantSchema.omit({
   subscriptionEnabled: true,
   featureOverrides: true,
   theme: true,
-});
+}).strict();
 export type CreateRestaurantInput = z.infer<typeof restaurantSchema>;
 export type UpdateRestaurantInput = z.infer<typeof updateRestaurantSchema>;
 export type RestaurantAdminProfileInput = z.infer<
