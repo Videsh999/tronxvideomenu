@@ -2,7 +2,14 @@ import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypt
 import { orderRepository } from "@/lib/repositories/order.repository";
 import { restaurantService } from "@/lib/services/restaurant.service";
 import { tableRepository } from "@/lib/repositories/table.repository";
-import type { OrderStatus, RestaurantOrder } from "@/types";
+import type {
+  OrderStatus,
+  RestaurantOrder,
+  PaymentMethod,
+  PaymentStatus,
+  PaymentAuditActor,
+  PaymentAuditEvent,
+} from "@/types";
 import type { PlaceOrderInput } from "@/lib/validations";
 
 const allowedTransitions: Record<OrderStatus, OrderStatus[]> = {
@@ -18,7 +25,7 @@ export class OrderServiceError extends Error {
   constructor(message: string, readonly statusCode = 409) { super(message); }
 }
 
-const customerView = (order: RestaurantOrder) => ({
+const staffOrderView = (order: RestaurantOrder) => ({
   id: order.id,
   orderNumber: order.orderNumber,
   tableNumber: order.tableNumber,
@@ -26,18 +33,36 @@ const customerView = (order: RestaurantOrder) => ({
   items: order.items,
   subtotal: order.subtotal,
   total: order.total,
+  payment: order.payment ?? { status: "NOT_RECORDED", auditTrail: [] },
+  createdAt: order.createdAt,
+  updatedAt: order.updatedAt,
+});
+
+const customerOrderView = (order: RestaurantOrder) => ({
+  id: order.id,
+  orderNumber: order.orderNumber,
+  tableNumber: order.tableNumber,
+  status: order.status,
+  items: order.items,
+  subtotal: order.subtotal,
+  total: order.total,
+  payment: {
+    status: order.payment?.status ?? "NOT_RECORDED",
+    ...(order.payment?.method ? { method: order.payment.method } : {}),
+    ...(order.payment?.recordedAt ? { recordedAt: order.payment.recordedAt } : {}),
+  },
   createdAt: order.createdAt,
   updatedAt: order.updatedAt,
 });
 
 export class OrderService {
   async listForRestaurant(restaurantId: string) {
-    return (await orderRepository.findByRestaurantId(restaurantId)).map(customerView);
+    return (await orderRepository.findByRestaurantId(restaurantId)).map(staffOrderView);
   }
 
   async getForRestaurant(restaurantId: string, id: string) {
     const order = await orderRepository.findByRestaurantAndId(restaurantId, id);
-    return order ? customerView(order) : null;
+    return order ? staffOrderView(order) : null;
   }
 
   async createPublic(input: PlaceOrderInput) {
@@ -104,8 +129,106 @@ export class OrderService {
       items,
       subtotal,
       total: subtotal,
+      payment: {
+        status: "UNPAID",
+        auditTrail: [],
+      },
     });
-    return { order: customerView(created), customerToken };
+    return { order: customerOrderView(created), customerToken };
+  }
+
+  async recordPayment(
+    restaurantId: string,
+    id: string,
+    method: PaymentMethod,
+    actor: PaymentAuditActor,
+  ) {
+    const current = await orderRepository.findByRestaurantAndId(restaurantId, id);
+    if (!current) throw new OrderServiceError("Order not found.", 404);
+    if (current.status === "CANCELLED") {
+      throw new OrderServiceError("Cannot record payment for a cancelled order.", 409);
+    }
+    if (current.payment && current.payment.status === "PAID") {
+      throw new OrderServiceError("Payment has already been recorded for this order.", 409);
+    }
+
+    const event: PaymentAuditEvent = {
+      eventId: `pay-evt-${randomUUID()}`,
+      action: "RECORD",
+      previousStatus: current.payment?.status ?? "NOT_RECORDED",
+      newStatus: "PAID",
+      newMethod: method,
+      amount: current.total,
+      actor,
+      timestamp: new Date().toISOString(),
+    };
+
+    const updated = await orderRepository.recordPayment(
+      restaurantId,
+      id,
+      method,
+      current.total,
+      actor,
+      event,
+    );
+
+    if (!updated) {
+      throw new OrderServiceError(
+        "Payment could not be recorded. The order may have been modified concurrently.",
+        409,
+      );
+    }
+
+    return staffOrderView(updated);
+  }
+
+  async correctPayment(
+    restaurantId: string,
+    id: string,
+    input: { action: "CORRECTION" | "REVERSAL"; method?: PaymentMethod; reason: string },
+    actor: PaymentAuditActor,
+  ) {
+    const current = await orderRepository.findByRestaurantAndId(restaurantId, id);
+    if (!current) throw new OrderServiceError("Order not found.", 404);
+    if (current.status === "CANCELLED") {
+      throw new OrderServiceError("Cannot modify payment for a cancelled order.", 409);
+    }
+    if (!current.payment || current.payment.status !== "PAID") {
+      throw new OrderServiceError("Only already paid orders can be corrected or reversed.", 409);
+    }
+
+    const targetStatus: PaymentStatus = input.action === "REVERSAL" ? "UNPAID" : "PAID";
+    const targetMethod = input.action === "CORRECTION" ? input.method : undefined;
+
+    const event: PaymentAuditEvent = {
+      eventId: `pay-evt-${randomUUID()}`,
+      action: input.action,
+      previousStatus: current.payment.status,
+      newStatus: targetStatus,
+      previousMethod: current.payment.method,
+      newMethod: targetMethod,
+      amount: current.total,
+      actor,
+      reason: input.reason,
+      timestamp: new Date().toISOString(),
+    };
+
+    const updated = await orderRepository.correctPayment(
+      restaurantId,
+      id,
+      targetStatus,
+      targetMethod,
+      event,
+    );
+
+    if (!updated) {
+      throw new OrderServiceError(
+        "Payment modification failed. The order may have been modified concurrently.",
+        409,
+      );
+    }
+
+    return staffOrderView(updated);
   }
 
   async updateStatus(restaurantId: string, id: string, status: OrderStatus) {
@@ -130,7 +253,7 @@ export class OrderService {
         throw new OrderServiceError("This table was closed or unavailable before the order could be accepted.");
       }
     }
-    return customerView(updated);
+    return staffOrderView(updated);
   }
 
   async getCustomerStatus(id: string, token: string) {
@@ -139,7 +262,7 @@ export class OrderService {
     const expected = Buffer.from(order.customerTokenHash, "hex");
     const supplied = Buffer.from(createHash("sha256").update(token).digest("hex"), "hex");
     if (expected.length !== supplied.length || !timingSafeEqual(expected, supplied)) return null;
-    return customerView(order);
+    return customerOrderView(order);
   }
 }
 

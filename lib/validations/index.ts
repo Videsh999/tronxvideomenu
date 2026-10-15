@@ -317,3 +317,27 @@ export const resetCaptainPasswordSchema = z.object({ password: z.string().min(8)
 export const captainOrderStatusSchema = z.object({
   status: z.enum(["ACCEPTED", "PREPARING", "READY", "SERVED", "CANCELLED"]),
 });
+
+export const recordPaymentSchema = z
+  .object({
+    method: z.enum(["CASH", "UPI", "CARD"]),
+  })
+  .strict();
+export type RecordPaymentInput = z.infer<typeof recordPaymentSchema>;
+
+export const correctPaymentSchema = z
+  .object({
+    action: z.enum(["CORRECTION", "REVERSAL"]),
+    method: z.enum(["CASH", "UPI", "CARD"]).optional(),
+    reason: z
+      .string()
+      .trim()
+      .min(5, "Reason must be at least 5 characters")
+      .max(300, "Reason must not exceed 300 characters"),
+  })
+  .strict()
+  .refine((data) => data.action !== "CORRECTION" || !!data.method, {
+    message: "A payment method (CASH, UPI, CARD) is required for payment correction.",
+    path: ["method"],
+  });
+export type CorrectPaymentInput = z.infer<typeof correctPaymentSchema>;

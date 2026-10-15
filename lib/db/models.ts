@@ -237,6 +237,77 @@ const orderItemSnapshotSchema = new Schema(
   { _id: false, strict: true },
 );
 
+const paymentAuditEventSchema = new Schema(
+  {
+    eventId: { type: String, required: true },
+    action: {
+      type: String,
+      enum: ["RECORD", "CORRECTION", "REVERSAL"],
+      required: true,
+    },
+    previousStatus: {
+      type: String,
+      enum: ["NOT_RECORDED", "UNPAID", "PAID"],
+      required: true,
+    },
+    newStatus: {
+      type: String,
+      enum: ["NOT_RECORDED", "UNPAID", "PAID"],
+      required: true,
+    },
+    previousMethod: {
+      type: String,
+      enum: ["CASH", "UPI", "CARD"],
+    },
+    newMethod: {
+      type: String,
+      enum: ["CASH", "UPI", "CARD"],
+    },
+    amount: { type: Number, required: true, min: 0 },
+    actor: {
+      role: {
+        type: String,
+        enum: ["RESTAURANT_ADMIN", "CAPTAIN"],
+        required: true,
+      },
+      id: { type: String, required: true },
+      email: String,
+      name: String,
+    },
+    reason: String,
+    timestamp: { type: String, required: true },
+  },
+  { _id: false, strict: true },
+);
+
+const paymentSummarySchema = new Schema(
+  {
+    status: {
+      type: String,
+      enum: ["NOT_RECORDED", "UNPAID", "PAID"],
+      required: true,
+      default: "UNPAID",
+    },
+    method: {
+      type: String,
+      enum: ["CASH", "UPI", "CARD"],
+    },
+    amount: { type: Number, min: 0 },
+    recordedAt: String,
+    recordedBy: {
+      role: {
+        type: String,
+        enum: ["RESTAURANT_ADMIN", "CAPTAIN"],
+      },
+      id: String,
+      email: String,
+      name: String,
+    },
+    auditTrail: { type: [paymentAuditEventSchema], default: [] },
+  },
+  { _id: false, strict: true },
+);
+
 const orderSchema = new Schema<RestaurantOrder>(
   {
     id: { type: String, required: true, unique: true, index: true },
@@ -262,6 +333,11 @@ const orderSchema = new Schema<RestaurantOrder>(
     items: { type: [orderItemSnapshotSchema], required: true },
     subtotal: { type: Number, required: true, min: 0 },
     total: { type: Number, required: true, min: 0 },
+    payment: {
+      type: paymentSummarySchema,
+      required: true,
+      default: () => ({ status: "UNPAID", auditTrail: [] }),
+    },
     createdAt: { type: String, required: true },
     updatedAt: { type: String, required: true },
   },

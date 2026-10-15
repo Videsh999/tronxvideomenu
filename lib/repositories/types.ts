@@ -90,6 +90,21 @@ export interface IOrderRepository {
   findByRestaurantAndId(restaurantId: string, id: string): Promise<RestaurantOrder | null>;
   findForCustomer(id: string): Promise<RestaurantOrder | null>;
   updateStatus(restaurantId: string, id: string, expectedStatus: RestaurantOrder["status"], status: RestaurantOrder["status"]): Promise<RestaurantOrder | null>;
+  recordPayment(
+    restaurantId: string,
+    id: string,
+    method: import("@/types").PaymentMethod,
+    amount: number,
+    actor: import("@/types").PaymentAuditActor,
+    event: import("@/types").PaymentAuditEvent,
+  ): Promise<RestaurantOrder | null>;
+  correctPayment(
+    restaurantId: string,
+    id: string,
+    newStatus: import("@/types").PaymentStatus,
+    newMethod: import("@/types").PaymentMethod | undefined,
+    event: import("@/types").PaymentAuditEvent,
+  ): Promise<RestaurantOrder | null>;
   hasIdempotencyKey(restaurantId: string, key: string): Promise<boolean>;
 }
 

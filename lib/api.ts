@@ -45,6 +45,19 @@ export const api = {
   getOrders: () => fetcher<OrderSummary[]>("/api/orders"),
   updateOrderStatus: (id: string, status: RestaurantOrder["status"]) =>
     fetcher<OrderSummary>(`/api/orders/${id}`, { method: "PATCH", body: JSON.stringify({ status }) }),
+  recordPayment: (id: string, method: import("@/types").PaymentMethod) =>
+    fetcher<OrderSummary>(`/api/orders/${id}/payment`, {
+      method: "POST",
+      body: JSON.stringify({ method }),
+    }),
+  correctPayment: (
+    id: string,
+    data: { action: "CORRECTION" | "REVERSAL"; method?: import("@/types").PaymentMethod; reason: string },
+  ) =>
+    fetcher<OrderSummary>(`/api/orders/${id}/payment`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
   // Public Menu
   getPublicMenu: (restaurantIdOrSlug: string) =>
     fetcher<RestaurantMenu>(`/api/restaurants/${restaurantIdOrSlug}?fullMenu=true`),

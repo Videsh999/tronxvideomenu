@@ -327,6 +327,46 @@ export type OrderItemSnapshot = {
   itemTotal: number;
 };
 
+// Payment Recording Types
+export type PaymentMethod = "CASH" | "UPI" | "CARD";
+export type PaymentStatus = "NOT_RECORDED" | "UNPAID" | "PAID";
+export type PaymentAuditAction = "RECORD" | "CORRECTION" | "REVERSAL";
+
+export type PaymentAuditActor = {
+  role: "RESTAURANT_ADMIN" | "CAPTAIN";
+  id: string;
+  email?: string;
+  name?: string;
+};
+
+export type PaymentAuditEvent = {
+  eventId: string;
+  action: PaymentAuditAction;
+  previousStatus: PaymentStatus;
+  newStatus: PaymentStatus;
+  previousMethod?: PaymentMethod;
+  newMethod?: PaymentMethod;
+  amount: number;
+  actor: PaymentAuditActor;
+  reason?: string;
+  timestamp: string;
+};
+
+export type PaymentSummary = {
+  status: PaymentStatus;
+  method?: PaymentMethod;
+  amount?: number;
+  recordedAt?: string;
+  recordedBy?: PaymentAuditActor;
+  auditTrail?: PaymentAuditEvent[];
+};
+
+export type CustomerPaymentSummary = {
+  status: PaymentStatus;
+  method?: PaymentMethod;
+  recordedAt?: string;
+};
+
 export type RestaurantOrder = {
   id: string;
   restaurantId: string;
@@ -339,6 +379,7 @@ export type RestaurantOrder = {
   items: OrderItemSnapshot[];
   subtotal: number;
   total: number;
+  payment: PaymentSummary;
   createdAt: string;
   updatedAt: string;
 };
@@ -352,6 +393,7 @@ export type OrderSummary = Pick<
   | "items"
   | "subtotal"
   | "total"
+  | "payment"
   | "createdAt"
   | "updatedAt"
 >;
