@@ -73,19 +73,19 @@ export default function AvailabilityManager({
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
+        <h1 className="text-2xl font-bold tracking-tight text-neutral-900 sm:text-3xl">
           Availability & 86 Hub
         </h1>
-        <p className="mt-1 text-sm text-white/50">
+        <p className="mt-1 text-sm text-neutral-500">
           Instantly mark sold-out items or hide whole categories from customers
           in real time.
         </p>
       </div>
 
-      <div className="rounded-2xl border border-white/10 bg-white/2 p-4 flex items-center justify-between gap-4">
+      <div className="rounded-2xl border border-neutral-200 bg-white p-4 flex items-center justify-between gap-4">
         <div>
-          <p className="text-sm font-semibold text-white">Restaurant status</p>
-          <p className="mt-1 text-xs text-white/50">
+          <p className="text-sm font-semibold text-neutral-900">Restaurant status</p>
+          <p className="mt-1 text-xs text-neutral-500">
             Controls whether the restaurant is currently open to customers.
           </p>
         </div>
@@ -95,8 +95,8 @@ export default function AvailabilityManager({
           disabled={restaurantPending}
           className={`rounded-full px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50 ${
             restaurant.isOpen
-              ? "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
-              : "bg-rose-500/10 text-rose-400 hover:bg-rose-500/20"
+              ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-50"
+              : "bg-rose-50 text-rose-600 hover:bg-rose-50"
           }`}
         >
           {restaurant.isOpen ? "Open" : "Closed"}
@@ -107,54 +107,54 @@ export default function AvailabilityManager({
         <p
           role="status"
           className={`text-sm ${
-            feedback.type === "success" ? "text-emerald-400" : "text-rose-400"
+            feedback.type === "success" ? "text-emerald-700" : "text-rose-600"
           }`}
         >
           {feedback.message}
         </p>
       ) : null}
 
-      <div className="rounded-2xl border border-white/10 bg-white/2 p-4 flex items-center justify-between">
+      <div className="rounded-2xl border border-neutral-200 bg-white p-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Clock className="h-5 w-5 text-white/50" />
-          <span className="text-sm font-medium text-white/80">
+          <Clock className="h-5 w-5 text-neutral-500" />
+          <span className="text-sm font-medium text-neutral-700">
             {dishes.filter((d) => d.isAvailable).length} of {dishes.length}{" "}
             dishes in stock
           </span>
         </div>
-        <span className="text-xs text-white/40">
+        <span className="text-xs text-neutral-400">
           Changes reflect on the customer menu after refresh or tab focus
         </span>
       </div>
 
       <div className="space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-white/40">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-neutral-400">
           Dishes Stock Status
         </h2>
 
-        <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/2 divide-y divide-white/5">
+        <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white divide-y divide-neutral-100">
           {dishes.map((dish) => (
             <div
               key={dish.id}
-              className="flex items-center justify-between p-4 transition hover:bg-white/2"
+              className="flex items-center justify-between p-4 transition hover:bg-white"
             >
               <div>
-                <span className="font-semibold text-white text-sm">
+                <span className="font-semibold text-neutral-900 text-sm">
                   {dish.name}
                 </span>
-                <span className="ml-2 text-xs font-mono text-white/40">
+                <span className="ml-2 text-xs font-mono text-neutral-400">
                   ₹{dish.price}
                 </span>
               </div>
 
               <div className="flex items-center gap-3">
                 {dish.isAvailable ? (
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-400">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
                     <CheckCircle2 className="h-3.5 w-3.5" />
                     Available
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-400">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-600">
                     <XCircle className="h-3.5 w-3.5" />
                     Sold Out
                   </span>
@@ -164,7 +164,7 @@ export default function AvailabilityManager({
                   type="button"
                   disabled={pendingId === dish.id}
                   onClick={() => toggle(dish)}
-                  className="rounded-lg border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-white/80 hover:bg-white/10 hover:text-white disabled:opacity-50"
+                  className="rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-100 hover:text-neutral-900 disabled:opacity-50"
                 >
                   Toggle
                 </button>

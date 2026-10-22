@@ -55,9 +55,21 @@ export class RestaurantRepository implements IRestaurantRepository {
 
   async updateWifiConfiguration(id: string, wifi: RestaurantWifiConfiguration): Promise<RestaurantWifiConfiguration | null> {
     await connectToDatabase();
+    // Always replace the whole wifi object so leftover ciphertext cannot stick around after a clear/OPEN save.
+    const nextWifi: RestaurantWifiConfiguration = {
+      ssid: wifi.ssid,
+      security: wifi.security,
+      ...(wifi.passwordCiphertext && wifi.passwordIv && wifi.passwordAuthTag
+        ? {
+            passwordCiphertext: wifi.passwordCiphertext,
+            passwordIv: wifi.passwordIv,
+            passwordAuthTag: wifi.passwordAuthTag,
+          }
+        : {}),
+    };
     const updated = await RestaurantModel.findOneAndUpdate(
       { id },
-      { $set: { wifi, updatedAt: new Date().toISOString() } },
+      { $set: { wifi: nextWifi, updatedAt: new Date().toISOString() } },
       { returnDocument: "after", runValidators: true, projection: { wifi: 1 } },
     ).lean();
     return updated?.wifi as RestaurantWifiConfiguration | undefined ?? null;

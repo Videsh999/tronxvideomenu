@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import {
   sessionCookieForRole,
   createAdminSession,
+  isSecureRequest,
   SESSION_TTL_SECONDS,
 } from "@/lib/auth-core";
 import { restaurantService } from "@/lib/services/restaurant.service";
@@ -83,7 +84,7 @@ export async function POST(request: Request) {
         name: sessionCookieForRole("SUPER_ADMIN"),
         value: session,
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
+        secure: isSecureRequest(request),
         sameSite: "lax",
         path: "/",
         maxAge: SESSION_TTL_SECONDS,
@@ -127,15 +128,15 @@ export async function POST(request: Request) {
     const requestedRestaurantSlug = parsedLogin.data.restaurantSlug
       ? normalizeRestaurantId(parsedLogin.data.restaurantSlug)
       : undefined;
-    let identity;
+    let identity = null;
     if (requestedRestaurantSlug) {
       const restaurant = await restaurantService.getBySlug(requestedRestaurantSlug);
       identity = restaurant
         ? await restaurantAdminService.authenticateForRestaurant(restaurant, normalizedEmail, parsedLogin.data.password)
         : null;
-    } else {
-      identity = await restaurantAdminService.authenticateWithoutRestaurant(normalizedEmail, parsedLogin.data.password);
     }
+    // A login link for one restaurant may be reused by another restaurant's owner; their own credentials still identify them.
+    identity ??= await restaurantAdminService.authenticateWithoutRestaurant(normalizedEmail, parsedLogin.data.password);
 
     if (!identity) {
       await loginRateLimiter.recordFailure(rateLimitKey);
@@ -171,7 +172,7 @@ export async function POST(request: Request) {
       name: sessionCookieForRole("RESTAURANT_ADMIN"),
       value: session,
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: isSecureRequest(request),
       sameSite: "lax",
       path: "/",
       maxAge: SESSION_TTL_SECONDS,

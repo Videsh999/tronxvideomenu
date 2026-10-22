@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Lets phones/tablets on the local network load dev assets; ignored in production.
+  allowedDevOrigins: ["192.168.46.190"],
   images: {
     remotePatterns: [
       {

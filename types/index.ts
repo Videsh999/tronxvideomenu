@@ -207,6 +207,13 @@ export type AddonGroup = {
 };
 
 // Dish
+export type DishMediaItem = {
+  id: string;
+  type: "IMAGE" | "VIDEO";
+  url: string;
+  posterUrl?: string;
+};
+
 export type Dish = {
   id: string;
   restaurantId?: string;
@@ -225,6 +232,8 @@ export type Dish = {
   imageUrl?: string;
   videoUrl?: string;
   videoPosterUrl?: string;
+  /** Extra photos and videos shown after the main image/video in the dish gallery. */
+  gallery?: DishMediaItem[];
   sortOrder: number;
   addonGroupIds?: string[];
   addonGroups?: AddonGroup[];

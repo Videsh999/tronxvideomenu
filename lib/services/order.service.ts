@@ -13,7 +13,8 @@ import type {
 import type { PlaceOrderInput } from "@/lib/validations";
 
 const allowedTransitions: Record<OrderStatus, OrderStatus[]> = {
-  PENDING: ["ACCEPTED", "CANCELLED"],
+  // PREPARING from PENDING = accept + send to kitchen in one captain action.
+  PENDING: ["ACCEPTED", "PREPARING", "CANCELLED"],
   ACCEPTED: ["PREPARING", "CANCELLED"],
   PREPARING: ["READY"],
   READY: ["SERVED"],
@@ -237,6 +238,12 @@ export class OrderService {
     if (!allowedTransitions[current.status].includes(status)) {
       throw new OrderServiceError(`Order cannot move from ${current.status} to ${status}.`);
     }
+
+    // One tap from the floor: accept the order and put it on the kitchen ticket board.
+    if (current.status === "PENDING" && status === "PREPARING") {
+      return this.acceptToKitchen(restaurantId, id, current);
+    }
+
     let table = null;
     if (status === "ACCEPTED") {
       table = await tableRepository.findByRestaurantAndId(restaurantId, current.tableId);
@@ -254,6 +261,29 @@ export class OrderService {
       }
     }
     return staffOrderView(updated);
+  }
+
+  private async acceptToKitchen(
+    restaurantId: string,
+    id: string,
+    current: RestaurantOrder,
+  ) {
+    const table = await tableRepository.findByRestaurantAndId(restaurantId, current.tableId);
+    if (!table || !table.isActive || table.status === "CLOSED") {
+      throw new OrderServiceError("This table is closed or unavailable. The order cannot be accepted.");
+    }
+
+    const accepted = await orderRepository.updateStatus(restaurantId, id, "PENDING", "ACCEPTED");
+    if (!accepted) throw new OrderServiceError("Order status changed. Refresh and try again.");
+
+    const occupied = await tableRepository.markOccupiedForAcceptedOrder(restaurantId, table.id);
+    if (!occupied) {
+      await orderRepository.revertAcceptance(restaurantId, id);
+      throw new OrderServiceError("This table was closed or unavailable before the order could be accepted.");
+    }
+
+    const preparing = await orderRepository.updateStatus(restaurantId, id, "ACCEPTED", "PREPARING");
+    return staffOrderView(preparing ?? accepted);
   }
 
   async getCustomerStatus(id: string, token: string) {

@@ -210,6 +210,17 @@ export const dishSchema = z.object({
   imageUrl: z.string().trim().optional(),
   videoUrl: z.string().trim().optional(),
   videoPosterUrl: z.string().trim().optional(),
+  gallery: z
+    .array(
+      z.object({
+        id: z.string().trim().min(1).max(64),
+        type: z.enum(["IMAGE", "VIDEO"]),
+        url: z.string().trim().min(1, "Media URL is required").max(2048),
+        posterUrl: z.string().trim().max(2048).optional(),
+      }),
+    )
+    .max(12, "A dish can have at most 12 gallery items")
+    .optional(),
   sortOrder: z.number().int().min(0).default(0),
   addonGroupIds: z.array(z.string()).optional(),
 });

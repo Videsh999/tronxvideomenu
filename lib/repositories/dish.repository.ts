@@ -34,6 +34,8 @@ export class DishRepository implements IDishRepository {
         { videoPosterUrl: mediaUrl },
         { image: mediaUrl },
         { video: mediaUrl },
+        { "gallery.url": mediaUrl },
+        { "gallery.posterUrl": mediaUrl },
       ],
     });
     return Boolean(dish);

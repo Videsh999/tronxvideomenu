@@ -59,7 +59,7 @@ export async function PATCH(
       );
     }
 
-    if (validated.video || validated.videoUrl) {
+    if (validated.video || validated.videoUrl || validated.gallery?.some((item) => item.type === "VIDEO")) {
       const featureCheck = requireRestaurantFeature(restaurant, "VIDEO_MENU");
       if (!featureCheck.allowed) {
         return NextResponse.json(

@@ -31,7 +31,7 @@ export default function RestaurantAdminCredentials({
   const [message, setMessage] = useState("");
   const [verification, setVerification] = useState<RestaurantAdminCredentialVerification | null>(null);
   const basePath = `/api/super-admin/restaurant-admins/${encodeURIComponent(status.restaurantId)}`;
-  const loginPath = `/admin/login?next=${encodeURIComponent(`/admin/${restaurantSlug}`)}`;
+  const loginPath = `/menu/${restaurantSlug}/admin`;
 
   const copy = async (value: string, successText: string) => {
     try { await navigator.clipboard.writeText(value); setMessage(successText); }
@@ -108,43 +108,43 @@ export default function RestaurantAdminCredentials({
     finally { setBusy(false); }
   };
 
-  return <section className="mt-4 rounded-xl border border-white/10 bg-black/20 p-3" aria-label="Restaurant Admin credentials">
+  return <section className="mt-4 rounded-xl border border-neutral-200 bg-neutral-50 p-3" aria-label="Restaurant Admin credentials">
     <div className="flex flex-wrap items-center justify-between gap-2">
       <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-white/65">Restaurant Admin account</p>
-        <p className="mt-1 text-xs text-white/45">
+        <p className="text-xs font-semibold uppercase tracking-wide text-neutral-600">Restaurant Admin account</p>
+        <p className="mt-1 text-xs text-neutral-500">
           {status.email ?? "No administrator account"}
           {status.credentialSource === "LEGACY_ENV" ? " · Legacy environment credentials" : status.credentialSource === "DATABASE" ? ` · ${status.isActive ? "Active" : "Deactivated"}` : ""}
         </p>
       </div>
       <div className="flex flex-wrap gap-2">
-        {status.email && <button type="button" onClick={() => void copy(status.email!, "Restaurant Admin email copied.")} className="rounded-md border border-white/15 px-2.5 py-1.5 text-[11px] text-white/75">Copy email</button>}
-        <a href={loginPath} target="_blank" rel="noopener noreferrer" className="rounded-md border border-white/15 px-2.5 py-1.5 text-[11px] text-white/75">Open Admin Login</a>
-        <button type="button" onClick={() => void copy(new URL(loginPath, window.location.origin).toString(), "Restaurant Admin login URL copied.")} className="rounded-md border border-white/15 px-2.5 py-1.5 text-[11px] text-white/75">Copy login URL</button>
+        {status.email && <button type="button" onClick={() => void copy(status.email!, "Restaurant Admin email copied.")} className="rounded-md border border-neutral-300 px-2.5 py-1.5 text-[11px] text-neutral-700">Copy email</button>}
+        <a href={loginPath} target="_blank" rel="noopener noreferrer" className="rounded-md border border-neutral-300 px-2.5 py-1.5 text-[11px] text-neutral-700">Open Admin Login</a>
+        <button type="button" onClick={() => void copy(new URL(loginPath, window.location.origin).toString(), "Restaurant Admin login URL copied.")} className="rounded-md border border-neutral-300 px-2.5 py-1.5 text-[11px] text-neutral-700">Copy login URL</button>
       </div>
     </div>
-    <p className="mt-2 text-xs text-white/55">Migration readiness: {readinessLabel(status)}</p>
-    <p className={`mt-1 text-xs ${status.encryptionKeyStatus === "READY" ? "text-white/40" : "text-amber-200/80"}`}>Credential encryption configuration: {status.encryptionKeyStatus === "READY" ? "ready" : status.encryptionKeyStatus === "MISSING" ? "missing" : "invalid"}</p>
-    {status.legacyFallbackRequired && <p className="mt-1 text-xs text-amber-200/80">Legacy environment fallback is still required. Do not remove this restaurant&apos;s legacy variables yet.</p>}
-    {status.credentialSource === "DATABASE" && <button type="button" disabled={busy} onClick={() => void verifyDatabaseCredentials()} className="mt-3 rounded-md border border-sky-300/25 px-2.5 py-1.5 text-[11px] text-sky-100 disabled:opacity-50">{busy ? "Verifying…" : "Verify database login and recovery"}</button>}
-    {verification && <p role="status" className={`mt-2 text-xs ${verification.verified ? "text-emerald-300" : "text-amber-200"}`}>{verification.verified ? "Verified: the saved encrypted password decrypts and authenticates through the tenant-scoped database login." : verificationLabel(verification.result)}</p>}
+    <p className="mt-2 text-xs text-neutral-500">Migration readiness: {readinessLabel(status)}</p>
+    <p className={`mt-1 text-xs ${status.encryptionKeyStatus === "READY" ? "text-neutral-400" : "text-amber-700"}`}>Credential encryption configuration: {status.encryptionKeyStatus === "READY" ? "ready" : status.encryptionKeyStatus === "MISSING" ? "missing" : "invalid"}</p>
+    {status.legacyFallbackRequired && <p className="mt-1 text-xs text-amber-700">Legacy environment fallback is still required. Do not remove this restaurant&apos;s legacy variables yet.</p>}
+    {status.credentialSource === "DATABASE" && <button type="button" disabled={busy} onClick={() => void verifyDatabaseCredentials()} className="mt-3 rounded-md border border-sky-200 px-2.5 py-1.5 text-[11px] text-sky-700 disabled:opacity-50">{busy ? "Verifying…" : "Verify database login and recovery"}</button>}
+    {verification && <p role="status" className={`mt-2 text-xs ${verification.verified ? "text-emerald-700" : "text-amber-700"}`}>{verification.verified ? "Verified: the saved encrypted password decrypts and authenticates through the tenant-scoped database login." : verificationLabel(verification.result)}</p>}
     {status.passwordConfigured && <div className="mt-3 flex flex-wrap items-center gap-2">
-      <span className="min-w-44 rounded-md border border-white/10 bg-black/30 px-2.5 py-1.5 font-mono text-xs text-white/75">{passwordVisible ? savedPassword : "••••••••••••"}</span>
-      <button type="button" disabled={busy} onClick={() => void revealPassword()} className="rounded-md border border-white/15 px-2.5 py-1.5 text-[11px] text-white/75 disabled:opacity-50">{passwordVisible ? "Hide password" : "Show password"}</button>
-      <button type="button" disabled={busy} onClick={() => void copyPassword()} className="rounded-md border border-white/15 px-2.5 py-1.5 text-[11px] text-white/75 disabled:opacity-50">Copy password</button>
+      <span className="min-w-44 rounded-md border border-neutral-200 bg-neutral-50 px-2.5 py-1.5 font-mono text-xs text-neutral-700">{passwordVisible ? savedPassword : "••••••••••••"}</span>
+      <button type="button" disabled={busy} onClick={() => void revealPassword()} className="rounded-md border border-neutral-300 px-2.5 py-1.5 text-[11px] text-neutral-700 disabled:opacity-50">{passwordVisible ? "Hide password" : "Show password"}</button>
+      <button type="button" disabled={busy} onClick={() => void copyPassword()} className="rounded-md border border-neutral-300 px-2.5 py-1.5 text-[11px] text-neutral-700 disabled:opacity-50">Copy password</button>
     </div>}
-    {status.credentialSource === "LEGACY_ENV" && <div className="mt-3 flex flex-wrap items-center gap-2"><p className="text-xs text-amber-200/80">This account still uses trusted legacy environment configuration.</p><button type="button" disabled={busy} onClick={() => void migrateLegacy()} className="rounded-md border border-amber-300/25 px-2.5 py-1.5 text-[11px] text-amber-100 disabled:opacity-50">Migrate to encrypted storage</button></div>}
-    {status.credentialSource === "DATABASE" && <button type="button" disabled={busy} onClick={() => void toggleActive()} className="mt-3 rounded-md border border-white/15 px-2.5 py-1.5 text-[11px] text-white/75 disabled:opacity-50">{status.isActive ? "Deactivate account" : "Activate account"}</button>}
-    {status.needsPasswordSetup && status.credentialSource === "DATABASE" && <p className="mt-2 text-xs text-amber-200/80">Only a password hash exists for this account. Set a new password explicitly to enable retrieval; the existing password cannot be reconstructed.</p>}
+    {status.credentialSource === "LEGACY_ENV" && <div className="mt-3 flex flex-wrap items-center gap-2"><p className="text-xs text-amber-700">This account still uses trusted legacy environment configuration.</p><button type="button" disabled={busy} onClick={() => void migrateLegacy()} className="rounded-md border border-amber-200 px-2.5 py-1.5 text-[11px] text-amber-700 disabled:opacity-50">Migrate to encrypted storage</button></div>}
+    {status.credentialSource === "DATABASE" && <button type="button" disabled={busy} onClick={() => void toggleActive()} className="mt-3 rounded-md border border-neutral-300 px-2.5 py-1.5 text-[11px] text-neutral-700 disabled:opacity-50">{status.isActive ? "Deactivate account" : "Activate account"}</button>}
+    {status.needsPasswordSetup && status.credentialSource === "DATABASE" && <p className="mt-2 text-xs text-amber-700">Only a password hash exists for this account. Set a new password explicitly to enable retrieval; the existing password cannot be reconstructed.</p>}
     <div className="mt-3">
-      <button type="button" onClick={() => setEditorOpen((open) => !open)} className="text-xs font-medium text-sky-300 underline underline-offset-2">{editorOpen ? "Cancel credential editor" : status.credentialSource === "NONE" ? "Create admin account" : "Update credentials"}</button>
+      <button type="button" onClick={() => setEditorOpen((open) => !open)} className="text-xs font-medium text-sky-700 underline underline-offset-2">{editorOpen ? "Cancel credential editor" : status.credentialSource === "NONE" ? "Create admin account" : "Update credentials"}</button>
       {editorOpen && <form onSubmit={(event) => void saveCredentials(event)} className="mt-3 grid gap-2 sm:grid-cols-2">
-        <label className="text-[11px] text-white/55">Administrator email<input type="email" required maxLength={254} value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="username" className="mt-1 block h-9 w-full rounded-md border border-white/15 bg-zinc-900 px-2.5 text-xs text-white" /></label>
-        <label className="text-[11px] text-white/55">{status.credentialSource === "NONE" ? "Password" : "New password"}<input type="password" required minLength={8} maxLength={256} value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="new-password" className="mt-1 block h-9 w-full rounded-md border border-white/15 bg-zinc-900 px-2.5 text-xs text-white" /></label>
-        <button type="submit" disabled={busy} className="rounded-md bg-white px-3 py-2 text-xs font-semibold text-black disabled:opacity-50 sm:col-span-2">{busy ? "Saving…" : status.credentialSource === "NONE" ? "Create account" : "Save new credentials"}</button>
+        <label className="text-[11px] text-neutral-500">Administrator email<input type="email" required maxLength={254} value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="username" className="mt-1 block h-9 w-full rounded-md border border-neutral-300 bg-neutral-100 px-2.5 text-xs text-neutral-900" /></label>
+        <label className="text-[11px] text-neutral-500">{status.credentialSource === "NONE" ? "Password" : "New password"}<input type="password" required minLength={8} maxLength={256} value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="new-password" className="mt-1 block h-9 w-full rounded-md border border-neutral-300 bg-neutral-100 px-2.5 text-xs text-neutral-900" /></label>
+        <button type="submit" disabled={busy} className="rounded-md bg-neutral-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50 sm:col-span-2">{busy ? "Saving…" : status.credentialSource === "NONE" ? "Create account" : "Save new credentials"}</button>
       </form>}
     </div>
-    {message && <p role="status" className="mt-2 text-xs text-white/65">{message}</p>}
+    {message && <p role="status" className="mt-2 text-xs text-neutral-600">{message}</p>}
   </section>;
 }
 

@@ -14,7 +14,7 @@ export async function proxy(request: NextRequest) {
     pathname === "/api/public/reservations" ||
     pathname === "/api/public/orders"
   );
-  const isPublicWifiRoute = request.method === "GET" && /^\/api\/public\/restaurants\/[^/]+\/wifi$/.test(pathname);
+  const isPublicWifiRoute = request.method === "GET" && /^\/api\/public\/restaurants\/[^/]+\/(?:wifi|translations)$/.test(pathname);
   const isCustomerOrderStatusRoute = request.method === "GET" && /^\/api\/orders\/[^/]+\/status$/.test(pathname);
   const isApiRequest = pathname.startsWith("/api/");
   const isPublicCustomerRoute =
@@ -51,7 +51,10 @@ export async function proxy(request: NextRequest) {
     if (isSuperAdminLoginRoute && superSession?.role === "SUPER_ADMIN") return NextResponse.redirect(new URL("/super-admin", request.url));
     if (isAdminLoginRoute && restaurantSession?.role === "RESTAURANT_ADMIN") {
       const targetRestaurant = restaurantSession.restaurantSlug || restaurantSession.restaurantId || "";
-      return NextResponse.redirect(new URL(targetRestaurant ? `/admin/${targetRestaurant}` : "/admin", request.url));
+      const nextRestaurant = request.nextUrl.searchParams.get("next")?.match(/^\/admin\/([^/?#]+)/)?.[1];
+      if (!nextRestaurant || nextRestaurant === targetRestaurant) {
+        return NextResponse.redirect(new URL(targetRestaurant ? `/admin/${targetRestaurant}` : "/admin", request.url));
+      }
     }
     return NextResponse.next();
   }
@@ -84,9 +87,9 @@ export async function proxy(request: NextRequest) {
     const requestedRestaurant = pathname.split("/admin/")[1]?.split("/")[0];
     const sessionRestaurant = restaurantSession.restaurantSlug || restaurantSession.restaurantId;
     if (requestedRestaurant && requestedRestaurant !== sessionRestaurant) {
-      return NextResponse.redirect(
-        new URL(`/admin/${sessionRestaurant || "login"}`, request.url),
-      );
+      const loginUrl = new URL("/admin/login", request.url);
+      loginUrl.searchParams.set("next", `${pathname}${request.nextUrl.search}`);
+      return NextResponse.redirect(loginUrl);
     }
     return NextResponse.next();
   }

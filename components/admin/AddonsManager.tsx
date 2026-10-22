@@ -248,16 +248,16 @@ export default function AddonsManager({
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <Link
-            href="/admin/menu"
-            className="inline-flex items-center gap-1.5 text-xs text-white/50 hover:text-white mb-2"
+            href={`/admin/${encodeURIComponent(restaurantId)}/menu`}
+            className="inline-flex items-center gap-1.5 text-xs text-neutral-500 hover:text-neutral-900 mb-2"
           >
             <ArrowLeft className="h-3 w-3" />
             <span>Back to Menu Hub</span>
           </Link>
-          <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
+          <h1 className="text-2xl font-bold tracking-tight text-neutral-900 sm:text-3xl">
             Add-ons & Options
           </h1>
-          <p className="mt-1 text-sm text-white/50">
+          <p className="mt-1 text-sm text-neutral-500">
             Define customisation groups, dips, toppings, and selection
             constraints.
           </p>
@@ -266,7 +266,7 @@ export default function AddonsManager({
         <button
           type="button"
           onClick={openCreateGroup}
-          className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-xs font-bold text-black transition hover:bg-white/90"
+          className="inline-flex items-center gap-2 rounded-xl bg-neutral-900 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-neutral-800"
         >
           <Plus className="h-4 w-4" />
           <span>New Add-on Group</span>
@@ -277,7 +277,7 @@ export default function AddonsManager({
         <p
           role="status"
           className={`text-sm ${
-            feedback.type === "success" ? "text-emerald-400" : "text-rose-400"
+            feedback.type === "success" ? "text-emerald-700" : "text-rose-600"
           }`}
         >
           {feedback.message}
@@ -288,18 +288,18 @@ export default function AddonsManager({
         {groups.map((group) => (
           <div
             key={group.id}
-            className="rounded-2xl border border-white/10 bg-white/2 p-5 sm:p-6"
+            className="rounded-2xl border border-neutral-200 bg-white p-5 sm:p-6"
           >
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/5 pb-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-200 pb-4">
               <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/5 text-white/70">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-neutral-50 text-neutral-600">
                   <Sliders className="h-4 w-4" />
                 </div>
                 <div>
-                  <h2 className="text-base font-bold text-white">
+                  <h2 className="text-base font-bold text-neutral-900">
                     {group.name}
                   </h2>
-                  <p className="text-xs text-white/45">
+                  <p className="text-xs text-neutral-500">
                     {group.maxSelect === 1
                       ? "Single choice (Radio)"
                       : `Multi-choice (Up to ${group.maxSelect})`}
@@ -309,70 +309,70 @@ export default function AddonsManager({
 
               <div className="flex flex-wrap items-center gap-2">
                 {group.isRequired ? (
-                  <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-semibold text-amber-400">
+                  <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700">
                     Mandatory
                   </span>
                 ) : (
-                  <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-xs font-medium text-white/50">
+                  <span className="rounded-full bg-neutral-100 px-2.5 py-0.5 text-xs font-medium text-neutral-500">
                     Optional
                   </span>
                 )}
                 <button
                   type="button"
                   onClick={() => openEditGroup(group)}
-                  className="rounded-lg px-2.5 py-1 text-xs font-medium text-white/60 hover:bg-white/10 hover:text-white transition"
+                  className="rounded-lg px-2.5 py-1 text-xs font-medium text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 transition"
                 >
                   Edit Group
                 </button>
                 <button
                   type="button"
                   onClick={() => deleteGroup(group)}
-                  className="rounded-lg px-2.5 py-1 text-xs font-medium text-rose-400/80 hover:bg-rose-500/10"
+                  className="rounded-lg px-2.5 py-1 text-xs font-medium text-rose-600 hover:bg-rose-50"
                 >
                   Delete
                 </button>
                 <button
                   type="button"
                   onClick={() => openCreateAddon(group.id)}
-                  className="rounded-lg border border-white/10 px-2.5 py-1 text-xs font-medium text-white/80 hover:bg-white/5"
+                  className="rounded-lg border border-neutral-200 px-2.5 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-50"
                 >
                   Add item
                 </button>
               </div>
             </div>
 
-            <div className="mt-3 divide-y divide-white/5">
+            <div className="mt-3 divide-y divide-neutral-100">
               {group.addons.map((addon) => (
                 <div
                   key={addon.id}
                   className="flex items-center justify-between py-2.5 text-sm"
                 >
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
-                    <span className="text-white/80 font-medium">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-700" />
+                    <span className="text-neutral-700 font-medium">
                       {addon.name}
                     </span>
                     {!addon.isAvailable ? (
-                      <span className="text-[10px] text-rose-400">
+                      <span className="text-[10px] text-rose-600">
                         Unavailable
                       </span>
                     ) : null}
                   </div>
                   <div className="flex items-center gap-4">
-                    <span className="font-semibold text-white">
+                    <span className="font-semibold text-neutral-900">
                       {addon.price > 0 ? `+₹${addon.price}` : "Free"}
                     </span>
                     <button
                       type="button"
                       onClick={() => openEditAddon(addon, group.id)}
-                      className="text-xs text-white/40 hover:text-white"
+                      className="text-xs text-neutral-400 hover:text-neutral-900"
                     >
                       Edit
                     </button>
                     <button
                       type="button"
                       onClick={() => deleteAddonItem(addon, group.id)}
-                      className="text-xs text-rose-400/70 hover:text-rose-300"
+                      className="text-xs text-rose-600 hover:text-rose-600"
                     >
                       Delete
                     </button>
@@ -393,14 +393,14 @@ export default function AddonsManager({
             <button
               type="button"
               onClick={() => setGroupModalOpen(false)}
-              className="rounded-xl border border-white/10 px-4 py-2 text-xs text-white/70"
+              className="rounded-xl border border-neutral-200 px-4 py-2 text-xs text-neutral-600"
             >
               Cancel
             </button>
             <button
               type="submit"
               form="addon-group-form"
-              className="rounded-xl bg-white px-4 py-2 text-xs font-bold text-black"
+              className="rounded-xl bg-neutral-900 px-4 py-2 text-xs font-bold text-white"
             >
               Save
             </button>
@@ -412,37 +412,37 @@ export default function AddonsManager({
           onSubmit={groupForm.handleSubmit(submitGroup)}
           className="space-y-3"
         >
-          {error ? <p className="text-xs text-rose-400">{error}</p> : null}
+          {error ? <p className="text-xs text-rose-600">{error}</p> : null}
           <input
             {...groupForm.register("name")}
             placeholder="Group name"
-            className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
+            className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm text-neutral-900"
           />
           <div className="grid grid-cols-2 gap-2">
             <input
               type="number"
               {...groupForm.register("minSelect", { valueAsNumber: true })}
               placeholder="Min select"
-              className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
+              className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm text-neutral-900"
             />
             <input
               type="number"
               {...groupForm.register("maxSelect", { valueAsNumber: true })}
               placeholder="Max select"
-              className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
+              className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm text-neutral-900"
             />
           </div>
           <input
             type="number"
             {...groupForm.register("sortOrder", { valueAsNumber: true })}
             placeholder="Sort order"
-            className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
+            className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm text-neutral-900"
           />
-          <label className="flex items-center gap-2 text-sm text-white/80">
+          <label className="flex items-center gap-2 text-sm text-neutral-700">
             <input type="checkbox" {...groupForm.register("isRequired")} />
             Required selection
           </label>
-          <label className="flex items-center gap-2 text-sm text-white/80">
+          <label className="flex items-center gap-2 text-sm text-neutral-700">
             <input type="checkbox" {...groupForm.register("isActive")} />
             Active
           </label>
@@ -458,14 +458,14 @@ export default function AddonsManager({
             <button
               type="button"
               onClick={() => setAddonModalOpen(false)}
-              className="rounded-xl border border-white/10 px-4 py-2 text-xs text-white/70"
+              className="rounded-xl border border-neutral-200 px-4 py-2 text-xs text-neutral-600"
             >
               Cancel
             </button>
             <button
               type="submit"
               form="addon-item-form"
-              className="rounded-xl bg-white px-4 py-2 text-xs font-bold text-black"
+              className="rounded-xl bg-neutral-900 px-4 py-2 text-xs font-bold text-white"
             >
               Save
             </button>
@@ -477,11 +477,11 @@ export default function AddonsManager({
           onSubmit={addonForm.handleSubmit(submitAddon)}
           className="space-y-3"
         >
-          {error ? <p className="text-xs text-rose-400">{error}</p> : null}
+          {error ? <p className="text-xs text-rose-600">{error}</p> : null}
           {editingAddon ? (
             <>
               <input type="hidden" {...addonForm.register("addonGroupId")} />
-              <p className="text-xs text-white/50">
+              <p className="text-xs text-neutral-500">
                 Group:{" "}
                 {groups.find((group) => group.id === addonGroupId)?.name ??
                   "Unknown"}
@@ -489,12 +489,12 @@ export default function AddonsManager({
             </>
           ) : (
             <div>
-              <label className="mb-1 block text-xs text-white/60">
+              <label className="mb-1 block text-xs text-neutral-500">
                 Add-on group
               </label>
               <select
                 {...addonForm.register("addonGroupId")}
-                className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
+                className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm text-neutral-900"
               >
                 {groups.map((group) => (
                   <option key={group.id} value={group.id}>
@@ -507,26 +507,26 @@ export default function AddonsManager({
           <input
             {...addonForm.register("name")}
             placeholder="Add-on name"
-            className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
+            className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm text-neutral-900"
           />
           <input
             type="number"
             step="1"
             {...addonForm.register("price", { valueAsNumber: true })}
             placeholder="Price"
-            className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
+            className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm text-neutral-900"
           />
           <input
             type="number"
             {...addonForm.register("sortOrder", { valueAsNumber: true })}
             placeholder="Sort order"
-            className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
+            className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm text-neutral-900"
           />
-          <label className="flex items-center gap-2 text-sm text-white/80">
+          <label className="flex items-center gap-2 text-sm text-neutral-700">
             <input type="checkbox" {...addonForm.register("isAvailable")} />
             Available
           </label>
-          <label className="flex items-center gap-2 text-sm text-white/80">
+          <label className="flex items-center gap-2 text-sm text-neutral-700">
             <input type="checkbox" {...addonForm.register("isActive")} />
             Active
           </label>

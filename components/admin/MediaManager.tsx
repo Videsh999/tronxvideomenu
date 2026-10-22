@@ -133,15 +133,15 @@ export default function MediaManager({
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
+          <h1 className="text-2xl font-bold tracking-tight text-neutral-900 sm:text-3xl">
             Media Library
           </h1>
-          <p className="mt-1 text-sm text-white/50">
+          <p className="mt-1 text-sm text-neutral-500">
             Manage restaurant images and videos used across the menu.
           </p>
         </div>
 
-        <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-xs font-bold text-black transition hover:bg-white/90 has-disabled:cursor-not-allowed has-disabled:opacity-50">
+        <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-neutral-900 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-neutral-800 has-disabled:cursor-not-allowed has-disabled:opacity-50">
           {isUploading ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
@@ -160,30 +160,30 @@ export default function MediaManager({
       </div>
 
       {error ? (
-        <div className="flex items-start gap-2 rounded-xl border border-rose-500/20 bg-rose-500/10 p-3 text-sm text-rose-300">
+        <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-600">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>{error}</span>
         </div>
       ) : null}
 
       {feedback ? (
-        <p role="status" className="text-sm text-emerald-400">
+        <p role="status" className="text-sm text-emerald-700">
           {feedback}
         </p>
       ) : null}
 
       {isRefreshing && media.length === 0 ? (
-        <div className="flex min-h-48 items-center justify-center rounded-2xl border border-white/10 bg-white/2 text-sm text-white/50">
+        <div className="flex min-h-48 items-center justify-center rounded-2xl border border-neutral-200 bg-white text-sm text-neutral-500">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           Loading media…
         </div>
       ) : media.length === 0 ? (
-        <div className="flex min-h-48 flex-col items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/2 px-6 text-center">
-          <ImageIcon className="h-8 w-8 text-white/25" />
-          <p className="mt-3 text-sm font-semibold text-white/70">
+        <div className="flex min-h-48 flex-col items-center justify-center rounded-2xl border border-dashed border-neutral-200 bg-white px-6 text-center">
+          <ImageIcon className="h-8 w-8 text-neutral-300" />
+          <p className="mt-3 text-sm font-semibold text-neutral-600">
             No media files yet
           </p>
-          <p className="mt-1 text-xs text-white/40">
+          <p className="mt-1 text-xs text-neutral-400">
             Upload an image or video to start building the restaurant library.
           </p>
         </div>
@@ -198,9 +198,9 @@ export default function MediaManager({
             return (
               <article
                 key={item.id}
-                className="overflow-hidden rounded-2xl border border-white/10 bg-white/2"
+                className="overflow-hidden rounded-2xl border border-neutral-200 bg-white"
               >
-                <div className="relative aspect-video bg-zinc-900">
+                <div className="relative aspect-video bg-neutral-100">
                   {isVideo ? (
                     <video
                       src={item.url}
@@ -228,7 +228,7 @@ export default function MediaManager({
                 </div>
 
                 <div className="space-y-3 p-4">
-                  <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-white/50">
+                  <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-neutral-500">
                     {item.format ? (
                       <span>{item.format.toUpperCase()}</span>
                     ) : null}
@@ -236,7 +236,7 @@ export default function MediaManager({
                     {duration ? <span>{duration}</span> : null}
                   </div>
                   <p
-                    className="truncate text-xs text-white/35"
+                    className="truncate text-xs text-neutral-400"
                     title={item.publicId}
                   >
                     {item.publicId}
@@ -245,7 +245,7 @@ export default function MediaManager({
                     type="button"
                     onClick={() => handleDelete(item)}
                     disabled={deletingId === item.id}
-                    className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-rose-400/80 transition hover:bg-rose-500/10 hover:text-rose-300 disabled:opacity-50"
+                    className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-rose-600 transition hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
                   >
                     {deletingId === item.id ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />

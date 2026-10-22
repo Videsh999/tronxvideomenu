@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -15,18 +15,32 @@ import {
   CheckCircle2,
   XCircle,
   Check,
-  ChevronDown,
+  ArrowUp,
+  ArrowDown,
+  Trash2,
+  ImagePlus,
 } from "lucide-react";
-import type { AddonGroup, Category, Dish } from "@/types";
+import type { AddonGroup, Category, Dish, DishMediaItem } from "@/types";
 import { api } from "@/lib/api";
 import { canUseNextImage } from "@/lib/image-url";
 import AdminModal from "@/components/admin/AdminModal";
 import MediaPicker from "@/components/admin/MediaPicker";
+import SmartImage from "@/components/shared/SmartImage";
 import { dishSchema } from "@/lib/validations";
 
 const dishFormSchema = dishSchema.omit({ restaurantId: true });
 type DishFormInput = z.input<typeof dishFormSchema>;
 type DishFormValues = z.output<typeof dishFormSchema>;
+
+const sectionTitleClass = "text-xs font-bold uppercase tracking-[0.14em] text-neutral-400";
+const labelClass = "mb-1.5 block text-sm font-medium text-neutral-700";
+const secondaryButtonClass = "inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-neutral-200 px-3.5 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50";
+const fieldClass = (invalid: boolean) =>
+  `h-11 w-full rounded-xl border bg-white px-3.5 text-sm text-neutral-900 placeholder:text-neutral-400 transition focus:outline-none focus:ring-2 focus:ring-neutral-900/10 [&:is(textarea)]:h-auto [&:is(textarea)]:py-2.5 ${invalid ? "border-rose-400" : "border-neutral-200 focus:border-neutral-400"}`;
+
+function FieldError({ message }: { message?: string }) {
+  return message ? <p className="mt-1.5 text-xs font-medium text-rose-600">{message}</p> : null;
+}
 
 type DishesManagerProps = {
   initialDishes: Dish[];
@@ -57,9 +71,9 @@ export default function DishesManager({
   const [mediaPickerType, setMediaPickerType] = useState<
     "IMAGE" | "VIDEO" | null
   >(null);
-  const [categoryOpen, setCategoryOpen] = useState(false);
-  const [categoryOptionIndex, setCategoryOptionIndex] = useState(0);
-  const categoryDropdownRef = useRef<HTMLDivElement>(null);
+  const [mediaPickerTarget, setMediaPickerTarget] = useState<"main" | "gallery">("main");
+  const [galleryUrl, setGalleryUrl] = useState("");
+  const [galleryUrlType, setGalleryUrlType] = useState<DishMediaItem["type"]>("IMAGE");
 
   const categoryMap = new Map(categories.map((c) => [c.id, c.name]));
 
@@ -86,43 +100,34 @@ export default function DishesManager({
       imageUrl: "",
       videoUrl: "",
       videoPosterUrl: "",
+      gallery: [],
     },
   });
 
   const selectedAddonGroupIds = watch("addonGroupIds") ?? [];
-  const selectedCategoryId = watch("categoryId");
-  const selectedCategory = categories.find(
-    (category) => category.id === selectedCategoryId,
-  );
+  const gallery = watch("gallery") ?? [];
 
-  useEffect(() => {
-    if (!categoryOpen) return;
-
-    const handleOutsideClick = (event: MouseEvent) => {
-      if (
-        categoryDropdownRef.current &&
-        !categoryDropdownRef.current.contains(event.target as Node)
-      ) {
-        setCategoryOpen(false);
-      }
-    };
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setCategoryOpen(false);
-    };
-
-    document.addEventListener("mousedown", handleOutsideClick);
-    document.addEventListener("keydown", handleEscape);
-    return () => {
-      document.removeEventListener("mousedown", handleOutsideClick);
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, [categoryOpen]);
+  const setGallery = (next: DishMediaItem[]) =>
+    setValue("gallery", next, { shouldDirty: true, shouldValidate: true });
+  const addGalleryItem = (type: DishMediaItem["type"], url: string) => {
+    const trimmed = url.trim();
+    if (!trimmed || gallery.some((item) => item.url === trimmed)) return;
+    setGallery([...gallery, { id: `media-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, type, url: trimmed }]);
+  };
+  const moveGalleryItem = (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= gallery.length) return;
+    const next = [...gallery];
+    [next[index], next[target]] = [next[target], next[index]];
+    setGallery(next);
+  };
+  const dishType = watch("type");
+  const imageUrlValue = watch("imageUrl")?.trim();
 
   const openCreate = () => {
     setEditing(null);
     setSubmitError(null);
     setFeedback(null);
-    setCategoryOpen(false);
     reset({
       categoryId: categories[0]?.id ?? "",
       name: "",
@@ -136,7 +141,9 @@ export default function DishesManager({
       imageUrl: "",
       videoUrl: "",
       videoPosterUrl: "",
+      gallery: [],
     });
+    setGalleryUrl("");
     setModalOpen(true);
   };
 
@@ -144,7 +151,6 @@ export default function DishesManager({
     setEditing(dish);
     setSubmitError(null);
     setFeedback(null);
-    setCategoryOpen(false);
     reset({
       categoryId: dish.categoryId,
       name: dish.name,
@@ -160,7 +166,9 @@ export default function DishesManager({
       imageUrl: dish.imageUrl ?? dish.image ?? "",
       videoUrl: dish.videoUrl ?? dish.video ?? "",
       videoPosterUrl: dish.videoPosterUrl ?? "",
+      gallery: dish.gallery ?? [],
     });
+    setGalleryUrl("");
     setModalOpen(true);
   };
 
@@ -180,6 +188,7 @@ export default function DishesManager({
       image: values.imageUrl || undefined,
       videoUrl: videoMenuEnabled ? values.videoUrl : undefined,
       video: videoMenuEnabled ? values.videoUrl || undefined : undefined,
+      gallery: (values.gallery ?? []).filter((item) => videoMenuEnabled || item.type === "IMAGE"),
       addonGroupIds: values.addonGroupIds ?? [],
       isCustomizable:
         values.isCustomizable ?? (values.addonGroupIds?.length ?? 0) > 0,
@@ -254,16 +263,16 @@ export default function DishesManager({
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <Link
-            href="/admin/menu"
-            className="inline-flex items-center gap-1.5 text-xs text-white/50 hover:text-white mb-2"
+            href={`/admin/${encodeURIComponent(restaurantId)}/menu`}
+            className="inline-flex items-center gap-1.5 text-xs text-neutral-500 hover:text-neutral-900 mb-2"
           >
             <ArrowLeft className="h-3 w-3" />
             <span>Back to Menu Hub</span>
           </Link>
-          <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
+          <h1 className="text-2xl font-bold tracking-tight text-neutral-900 sm:text-3xl">
             Dishes
           </h1>
-          <p className="mt-1 text-sm text-white/50">
+          <p className="mt-1 text-sm text-neutral-500">
             Catalogue your food and drink offerings, prices, and video previews.
           </p>
         </div>
@@ -271,28 +280,39 @@ export default function DishesManager({
         <button
           type="button"
           onClick={openCreate}
-          className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-xs font-bold text-black transition hover:bg-white/90"
+          disabled={categories.length === 0}
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-neutral-900 px-5 text-sm font-bold text-white transition hover:bg-neutral-800 disabled:opacity-40"
         >
           <Plus className="h-4 w-4" />
-          <span>Add Dish</span>
+          <span>Add dish</span>
         </button>
       </div>
+
+      {categories.length === 0 ? (
+        <div className="flex flex-col gap-3 rounded-2xl border border-neutral-200 bg-neutral-50 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-neutral-900">Create a category first</p>
+            <p className="mt-0.5 text-sm text-neutral-500">Every dish lives in a category, like Starters, Mains or Drinks.</p>
+          </div>
+          <Link href={`/admin/${encodeURIComponent(restaurantId)}/menu/categories`} className="inline-flex h-11 shrink-0 items-center justify-center rounded-xl bg-neutral-900 px-5 text-sm font-bold text-white transition hover:bg-neutral-800">Add categories</Link>
+        </div>
+      ) : null}
 
       {feedback ? (
         <p
           role="status"
           className={`text-sm ${
-            feedback.type === "success" ? "text-emerald-400" : "text-rose-400"
+            feedback.type === "success" ? "text-emerald-700" : "text-rose-600"
           }`}
         >
           {feedback.message}
         </p>
       ) : null}
 
-      <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/2">
+      <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-white/10 bg-white/2 text-xs font-semibold uppercase tracking-wider text-white/40">
+            <thead className="border-b border-neutral-200 bg-white text-xs font-semibold uppercase tracking-wider text-neutral-400">
               <tr>
                 <th className="py-3.5 pl-4 pr-3">Dish</th>
                 <th className="py-3.5 px-4 hidden md:table-cell">Category</th>
@@ -302,7 +322,7 @@ export default function DishesManager({
                 <th className="py-3.5 pr-4 pl-2 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/5">
+            <tbody className="divide-y divide-neutral-100">
               {dishes.map((dish) => {
                 const categoryName =
                   categoryMap.get(dish.categoryId) || "Uncategorized";
@@ -310,10 +330,10 @@ export default function DishesManager({
                 const imageSrc = dish.imageUrl || dish.image;
 
                 return (
-                  <tr key={dish.id} className="hover:bg-white/2 transition">
+                  <tr key={dish.id} className="hover:bg-white transition">
                     <td className="py-4 pl-4 pr-3">
                       <div className="flex items-center gap-3">
-                        <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-zinc-900">
+                        <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-neutral-200 bg-neutral-100">
                           {imageSrc ? (
                             canUseNextImage(imageSrc) ? (
                               <Image
@@ -331,40 +351,40 @@ export default function DishesManager({
                               />
                             )
                           ) : (
-                            <div className="flex h-full w-full items-center justify-center text-white/20">
+                            <div className="flex h-full w-full items-center justify-center text-neutral-300">
                               <Utensils className="h-5 w-5" />
                             </div>
                           )}
                           {hasVideo ? (
-                            <span className="absolute bottom-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-black/80 text-[9px] text-white">
+                            <span className="absolute bottom-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-black/70 text-[9px] text-white">
                               ▶
                             </span>
                           ) : null}
                         </div>
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="font-semibold text-white">
+                            <span className="font-semibold text-neutral-900">
                               {dish.name}
                             </span>
                             {hasVideo ? (
-                              <span className="inline-flex items-center gap-1 rounded bg-purple-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-purple-300">
+                              <span className="inline-flex items-center gap-1 rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-900">
                                 <Video className="h-2.5 w-2.5" />
                                 Video
                               </span>
                             ) : null}
                           </div>
                           {dish.description ? (
-                            <p className="line-clamp-1 text-xs text-white/45 max-w-sm">
+                            <p className="line-clamp-1 text-xs text-neutral-500 max-w-sm">
                               {dish.description}
                             </p>
                           ) : null}
                         </div>
                       </div>
                     </td>
-                    <td className="py-4 px-4 text-xs font-medium text-white/70 hidden md:table-cell">
+                    <td className="py-4 px-4 text-xs font-medium text-neutral-600 hidden md:table-cell">
                       {categoryName}
                     </td>
-                    <td className="py-4 px-4 font-bold text-white">
+                    <td className="py-4 px-4 font-bold text-neutral-900">
                       ₹{dish.price}
                     </td>
                     <td className="py-4 px-4 text-center">
@@ -386,12 +406,12 @@ export default function DishesManager({
                         onClick={() => toggleAvailability(dish)}
                       >
                         {dish.isAvailable ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-400">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
                             <CheckCircle2 className="h-3 w-3" />
                             In Stock
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/10 px-2.5 py-0.5 text-xs font-medium text-rose-400">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2.5 py-0.5 text-xs font-medium text-rose-600">
                             <XCircle className="h-3 w-3" />
                             Sold Out
                           </span>
@@ -402,14 +422,14 @@ export default function DishesManager({
                       <button
                         type="button"
                         onClick={() => openEdit(dish)}
-                        className="rounded-lg px-2.5 py-1 text-xs font-medium text-white/60 hover:bg-white/10 hover:text-white transition"
+                        className="rounded-lg px-2.5 py-1 text-xs font-medium text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 transition"
                       >
                         Edit
                       </button>
                       <button
                         type="button"
                         onClick={() => handleDelete(dish)}
-                        className="rounded-lg px-2.5 py-1 text-xs font-medium text-rose-400/80 hover:bg-rose-500/10 transition"
+                        className="rounded-lg px-2.5 py-1 text-xs font-medium text-rose-600 hover:bg-rose-50 transition"
                       >
                         Delete
                       </button>
@@ -423,295 +443,241 @@ export default function DishesManager({
       </div>
 
       <AdminModal
-        title={editing ? "Edit Dish" : "Add Dish"}
+        title={editing ? `Edit ${editing.name}` : "Add a dish"}
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         footer={
-          <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => setModalOpen(false)}
-              className="rounded-xl border border-white/10 px-4 py-2 text-xs font-semibold text-white/70"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              form="dish-form"
-              disabled={isSubmitting}
-              className="rounded-xl bg-white px-4 py-2 text-xs font-bold text-black disabled:opacity-50"
-            >
-              {isSubmitting ? "Saving…" : "Save"}
-            </button>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p role="alert" className="min-h-4 text-xs font-medium text-rose-600">{submitError}</p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setModalOpen(false)}
+                className="h-11 rounded-xl border border-neutral-200 px-5 text-sm font-semibold text-neutral-700 transition hover:bg-neutral-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                form="dish-form"
+                disabled={isSubmitting}
+                className="h-11 rounded-xl bg-neutral-900 px-6 text-sm font-bold text-white transition hover:bg-neutral-800 disabled:opacity-50"
+              >
+                {isSubmitting ? "Saving…" : editing ? "Save changes" : "Add dish"}
+              </button>
+            </div>
           </div>
         }
       >
         <form
           id="dish-form"
-          onSubmit={handleSubmit(onSubmit)}
-          className="space-y-3 max-h-[60vh] overflow-y-auto pr-1"
+          noValidate
+          onSubmit={handleSubmit(onSubmit, () => setSubmitError("Please fix the highlighted fields."))}
+          className="space-y-6"
         >
-          {submitError ? (
-            <p className="text-xs text-rose-400">{submitError}</p>
-          ) : null}
-          <div>
-            <label className="mb-1 block text-xs text-white/60">Name</label>
-            <input
-              {...register("name")}
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
-            />
-            {errors.name ? (
-              <p className="text-xs text-rose-400">{errors.name.message}</p>
-            ) : null}
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-white/60">Category</label>
-            <div ref={categoryDropdownRef} className="relative">
-              <input type="hidden" {...register("categoryId")} />
-              <button
-                type="button"
-                aria-haspopup="listbox"
-                aria-expanded={categoryOpen}
-                onClick={() => {
-                  setCategoryOpen((open) => !open);
-                  setCategoryOptionIndex(
-                    Math.max(
-                      0,
-                      categories.findIndex(
-                        (category) => category.id === selectedCategoryId,
-                      ),
-                    ),
-                  );
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Escape") {
-                    setCategoryOpen(false);
-                    return;
-                  }
-                  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-                    event.preventDefault();
-                    if (!categoryOpen) {
-                      setCategoryOpen(true);
-                      return;
-                    }
-                    setCategoryOptionIndex((current) => {
-                      const direction = event.key === "ArrowDown" ? 1 : -1;
-                      return Math.min(
-                        Math.max(current + direction, 0),
-                        Math.max(categories.length - 1, 0),
-                      );
-                    });
-                  }
-                  if (
-                    categoryOpen &&
-                    (event.key === "Enter" || event.key === " ") &&
-                    categories[categoryOptionIndex]
-                  ) {
-                    event.preventDefault();
-                    setValue("categoryId", categories[categoryOptionIndex].id, {
-                      shouldDirty: true,
-                      shouldValidate: true,
-                    });
-                    setCategoryOpen(false);
-                  }
-                }}
-                className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left text-sm text-white transition hover:border-white/20 hover:bg-white/10 focus:outline-none focus:ring-1 focus:ring-white/30"
-              >
-                <span
-                  className={selectedCategory ? "text-white" : "text-white/40"}
-                >
-                  {selectedCategory?.name ?? "Select a category"}
-                </span>
-                <ChevronDown
-                  className={`h-4 w-4 text-white/50 transition-transform ${
-                    categoryOpen ? "rotate-180" : ""
-                  }`}
+          <section className="space-y-4">
+            <h3 className={sectionTitleClass}>Basics</h3>
+            <label className="block">
+              <span className={labelClass}>Dish name</span>
+              <input {...register("name")} placeholder="e.g. Butter Chicken" aria-invalid={Boolean(errors.name)} className={fieldClass(Boolean(errors.name))} />
+              <FieldError message={errors.name?.message} />
+            </label>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="block">
+                <span className={labelClass}>Category</span>
+                <select {...register("categoryId")} aria-invalid={Boolean(errors.categoryId)} className={fieldClass(Boolean(errors.categoryId))}>
+                  <option value="" disabled>Select a category</option>
+                  {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+                </select>
+                <FieldError message={errors.categoryId ? "Choose a category" : undefined} />
+              </label>
+              <label className="block">
+                <span className={labelClass}>Price (₹)</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="any"
+                  placeholder="0"
+                  {...register("price", { setValueAs: (value) => (value === "" || value == null ? Number.NaN : Number(value)) })}
+                  aria-invalid={Boolean(errors.price)}
+                  className={fieldClass(Boolean(errors.price))}
                 />
-              </button>
+                <FieldError message={errors.price ? "Enter a price of 0 or more" : undefined} />
+              </label>
+            </div>
+            <label className="block">
+              <span className={labelClass}>Description <span className="font-normal text-neutral-400">(optional)</span></span>
+              <textarea {...register("description")} rows={3} placeholder="Ingredients, taste, portion size…" className={fieldClass(Boolean(errors.description))} />
+              <FieldError message={errors.description?.message} />
+            </label>
+            <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Dish type">
+              {(["VEG", "NON_VEG"] as const).map((type) => (
+                <label key={type} className={`flex cursor-pointer items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-semibold transition ${dishType === type ? "border-neutral-900 bg-neutral-900 text-white" : "border-neutral-200 text-neutral-700 hover:bg-neutral-50"}`}>
+                  <input type="radio" value={type} {...register("type")} className="sr-only" />
+                  <span className={`grid h-3.5 w-3.5 place-items-center rounded-[3px] border-2 ${type === "VEG" ? "border-emerald-600" : "border-rose-600"}`}><span className={`h-1.5 w-1.5 rounded-full ${type === "VEG" ? "bg-emerald-600" : "bg-rose-600"}`} /></span>
+                  {type === "VEG" ? "Veg" : "Non-veg"}
+                </label>
+              ))}
+            </div>
+          </section>
 
-              {categoryOpen ? (
-                <div
-                  role="listbox"
-                  aria-label="Categories"
-                  className="absolute left-0 right-0 z-30 mt-2 max-h-52 overflow-y-auto rounded-xl border border-white/10 bg-zinc-900 p-1 shadow-2xl"
-                >
-                  {categories.map((category, index) => {
-                    const isSelected = category.id === selectedCategoryId;
-                    const isKeyboardFocused = index === categoryOptionIndex;
-                    return (
-                      <button
-                        key={category.id}
-                        type="button"
-                        role="option"
-                        aria-selected={isSelected}
-                        onMouseEnter={() => setCategoryOptionIndex(index)}
-                        onClick={() => {
-                          setValue("categoryId", category.id, {
-                            shouldDirty: true,
-                            shouldValidate: true,
-                          });
-                          setCategoryOpen(false);
-                        }}
-                        className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition ${
-                          isSelected || isKeyboardFocused
-                            ? "bg-white/10 text-white"
-                            : "text-white/70 hover:bg-white/5 hover:text-white"
-                        }`}
-                      >
-                        <span>{category.name}</span>
-                        {isSelected ? <Check className="h-4 w-4" /> : null}
-                      </button>
-                    );
-                  })}
+          <section className="space-y-4 border-t border-neutral-100 pt-5">
+            <h3 className={sectionTitleClass}>Photo{videoMenuEnabled ? " & video" : ""}</h3>
+            <div className="flex items-start gap-3">
+              <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-neutral-200 bg-neutral-100">
+                {imageUrlValue ? <SmartImage src={imageUrlValue} alt="" sizes="64px" className="object-cover" /> : <span className="grid h-full w-full place-items-center text-neutral-300"><ImagePlus className="h-5 w-5" /></span>}
+              </div>
+              <label className="block min-w-0 flex-1">
+                <span className={labelClass}>Main photo</span>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <input {...register("imageUrl")} placeholder="Paste an image link" className={`${fieldClass(Boolean(errors.imageUrl))} min-w-0 flex-1`} />
+                  {mediaLibraryEnabled ? <button type="button" onClick={() => { setMediaPickerTarget("main"); setMediaPickerType("IMAGE"); }} className={secondaryButtonClass}>Choose from library</button> : null}
                 </div>
-              ) : null}
+                <FieldError message={errors.imageUrl?.message} />
+              </label>
             </div>
-            {errors.categoryId ? (
-              <p className="mt-1 text-xs text-rose-400">
-                {errors.categoryId.message}
-              </p>
+            {videoMenuEnabled ? (
+              <>
+                <label className="block">
+                  <span className={labelClass}>Video <span className="font-normal text-neutral-400">(optional, plays on the menu card)</span></span>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <input {...register("videoUrl")} placeholder="Paste a video link (.mp4 or .m3u8)" className={`${fieldClass(Boolean(errors.videoUrl))} min-w-0 flex-1`} />
+                    {mediaLibraryEnabled ? <button type="button" onClick={() => { setMediaPickerTarget("main"); setMediaPickerType("VIDEO"); }} className={secondaryButtonClass}>Choose from library</button> : null}
+                  </div>
+                  <FieldError message={errors.videoUrl?.message} />
+                </label>
+                <label className="block">
+                  <span className={labelClass}>Video cover image <span className="font-normal text-neutral-400">(optional)</span></span>
+                  <input {...register("videoPosterUrl")} placeholder="Shown while the video loads" className={fieldClass(Boolean(errors.videoPosterUrl))} />
+                  <FieldError message={errors.videoPosterUrl?.message} />
+                </label>
+              </>
             ) : null}
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-white/60">
-              Description
-            </label>
-            <textarea
-              {...register("description")}
-              rows={2}
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="mb-1 block text-xs text-white/60">
-                Price (₹)
+          </section>
+
+          <section className="space-y-3 border-t border-neutral-100 pt-5">
+            <div className="flex items-end justify-between gap-2">
+              <div>
+                <h3 className={sectionTitleClass}>Gallery</h3>
+                <p className="mt-0.5 text-xs text-neutral-500">Extra photos{videoMenuEnabled ? " and videos" : ""} guests can swipe through.</p>
+              </div>
+              <span className="shrink-0 text-xs tabular-nums text-neutral-400">{gallery.length}/12</span>
+            </div>
+            {gallery.length ? (
+              <ul className="space-y-2">
+                {gallery.map((item, index) => (
+                  <li key={item.id} className="flex items-center gap-3 rounded-xl border border-neutral-200 p-2">
+                    <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-neutral-100">
+                      {item.type === "IMAGE" ? (
+                        <SmartImage src={item.url} alt="" sizes="48px" className="object-cover" />
+                      ) : (
+                        <video src={item.url} muted preload="metadata" className="h-full w-full object-cover" />
+                      )}
+                      <span className="absolute bottom-0.5 left-0.5 rounded bg-black/70 px-1 text-[9px] font-bold uppercase text-white">{item.type === "IMAGE" ? "Photo" : "Video"}</span>
+                    </div>
+                    <p className="min-w-0 flex-1 truncate text-xs text-neutral-500" title={item.url}>{item.url}</p>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <button type="button" onClick={() => moveGalleryItem(index, -1)} disabled={index === 0} aria-label="Move up" className="grid h-8 w-8 place-items-center rounded-lg text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 disabled:opacity-30"><ArrowUp className="h-3.5 w-3.5" /></button>
+                      <button type="button" onClick={() => moveGalleryItem(index, 1)} disabled={index === gallery.length - 1} aria-label="Move down" className="grid h-8 w-8 place-items-center rounded-lg text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 disabled:opacity-30"><ArrowDown className="h-3.5 w-3.5" /></button>
+                      <button type="button" onClick={() => setGallery(gallery.filter((entry) => entry.id !== item.id))} aria-label="Remove from gallery" className="grid h-8 w-8 place-items-center rounded-lg text-rose-600 hover:bg-rose-50"><Trash2 className="h-3.5 w-3.5" /></button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {gallery.length < 12 ? (
+              <div className="space-y-2">
+                {mediaLibraryEnabled ? (
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" onClick={() => { setMediaPickerTarget("gallery"); setMediaPickerType("IMAGE"); }} className={secondaryButtonClass}><ImagePlus className="h-4 w-4" /> Add photo</button>
+                    {videoMenuEnabled ? <button type="button" onClick={() => { setMediaPickerTarget("gallery"); setMediaPickerType("VIDEO"); }} className={secondaryButtonClass}><Video className="h-4 w-4" /> Add video</button> : null}
+                  </div>
+                ) : null}
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  {videoMenuEnabled ? (
+                    <select value={galleryUrlType} onChange={(event) => setGalleryUrlType(event.target.value as DishMediaItem["type"])} aria-label="Gallery media type" className={`${fieldClass(false)} sm:w-28`}>
+                      <option value="IMAGE">Photo</option>
+                      <option value="VIDEO">Video</option>
+                    </select>
+                  ) : null}
+                  <input
+                    value={galleryUrl}
+                    onChange={(event) => setGalleryUrl(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        addGalleryItem(videoMenuEnabled ? galleryUrlType : "IMAGE", galleryUrl);
+                        setGalleryUrl("");
+                      }
+                    }}
+                    placeholder="…or paste a link"
+                    className={`${fieldClass(false)} min-w-0 flex-1`}
+                  />
+                  <button type="button" onClick={() => { addGalleryItem(videoMenuEnabled ? galleryUrlType : "IMAGE", galleryUrl); setGalleryUrl(""); }} disabled={!galleryUrl.trim()} className="inline-flex h-11 items-center justify-center gap-1.5 rounded-xl bg-neutral-900 px-4 text-sm font-bold text-white disabled:opacity-40"><Plus className="h-4 w-4" /> Add</button>
+                </div>
+              </div>
+            ) : null}
+            <FieldError message={errors.gallery ? errors.gallery.message ?? "Check the gallery items." : undefined} />
+          </section>
+
+          {addonGroups.length ? (
+            <section className="space-y-3 border-t border-neutral-100 pt-5">
+              <div>
+                <h3 className={sectionTitleClass}>Add-ons</h3>
+                <p className="mt-0.5 text-xs text-neutral-500">Extras guests can pick, like toppings or sizes.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {addonGroups.map((group) => {
+                  const selected = selectedAddonGroupIds.includes(group.id);
+                  return (
+                    <button key={group.id} type="button" aria-pressed={selected} onClick={() => toggleAddonGroup(group.id)} className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-sm font-medium transition ${selected ? "border-neutral-900 bg-neutral-900 text-white" : "border-neutral-200 text-neutral-700 hover:bg-neutral-50"}`}>
+                      {selected ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+                      {group.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          ) : null}
+
+          <section className="space-y-4 border-t border-neutral-100 pt-5">
+            <h3 className={sectionTitleClass}>More options</h3>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="block">
+                <span className={labelClass}>Preparation time (minutes) <span className="font-normal text-neutral-400">(optional)</span></span>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min="0"
+                  step="1"
+                  placeholder="e.g. 15"
+                  {...register("preparationTime", { setValueAs: (value) => (value === "" || value == null ? undefined : Number(value)) })}
+                  className={fieldClass(Boolean(errors.preparationTime))}
+                />
+                <FieldError message={errors.preparationTime ? "Use whole minutes, 0 or more" : undefined} />
               </label>
-              <input
-                type="number"
-                step="1"
-                {...register("price", { valueAsNumber: true })}
-                className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs text-white/60">
-                Preparation time (min)
+              <label className="block">
+                <span className={labelClass}>Position in category</span>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min="0"
+                  step="1"
+                  {...register("sortOrder", { setValueAs: (value) => (value === "" || value == null ? undefined : Number(value)) })}
+                  className={fieldClass(Boolean(errors.sortOrder))}
+                />
+                <FieldError message={errors.sortOrder ? "Use a whole number, 0 or more" : undefined} />
               </label>
-              <input
-                type="number"
-                min="0"
-                {...register("preparationTime", { valueAsNumber: true })}
-                className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
-              />
-              {errors.preparationTime ? (
-                <p className="mt-1 text-xs text-rose-400">
-                  {errors.preparationTime.message}
-                </p>
-              ) : null}
             </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="mb-1 block text-xs text-white/60">
-                Sort order
-              </label>
-              <input
-                type="number"
-                {...register("sortOrder", { valueAsNumber: true })}
-                className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
-              />
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-4 text-sm text-white/80">
-            <label className="flex items-center gap-2">
-              <select
-                {...register("type")}
-                className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-sm"
-              >
-                <option value="VEG">Vegetarian</option>
-                <option value="NON_VEG">Non-Veg</option>
-              </select>
+            <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-neutral-200 px-4 py-3">
+              <span>
+                <span className="block text-sm font-semibold text-neutral-900">Available to order</span>
+                <span className="block text-xs text-neutral-500">Turn off when it&apos;s sold out. It stays on the menu, marked unavailable.</span>
+              </span>
+              <input type="checkbox" {...register("isAvailable")} className="h-5 w-5 shrink-0 accent-neutral-900" />
             </label>
-            <label className="flex items-center gap-2">
-              <input type="checkbox" {...register("isAvailable")} />
-              Available
-            </label>
-            <label className="flex items-center gap-2">
-              <input type="checkbox" {...register("isCustomizable")} />
-              Customisable
-            </label>
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-white/60">
-              Image URL
-            </label>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <input
-                {...register("imageUrl")}
-                className="min-w-0 flex-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
-              />
-              {mediaLibraryEnabled && <button
-                type="button"
-                onClick={() => setMediaPickerType("IMAGE")}
-                className="inline-flex shrink-0 items-center justify-center rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-white/70 transition hover:bg-white/5 hover:text-white"
-              >
-                Select from Media Library
-              </button>}
-            </div>
-          </div>
-          {videoMenuEnabled && <>
-          <div>
-            <label className="mb-1 block text-xs text-white/60">
-              Video URL
-            </label>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <input
-                {...register("videoUrl")}
-                className="min-w-0 flex-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
-              />
-              {mediaLibraryEnabled && <button
-                type="button"
-                onClick={() => setMediaPickerType("VIDEO")}
-                className="inline-flex shrink-0 items-center justify-center rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-white/70 transition hover:bg-white/5 hover:text-white"
-              >
-                Select from Media Library
-              </button>}
-            </div>
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-white/60">
-              Video poster URL
-            </label>
-            <input
-              {...register("videoPosterUrl")}
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
-            />
-          </div></>}
-          <div>
-            <p className="mb-2 text-xs font-medium text-white/60">
-              Assigned add-on groups
-            </p>
-            <div className="space-y-2 rounded-xl border border-white/10 bg-white/2 p-3">
-              {addonGroups.length === 0 ? (
-                <p className="text-xs text-white/40">No add-on groups yet.</p>
-              ) : (
-                addonGroups.map((group) => (
-                  <label
-                    key={group.id}
-                    className="flex items-center gap-2 text-sm text-white/80"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedAddonGroupIds.includes(group.id)}
-                      onChange={() => toggleAddonGroup(group.id)}
-                    />
-                    {group.name}
-                  </label>
-                ))
-              )}
-            </div>
-          </div>
+          </section>
         </form>
       </AdminModal>
 
@@ -721,7 +687,9 @@ export default function DishesManager({
         restaurantId={restaurantId}
         onClose={() => setMediaPickerType(null)}
         onSelect={(media) => {
-          if (mediaPickerType === "IMAGE") {
+          if (mediaPickerTarget === "gallery") {
+            addGalleryItem(media.type, media.url);
+          } else if (mediaPickerType === "IMAGE") {
             setValue("imageUrl", media.url, {
               shouldDirty: true,
               shouldValidate: true,

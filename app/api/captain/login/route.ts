@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createAdminSession, SESSION_TTL_SECONDS, sessionCookieForRole } from "@/lib/auth-core";
+import { createAdminSession, isSecureRequest, SESSION_TTL_SECONDS, sessionCookieForRole } from "@/lib/auth-core";
 import { requireRestaurantFeature } from "@/lib/feature-access";
 import { captainLoginSchema } from "@/lib/validations";
 import { restaurantService } from "@/lib/services/restaurant.service";
@@ -60,7 +60,7 @@ export async function POST(request: Request) {
 
     const session = await createAdminSession(captain.email, secret, "CAPTAIN", restaurant.id, restaurant.slug, captain.id, captain.updatedAt);
     const response = NextResponse.json({ success: true, data: { role: "CAPTAIN", name: captain.name, restaurantSlug: restaurant.slug } });
-    response.cookies.set({ name: sessionCookieForRole("CAPTAIN"), value: session, httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: SESSION_TTL_SECONDS });
+    response.cookies.set({ name: sessionCookieForRole("CAPTAIN"), value: session, httpOnly: true, secure: isSecureRequest(request), sameSite: "lax", path: "/", maxAge: SESSION_TTL_SECONDS });
     return response;
   } catch (error) {
     const validation = error && typeof error === "object" && "issues" in error;

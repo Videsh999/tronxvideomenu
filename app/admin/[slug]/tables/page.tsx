@@ -17,5 +17,5 @@ export default async function RestaurantTablesPage({ params }: { params: Promise
     tableService.list(slug),
     orderManagementEnabled ? orderService.listForRestaurant(slug) : Promise.resolve([]),
   ]);
-  return <TablesManager initialTables={initialTables} initialOrders={initialOrders} restaurantSlug={slug} orderManagementEnabled={orderManagementEnabled} tableOrderingEnabled={tableOrderingEnabled} />;
+  return <TablesManager initialTables={initialTables} initialOrders={initialOrders} restaurantSlug={slug} restaurantName={restaurant.name} orderManagementEnabled={orderManagementEnabled} tableOrderingEnabled={tableOrderingEnabled} />;
 }

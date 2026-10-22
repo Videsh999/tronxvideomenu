@@ -9,6 +9,12 @@ export function sessionCookieForRole(role: SessionRole) {
 }
 const SESSION_TTL_SECONDS = 60 * 60 * 8;
 
+// Browsers drop `Secure` cookies on plain http (e.g. a LAN IP), which would make every login silently fail there.
+export function isSecureRequest(request: Request): boolean {
+  const forwardedProto = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
+  return (forwardedProto ?? new URL(request.url).protocol.replace(":", "")) === "https";
+}
+
 type SessionPayload = {
   email: string;
   role: SessionRole;

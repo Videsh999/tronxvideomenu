@@ -16,7 +16,7 @@ export default async function RestaurantAvailabilitySlugPage({
   ]);
 
   if (!restaurant) {
-    return <p className="text-sm text-white/60">Restaurant not found.</p>;
+    return <p className="text-sm text-neutral-500">Restaurant not found.</p>;
   }
 
   return <AvailabilityManager initialDishes={dishes} restaurant={restaurant} />;

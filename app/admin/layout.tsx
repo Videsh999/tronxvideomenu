@@ -15,5 +15,14 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     ORDER_MANAGEMENT: false, MEDIA_LIBRARY: false, RESERVATIONS: false,
     CAPTAIN_ACCESS: false, WIFI: false, CUSTOM_THEME: false, ANALYTICS: false,
   };
-  return <AdminShell features={features} restaurantIsOpen={restaurant?.isOpen ?? false}>{children}</AdminShell>;
+  return (
+    <AdminShell
+      features={features}
+      restaurantIsOpen={restaurant?.isOpen ?? false}
+      restaurantName={restaurant?.name}
+      restaurantLogoUrl={restaurant?.logoUrl ?? restaurant?.logo}
+    >
+      {children}
+    </AdminShell>
+  );
 }

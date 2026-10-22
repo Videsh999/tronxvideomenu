@@ -3,26 +3,21 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type HlsType from "hls.js";
 
+/**
+ * Every visible card video plays at the same time. While a priority player (the
+ * dish detail) is open, the cards behind it pause and resume when it closes.
+ */
 type Candidate = {
-  ratio: number;
-  priority: number;
+  visible: boolean;
+  priority: boolean;
   setActive: (active: boolean) => void;
 };
 
 const candidates = new Map<symbol, Candidate>();
-let activePlayer: symbol | null = null;
 
-function chooseActivePlayer() {
-  const next = [...candidates.entries()]
-    .filter(([, candidate]) => candidate.ratio > 0)
-    .sort(
-      ([, left], [, right]) =>
-        right.priority - left.priority || right.ratio - left.ratio,
-    )[0]?.[0] ?? null;
-
-  if (activePlayer === next) return;
-  activePlayer = next;
-  candidates.forEach((candidate, id) => candidate.setActive(id === next));
+function syncPlayers() {
+  const detailOpen = [...candidates.values()].some((candidate) => candidate.priority && candidate.visible);
+  candidates.forEach((candidate) => candidate.setActive(candidate.visible && (candidate.priority || !detailOpen)));
 }
 
 function isHlsSource(url: string) {
@@ -43,7 +38,6 @@ type VideoPlayerProps = {
   controls?: boolean;
   loop?: boolean;
   playbackPriority?: boolean;
-  hovered?: boolean;
   className?: string;
 };
 
@@ -56,7 +50,6 @@ function VideoPlayer({
   controls = false,
   loop = true,
   playbackPriority = false,
-  hovered = false,
   className = "",
 }: VideoPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -67,7 +60,6 @@ function VideoPlayer({
   const activeRef = useRef(false);
   const [isActive, setIsActive] = useState(false);
   const [viewportRatio, setViewportRatio] = useState(0);
-  const [hasFinePointer, setHasFinePointer] = useState(false);
   const [errorUrl, setErrorUrl] = useState<string | null>(null);
   const hasError = errorUrl === videoUrl;
 
@@ -77,51 +69,14 @@ function VideoPlayer({
   }, []);
 
   const setPlayerActive = useCallback((active: boolean) => {
+    const wasActive = activeRef.current;
     activeRef.current = active;
-    if (!active) videoRef.current?.pause();
+    const video = videoRef.current;
+    if (!active) video?.pause();
+    // Each time a video comes back into play it starts again from the beginning.
+    else if (!wasActive && video && video.currentTime > 0) video.currentTime = 0;
     setIsActive((current) => (current === active ? current : active));
   }, []);
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia("(hover: hover) and (pointer: fine)");
-    const update = () => setHasFinePointer(mediaQuery.matches);
-    update();
-    mediaQuery.addEventListener("change", update);
-    return () => mediaQuery.removeEventListener("change", update);
-  }, []);
-
-  useEffect(() => {
-    const element = containerRef.current;
-    if (!element) return;
-    const observer = new IntersectionObserver(
-      ([entry]) =>
-        setViewportRatio(entry.isIntersecting ? entry.intersectionRatio : 0),
-      { threshold: [0, 0.1, 0.35, 0.6, 1] },
-    );
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
-    const eligibleRatio = playbackPriority
-      ? Math.max(viewportRatio, 1)
-      : hasFinePointer
-        ? (hovered ? 1 : 0)
-        : (viewportRatio >= 0.35 ? viewportRatio : 0);
-
-    const playerId = idRef.current;
-    candidates.set(playerId, {
-      ratio: eligibleRatio,
-      priority: playbackPriority ? 1 : 0,
-      setActive: setPlayerActive,
-    });
-    chooseActivePlayer();
-
-    return () => {
-      candidates.delete(playerId);
-      chooseActivePlayer();
-    };
-  }, [hasFinePointer, hovered, playbackPriority, setPlayerActive, viewportRatio]);
 
   const play = useCallback(() => {
     const video = videoRef.current;
@@ -134,6 +89,37 @@ function VideoPlayer({
       if (!blockedAutoplay || !controls) setErrorUrl(videoUrl);
     });
   }, [autoPlay, controls, videoUrl]);
+
+  // Register once; later effects only update this player's state in place so
+  // playing videos are not interrupted while the page scrolls.
+  useEffect(() => {
+    const playerId = idRef.current;
+    candidates.set(playerId, { visible: false, priority: false, setActive: setPlayerActive });
+    return () => {
+      candidates.delete(playerId);
+      syncPlayers();
+    };
+  }, [setPlayerActive]);
+
+  useEffect(() => {
+    const element = containerRef.current;
+    if (!element) return;
+    const observer = new IntersectionObserver(
+      ([entry]) =>
+        setViewportRatio(entry.isIntersecting ? entry.intersectionRatio : 0),
+      { threshold: [0, 0.3, 0.6, 0.9, 1] },
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const candidate = candidates.get(idRef.current);
+    if (!candidate) return;
+    candidate.priority = playbackPriority;
+    candidate.visible = !hasError && (playbackPriority || viewportRatio >= 0.3);
+    syncPlayers();
+  }, [hasError, playbackPriority, viewportRatio]);
 
   const loadVideo = useCallback(async () => {
     const video = videoRef.current;
@@ -210,8 +196,6 @@ function VideoPlayer({
 
   useEffect(
     () => () => {
-      candidates.delete(idRef.current);
-      chooseActivePlayer();
       destroyHls();
       const video = videoRef.current;
       if (video) {

@@ -1,10 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState, useMemo } from "react";
-import Image from "next/image";
-import { X, Sparkles, Check, Minus, Plus } from "lucide-react";
+import { X, Check, Clock, Minus, Plus } from "lucide-react";
 import type { Dish, AddonGroup, Addon } from "@/types";
-import VideoPlayer from "./VideoPlayer";
+import { getDishMedia } from "@/lib/dish-media";
+import DishMediaGallery from "./DishMediaGallery";
+import { VegMark } from "./DishCard";
+import SpeakButton from "./SpeakButton";
+import { useI18n } from "./I18nProvider";
 
 type DishDetailModalProps = {
   dish: Dish | null;
@@ -12,6 +15,7 @@ type DishDetailModalProps = {
   canOrder: boolean;
   orderingEnabled?: boolean;
   videoMenuEnabled?: boolean;
+  categoryName?: string;
   onAddToCart: (entry: { dishId: string; quantity: number; selections: { groupId: string; addonIds: string[] }[] }) => void;
 };
 
@@ -36,8 +40,10 @@ export default function DishDetailModal({
   canOrder,
   orderingEnabled = true,
   videoMenuEnabled = true,
+  categoryName,
   onAddToCart,
 }: DishDetailModalProps) {
+  const { t, tc } = useI18n();
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const savedScrollTopRef = useRef<number>(0);
@@ -180,17 +186,17 @@ export default function DishDetailModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="dish-modal-title"
-      className="fixed inset-0 z-50 flex items-end justify-center bg-[var(--restaurant-text)]/60 backdrop-blur-md sm:items-center sm:p-6"
+      className="fixed inset-0 z-50 flex animate-fade-in items-end justify-center bg-black/55 backdrop-blur-md sm:items-center sm:p-6"
       onClick={(e) => {
         if (e.target === e.currentTarget) {
           onClose();
         }
       }}
     >
-      <div className="relative flex max-h-[92vh] w-full max-w-full flex-col overflow-hidden rounded-t-[2rem] border border-[#e8d9cc] bg-[var(--restaurant-background)] text-[var(--restaurant-text)] shadow-2xl sm:max-h-[88vh] sm:max-w-3xl sm:rounded-3xl lg:h-[min(88vh,820px)] lg:max-h-[820px] lg:max-w-6xl">
+      <div className="relative flex max-h-[94dvh] w-full max-w-full animate-sheet-up flex-col overflow-hidden rounded-t-[2rem] bg-white text-[var(--restaurant-text)] shadow-2xl sm:max-h-[90vh] sm:max-w-lg sm:animate-scale-in sm:rounded-[2rem]">
         {/* Mobile Swipe / Drag Pill Handle */}
-        <div className="flex w-full items-center justify-center pt-3 pb-1 sm:hidden">
-          <div className="h-1.5 w-12 rounded-full bg-[var(--restaurant-primary)]/45" />
+        <div className="absolute inset-x-0 top-0 z-20 flex w-full items-center justify-center pt-2.5 sm:hidden">
+          <div className="h-1.5 w-12 rounded-full bg-white/70 shadow" />
         </div>
 
         {/* Accessible Close Button */}
@@ -199,8 +205,8 @@ export default function DishDetailModal({
             ref={closeButtonRef}
             type="button"
             onClick={onClose}
-            aria-label="Close dish details"
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-[var(--restaurant-primary)] shadow-md backdrop-blur-md transition hover:bg-white hover:scale-105 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--restaurant-primary)]"
+            aria-label={t("closeDetails")}
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-white/95 text-[var(--restaurant-text)] shadow-lg backdrop-blur-md transition hover:scale-105 hover:bg-white active:scale-95"
           >
             <X className="h-5 w-5" />
           </button>
@@ -214,124 +220,67 @@ export default function DishDetailModal({
         */}
         <div
           ref={scrollContainerRef}
-          className="flex-1 overflow-y-auto overscroll-contain scrollbar-none lg:grid lg:min-h-0 lg:grid-cols-2 lg:grid-rows-[minmax(0,1fr)] lg:overflow-hidden"
+          className="flex-1 overflow-y-auto overscroll-contain scrollbar-none"
         >
           {/* 1. MEDIA AREA */}
-          <div className="relative w-full lg:h-full lg:min-h-0 lg:overflow-hidden lg:bg-[var(--restaurant-secondary)]">
-            {videoMenuEnabled && dish.videoUrl ? (
-              <div className="p-4 sm:p-6 lg:flex lg:h-full lg:items-center lg:justify-center">
-                <div className="relative mx-auto aspect-[16/11] w-full max-w-xl overflow-hidden rounded-2xl bg-[var(--restaurant-secondary)] shadow-lg lg:aspect-auto lg:h-full lg:max-h-full">
-                  {dish.imageUrl && (
-                    <Image
-                      src={dish.imageUrl}
-                      alt={dish.name}
-                      fill
-                      priority
-                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 768px, 896px"
-                      className="object-contain"
-                    />
-                  )}
-                  <VideoPlayer
-                    videoUrl={dish.videoUrl}
-                    posterUrl={dish.videoPosterUrl || dish.imageUrl}
-                    title={dish.name}
-                    autoPlay
-                    muted
-                    loop
-                    controls
-                    playbackPriority
-                    className="absolute inset-0 rounded-2xl bg-[var(--restaurant-secondary)]"
-                  />
-                </div>
-              </div>
-            ) : dish.imageUrl ? (
-              <div className="relative aspect-[16/10] w-full overflow-hidden bg-[var(--restaurant-secondary)] sm:aspect-[16/9]">
-                <Image
-                  src={dish.imageUrl}
-                  alt={dish.name}
-                  fill
-                  priority
-                  sizes="(max-width: 640px) 100vw, (max-width: 1024px) 768px, 896px"
-                  className="object-cover"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/25 to-transparent" />
-              </div>
-            ) : (
-              <div className="relative flex aspect-[16/9] w-full items-center justify-center bg-gradient-to-br from-zinc-900 via-zinc-950 to-black">
-                <div className="flex flex-col items-center gap-2 text-white/40">
-                  <Sparkles className="h-8 w-8 text-white/30" />
-                  <span className="text-xs uppercase tracking-wider text-white/50">
-                    TRONX Video Menu
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
+          <DishMediaGallery media={getDishMedia(dish, videoMenuEnabled)} title={tc(dish.name)} />
 
           {/* 2. DISH INFORMATION & CONTENT */}
-          <div className="space-y-6 px-5 pb-8 pt-2 sm:px-8 lg:overflow-y-auto lg:px-8 lg:py-8">
+          <div className="space-y-6 px-5 pb-8 pt-5 sm:px-7">
             {/* Dish Info: Name, Price, Veg/Non-veg & Customisable badge */}
             <div className="space-y-3">
               <div className="flex flex-wrap items-center gap-2">
-                {/* Veg / Non-Veg Indicator */}
-                <span
-                  title={dish.isVeg ? "Vegetarian" : "Non-Vegetarian"}
-                  aria-label={dish.isVeg ? "Vegetarian" : "Non-Vegetarian"}
-                  className={`flex h-5 w-5 items-center justify-center rounded border bg-black/40 ${
-                    dish.isVeg ? "border-emerald-500" : "border-rose-500"
-                  }`}
-                >
-                  <span
-                    className={`h-2.5 w-2.5 rounded-full ${
-                      dish.isVeg ? "bg-emerald-500" : "bg-rose-500"
-                    }`}
-                  />
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--customer-border)] py-1 pl-1 pr-2.5 text-[11px] font-bold uppercase tracking-wider text-[var(--restaurant-text-muted)]">
+                  <VegMark isVeg={dish.isVeg} className="h-4 w-4" />
+                  {dish.isVeg ? t("pureVeg") : t("nonVeg")}
                 </span>
 
-                <span className="text-xs font-semibold uppercase tracking-wider text-[var(--restaurant-text-muted)]">
-                  {dish.isVeg ? "Pure Veg" : "Non-Veg"}
-                </span>
+                {dish.preparationTime ? (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-[var(--customer-border)] px-2.5 py-1 text-[11px] font-semibold text-[var(--restaurant-text-muted)]">
+                    <Clock className="h-3 w-3" /> {t("minutes", { count: dish.preparationTime })}
+                  </span>
+                ) : null}
 
                 {dish.addonGroups && dish.addonGroups.length > 0 && (
-                  <span className="rounded-full bg-[var(--restaurant-primary)]/10 px-2.5 py-0.5 text-xs font-medium text-[var(--restaurant-primary)]">
-                    Customisable
+                  <span className="rounded-full bg-[var(--restaurant-primary)]/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-[var(--restaurant-primary)]">
+                    {t("customisable")}
                   </span>
                 )}
               </div>
 
               {/* Title & Price */}
-              <div className="flex items-start justify-between gap-4">
-                <h2
-                  id="dish-modal-title"
-                  className="font-serif text-3xl font-bold tracking-tight text-[var(--restaurant-text)] sm:text-4xl"
-                >
-                  {dish.name}
-                </h2>
-
-                <div className="shrink-0 text-right">
-                  <span className="font-mono text-xl font-extrabold text-[var(--restaurant-text)] sm:text-2xl">
-                    ₹{dish.price}
-                  </span>
+              <div>
+                {categoryName ? <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-neutral-400">{tc(categoryName)}</p> : null}
+                <div className="mt-1 flex items-start gap-3">
+                  <h2
+                    id="dish-modal-title"
+                    className="font-serif min-w-0 flex-1 text-4xl uppercase text-[var(--restaurant-text)] sm:text-5xl"
+                  >
+                    {tc(dish.name)}
+                  </h2>
+                  <SpeakButton text={tc(dish.name)} originalText={dish.name} size="md" className="mt-0.5" />
                 </div>
               </div>
 
               {/* Description */}
               {dish.description && (
-                <p className="text-sm leading-relaxed text-[var(--restaurant-text-muted)] sm:text-base">
-                  {dish.description}
+                <p className="text-sm leading-relaxed text-neutral-600 sm:text-[15px]">
+                  {tc(dish.description)}
                 </p>
               )}
+
+              <p className="text-2xl font-bold tabular-nums text-[var(--restaurant-text)]">₹{dish.price}</p>
             </div>
 
             {/* 3. ADD-ONS SECTION */}
             {dish.addonGroups && dish.addonGroups.some((group) => group.isActive !== false) && (
-              <div className="space-y-6 border-t border-[#e8d9cc] pt-6">
+              <div className="space-y-5 border-t border-[var(--customer-border)] pt-6">
                 <div>
-                  <h3 className="font-serif text-xl font-bold tracking-tight text-[var(--restaurant-text)]">
-                    Customise Your Dish
+                  <h3 className="font-serif text-2xl uppercase text-[var(--restaurant-text)]">
+                    {t("customiseTitle")}
                   </h3>
                   <p className="mt-0.5 text-xs text-[var(--restaurant-text-muted)]">
-                    Select your preferred add-ons and accompaniments below.
+                    {t("customiseHint")}
                   </p>
                 </div>
 
@@ -346,40 +295,40 @@ export default function DishDetailModal({
                     return (
                       <div
                         key={group.id}
-                        className="rounded-2xl border border-[#e8d9cc] bg-white p-4 transition sm:p-5"
+                        className="overflow-hidden rounded-2xl border border-[var(--customer-border)] bg-white"
                       >
                         {/* Group Header (Stable height) */}
-                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#f0e5dc] pb-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--customer-border)] bg-[var(--customer-cream)]/60 px-4 py-3 sm:px-5">
                           <div className="flex items-center gap-2">
                             <span className="text-base font-semibold text-[var(--restaurant-text)]">
-                              {group.name}
+                              {tc(group.name)}
                             </span>
                             {group.isRequired ? (
                               <span className="rounded-full bg-[var(--restaurant-primary)]/10 px-2 py-0.5 text-[11px] font-semibold text-[var(--restaurant-primary)]">
-                                Required
+                                {t("required")}
                               </span>
                             ) : (
-                              <span className="rounded-full bg-[#faf2ea] px-2 py-0.5 text-[11px] font-medium text-[var(--restaurant-text-muted)]">
-                                Optional
+                              <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-[var(--restaurant-text-muted)] ring-1 ring-inset ring-[var(--customer-border)]">
+                                {t("optional")}
                               </span>
                             )}
                           </div>
 
                           {/* Rule hints */}
-                          <div className="text-xs text-[var(--restaurant-text-muted)]">
+                          <div className="text-xs font-medium text-[var(--restaurant-text-muted)]">
                             {isSingleSelect
-                              ? "Choose 1"
+                              ? t("chooseOne")
                               : group.minSelect > 0
-                                ? `Choose ${group.minSelect}–${group.maxSelect}`
-                                : `Up to ${group.maxSelect}`}
+                                ? t("chooseRange", { min: group.minSelect, max: group.maxSelect })
+                                : t("upTo", { max: group.maxSelect })}
                           </div>
                         </div>
 
                         {/* Add-on Options List */}
-                        <div className="divide-y divide-[#f0e5dc] pt-1">
+                        <div className="divide-y divide-[var(--customer-border)]/70 px-2 py-1 sm:px-3">
                           {group.addons.length === 0 ? (
                             <p className="px-2 py-4 text-sm text-[var(--restaurant-text-muted)]">
-                              No options are available in this group right now.
+                              {t("noOptions")}
                             </p>
                           ) : group.addons.map((addon) => {
                             const isSelected = currentSelections.includes(
@@ -395,8 +344,8 @@ export default function DishDetailModal({
                                 className={`relative flex items-center justify-between rounded-xl px-2 py-3 transition select-none ${
                                   isDisabled
                                     ? "cursor-not-allowed opacity-40"
-                                    : "cursor-pointer hover:bg-[#faf2ea]"
-                                } ${isSelected ? "bg-[var(--restaurant-primary)]/10" : ""}`}
+                                    : "cursor-pointer hover:bg-[var(--customer-cream)]"
+                                } ${isSelected ? "bg-[var(--restaurant-primary)]/[0.06]" : ""}`}
                               >
                                 {/* 
                                   Controlled Accessible Input:
@@ -412,8 +361,8 @@ export default function DishDetailModal({
                                     handleToggleAddon(group, addon)
                                   }
                                   className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
-                                  aria-label={`${addon.name}, ${
-                                    addon.price > 0 ? `₹${addon.price}` : "Free"
+                                  aria-label={`${tc(addon.name)}, ${
+                                    addon.price > 0 ? `₹${addon.price}` : t("free")
                                   }`}
                                 />
 
@@ -445,14 +394,14 @@ export default function DishDetailModal({
                                         : "text-[var(--restaurant-text-muted)]"
                                     }`}
                                   >
-                                    {addon.name}
+                                    {tc(addon.name)}
                                   </span>
                                 </div>
 
                                 <span className="text-sm font-semibold text-[var(--restaurant-primary)]">
                                   {addon.price > 0
                                     ? `+₹${addon.price}`
-                                    : "Free"}
+                                    : t("free")}
                                 </span>
                               </label>
                             );
@@ -472,20 +421,12 @@ export default function DishDetailModal({
           - Does not scroll with modal content
           - Always visible at the bottom of the modal card
         */}
-        {orderingEnabled && <div className="shrink-0 border-t border-[#e8d9cc] bg-white px-5 py-4 backdrop-blur-md sm:px-8 sm:py-4">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <span className="block text-xs uppercase tracking-wider text-[var(--restaurant-text-muted)]">
-                Total Price
-              </span>
-              <span className="font-mono text-xl font-extrabold text-[var(--restaurant-text)] sm:text-2xl">
-                ₹{totalPrice * quantity}
-              </span>
-            </div>
-            <div className="flex items-center gap-2 rounded-xl border border-[#e8d9cc] bg-[#fffaf6] p-1">
-              <button type="button" aria-label="Decrease quantity" onClick={() => setQuantity((value) => Math.max(1, value - 1))} className="grid h-9 w-9 place-items-center rounded-lg text-[var(--restaurant-primary)] hover:bg-[#f3e6dd]"><Minus className="h-4 w-4" /></button>
-              <span className="min-w-5 text-center text-sm font-bold">{quantity}</span>
-              <button type="button" aria-label="Increase quantity" onClick={() => setQuantity((value) => Math.min(99, value + 1))} className="grid h-9 w-9 place-items-center rounded-lg text-[var(--restaurant-primary)] hover:bg-[#f3e6dd]"><Plus className="h-4 w-4" /></button>
+        {orderingEnabled && <div className="safe-bottom shrink-0 border-t border-[var(--customer-border)] bg-white px-4 pt-3 sm:px-8 sm:pt-4">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <div className="flex shrink-0 items-center rounded-full border border-[var(--customer-border)] bg-[var(--customer-cream)]/60">
+              <button type="button" aria-label={t("decrease")} onClick={() => setQuantity((value) => Math.max(1, value - 1))} className="grid h-12 w-11 place-items-center rounded-full text-[var(--restaurant-primary)] hover:bg-[var(--customer-border)]/60"><Minus className="h-4 w-4" /></button>
+              <span className="min-w-6 text-center text-base font-bold tabular-nums">{quantity}</span>
+              <button type="button" aria-label={t("increase")} onClick={() => setQuantity((value) => Math.min(99, value + 1))} className="grid h-12 w-11 place-items-center rounded-full text-[var(--restaurant-primary)] hover:bg-[var(--customer-border)]/60"><Plus className="h-4 w-4" /></button>
             </div>
             <button
               type="button"
@@ -499,9 +440,10 @@ export default function DishDetailModal({
                 });
                 onClose();
               }}
-              className="flex-1 max-w-xs rounded-2xl bg-[var(--restaurant-primary)] py-3.5 text-center text-sm font-bold text-white transition hover:bg-[var(--restaurant-primary-dark)] active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--restaurant-primary)] disabled:cursor-not-allowed disabled:opacity-45"
+              className="inline-flex h-12 min-w-0 flex-1 items-center justify-between gap-3 rounded-full bg-[var(--restaurant-primary)] px-5 text-sm font-bold text-white shadow-[0_12px_28px_-12px_var(--restaurant-primary)] transition hover:bg-[var(--restaurant-primary-dark)] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none sm:ml-auto sm:max-w-sm"
             >
-              {dish.isAvailable ? canOrder ? "Add to cart" : "Scan a table QR to order" : "Unavailable"}
+              <span className="truncate">{dish.isAvailable ? canOrder ? hasValidSelections ? t("addToCart") : t("chooseRequired") : t("scanQrToOrder") : t("unavailable")}</span>
+              {dish.isAvailable && canOrder ? <span className="shrink-0 tabular-nums">₹{totalPrice * quantity}</span> : null}
             </button>
           </div>
         </div>}

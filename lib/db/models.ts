@@ -130,6 +130,18 @@ const dishSchema = new Schema<Dish>(
     imageUrl: String,
     videoUrl: String,
     videoPosterUrl: String,
+    gallery: {
+      type: [new Schema(
+        {
+          id: { type: String, required: true },
+          type: { type: String, enum: ["IMAGE", "VIDEO"], required: true },
+          url: { type: String, required: true },
+          posterUrl: String,
+        },
+        { _id: false, strict: true },
+      )],
+      default: [],
+    },
     sortOrder: { type: Number, required: true, default: 0 },
     addonGroupIds: { type: [String], default: [] },
     createdAt: String,

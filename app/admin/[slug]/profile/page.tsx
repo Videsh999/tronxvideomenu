@@ -18,9 +18,21 @@ export default async function RestaurantProfileSlugPage({
 
   if (!restaurant) {
     return (
-      <p className="text-sm text-white/60">Restaurant profile not found.</p>
+      <p className="text-sm text-neutral-500">Restaurant profile not found.</p>
     );
   }
 
-  return <RestaurantProfileForm restaurant={restaurant} restaurantId={context.restaurantId} wifiEnabled={hasRestaurantFeature(restaurant, "WIFI")} />;
+  const wifiEnabled = hasRestaurantFeature(restaurant, "WIFI");
+  const wifi = wifiEnabled
+    ? await restaurantService.getWifiAdminConfiguration(context.restaurantId)
+    : null;
+
+  return (
+    <RestaurantProfileForm
+      restaurant={restaurant}
+      restaurantId={context.restaurantId}
+      wifiEnabled={wifiEnabled}
+      initialWifi={wifi}
+    />
+  );
 }

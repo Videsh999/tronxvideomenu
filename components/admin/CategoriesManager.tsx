@@ -158,16 +158,16 @@ export default function CategoriesManager({
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <Link
-            href="/admin/menu"
-            className="inline-flex items-center gap-1.5 text-xs text-white/50 hover:text-white mb-2"
+            href={`/admin/${encodeURIComponent(restaurantId)}/menu`}
+            className="inline-flex items-center gap-1.5 text-xs text-neutral-500 hover:text-neutral-900 mb-2"
           >
             <ArrowLeft className="h-3 w-3" />
             <span>Back to Menu Hub</span>
           </Link>
-          <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
+          <h1 className="text-2xl font-bold tracking-tight text-neutral-900 sm:text-3xl">
             Categories
           </h1>
-          <p className="mt-1 text-sm text-white/50">
+          <p className="mt-1 text-sm text-neutral-500">
             Define menu sections and control their customer-facing presentation
             order.
           </p>
@@ -176,7 +176,7 @@ export default function CategoriesManager({
         <button
           type="button"
           onClick={openCreate}
-          className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-xs font-bold text-black transition hover:bg-white/90"
+          className="inline-flex items-center gap-2 rounded-xl bg-neutral-900 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-neutral-800"
         >
           <Plus className="h-4 w-4" />
           <span>Add Category</span>
@@ -187,17 +187,17 @@ export default function CategoriesManager({
         <p
           role="status"
           className={`text-sm ${
-            feedback.type === "success" ? "text-emerald-400" : "text-rose-400"
+            feedback.type === "success" ? "text-emerald-700" : "text-rose-600"
           }`}
         >
           {feedback.message}
         </p>
       ) : null}
 
-      <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/2">
+      <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-white/10 bg-white/2 text-xs font-semibold uppercase tracking-wider text-white/40">
+            <thead className="border-b border-neutral-200 bg-white text-xs font-semibold uppercase tracking-wider text-neutral-400">
               <tr>
                 <th className="py-3.5 pl-4 pr-2 w-12 text-center">Order</th>
                 <th className="py-3.5 px-4">Category Name</th>
@@ -206,21 +206,21 @@ export default function CategoriesManager({
                 <th className="py-3.5 pr-4 pl-2 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/5">
+            <tbody className="divide-y divide-neutral-100">
               {categories.map((category) => (
-                <tr key={category.id} className="hover:bg-white/2 transition">
+                <tr key={category.id} className="hover:bg-white transition">
                   <td className="py-4 pl-4 pr-2 text-center">
-                    <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white/5 text-xs font-bold text-white/80">
+                    <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-neutral-50 text-xs font-bold text-neutral-700">
                       {category.sortOrder}
                     </span>
                   </td>
-                  <td className="py-4 px-4 font-semibold text-white">
+                  <td className="py-4 px-4 font-semibold text-neutral-900">
                     <div className="flex items-center gap-2.5">
-                      <FolderTree className="h-4 w-4 text-white/40 shrink-0" />
+                      <FolderTree className="h-4 w-4 text-neutral-400 shrink-0" />
                       <span>{category.name}</span>
                     </div>
                   </td>
-                  <td className="py-4 px-4 text-xs font-mono text-white/50 hidden sm:table-cell">
+                  <td className="py-4 px-4 text-xs font-mono text-neutral-500 hidden sm:table-cell">
                     #
                     {category.slug ||
                       category.name.toLowerCase().replace(/\s+/g, "-")}
@@ -232,12 +232,12 @@ export default function CategoriesManager({
                       className="inline-flex"
                     >
                       {category.isActive ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-400">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
                           <CheckCircle2 className="h-3 w-3" />
                           Active
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/10 px-2.5 py-0.5 text-xs font-medium text-rose-400">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2.5 py-0.5 text-xs font-medium text-rose-600">
                           <XCircle className="h-3 w-3" />
                           Hidden
                         </span>
@@ -248,14 +248,14 @@ export default function CategoriesManager({
                     <button
                       type="button"
                       onClick={() => openEdit(category)}
-                      className="rounded-lg px-2.5 py-1 text-xs font-medium text-white/60 hover:bg-white/10 hover:text-white transition"
+                      className="rounded-lg px-2.5 py-1 text-xs font-medium text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 transition"
                     >
                       Edit
                     </button>
                     <button
                       type="button"
                       onClick={() => handleDelete(category)}
-                      className="rounded-lg px-2.5 py-1 text-xs font-medium text-rose-400/80 hover:bg-rose-500/10 hover:text-rose-300 transition"
+                      className="rounded-lg px-2.5 py-1 text-xs font-medium text-rose-600 hover:bg-rose-50 hover:text-rose-600 transition"
                     >
                       Delete
                     </button>
@@ -276,7 +276,7 @@ export default function CategoriesManager({
             <button
               type="button"
               onClick={() => setModalOpen(false)}
-              className="rounded-xl border border-white/10 px-4 py-2 text-xs font-semibold text-white/70 hover:bg-white/5"
+              className="rounded-xl border border-neutral-200 px-4 py-2 text-xs font-semibold text-neutral-600 hover:bg-neutral-50"
             >
               Cancel
             </button>
@@ -284,7 +284,7 @@ export default function CategoriesManager({
               type="submit"
               form="category-form"
               disabled={isSubmitting}
-              className="rounded-xl bg-white px-4 py-2 text-xs font-bold text-black hover:bg-white/90 disabled:opacity-50"
+              className="rounded-xl bg-neutral-900 px-4 py-2 text-xs font-bold text-white hover:bg-neutral-800 disabled:opacity-50"
             >
               {isSubmitting ? "Saving…" : "Save"}
             </button>
@@ -297,45 +297,45 @@ export default function CategoriesManager({
           className="space-y-4"
         >
           {submitError ? (
-            <p className="text-xs text-rose-400">{submitError}</p>
+            <p className="text-xs text-rose-600">{submitError}</p>
           ) : null}
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-white/60">
+            <label className="mb-1.5 block text-xs font-medium text-neutral-500">
               Name
             </label>
             <input
               {...register("name")}
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
+              className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm text-neutral-900"
             />
             {errors.name ? (
-              <p className="mt-1 text-xs text-rose-400">
+              <p className="mt-1 text-xs text-rose-600">
                 {errors.name.message}
               </p>
             ) : null}
           </div>
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-white/60">
+            <label className="mb-1.5 block text-xs font-medium text-neutral-500">
               Description
             </label>
             <textarea
               {...register("description")}
               rows={2}
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
+              className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm text-neutral-900"
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-white/60">
+              <label className="mb-1.5 block text-xs font-medium text-neutral-500">
                 Sort order
               </label>
               <input
                 type="number"
                 {...register("sortOrder", { valueAsNumber: true })}
-                className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
+                className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm text-neutral-900"
               />
             </div>
             <div className="flex items-end pb-2">
-              <label className="flex items-center gap-2 text-sm text-white/80">
+              <label className="flex items-center gap-2 text-sm text-neutral-700">
                 <input type="checkbox" {...register("isActive")} />
                 Active on menu
               </label>

@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import CustomerMenu from "@/components/customer/CustomerMenu";
 import ThemeProvider from "@/components/customer/ThemeProvider";
+import { I18nProvider } from "@/components/customer/I18nProvider";
 import { restaurantService } from "@/lib/services/restaurant.service";
 import { tableService } from "@/lib/services/table.service";
 import { hasRestaurantFeature } from "@/lib/feature-access";
@@ -35,6 +36,7 @@ export default async function RestaurantMenuPage({
 
   return (
     <ThemeProvider restaurant={menu.restaurant}>
+      <I18nProvider slug={menu.restaurant.slug}>
       <CustomerMenu
         initialMenu={menu}
         restaurantIdOrSlug={slug}
@@ -48,6 +50,7 @@ export default async function RestaurantMenuPage({
         videoMenuEnabled={videoMenuEnabled}
         tableOrderingEnabled={tableOrderingEnabled}
       />
+      </I18nProvider>
     </ThemeProvider>
   );
 }

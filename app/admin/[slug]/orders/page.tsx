@@ -11,5 +11,5 @@ export default async function RestaurantOrdersPage({ params }: { params: Promise
   const restaurant = await restaurantService.getBySlug(slug);
   if (!restaurant || !requireRestaurantFeature(restaurant, "ORDER_MANAGEMENT").allowed) notFound();
   const initialOrders = await orderService.listForRestaurant(slug);
-  return <OrdersManager initialOrders={initialOrders} />;
+  return <OrdersManager restaurantName={restaurant.name} initialOrders={initialOrders} />;
 }

@@ -44,7 +44,7 @@ export default function CaptainManagement({ restaurantSlug }: { restaurantSlug: 
     }
   };
 
-  const getLoginPath = () => `/captain/login?restaurant=${encodeURIComponent(restaurantSlug)}`;
+  const getLoginPath = () => `/menu/${encodeURIComponent(restaurantSlug)}/captain`;
 
   const getPassword = async (captainId: string) => {
     const result = await request<{ password: string }>(`/api/admin/captains/${encodeURIComponent(captainId)}/credentials`, { method: "POST" });
@@ -106,40 +106,40 @@ export default function CaptainManagement({ restaurantSlug }: { restaurantSlug: 
   };
 
   return <div className="space-y-6">
-    <header><h1 className="text-2xl font-bold text-white sm:text-3xl">Captain Access</h1><p className="mt-1 text-sm text-white/55">Create and manage staff accounts for your restaurant.</p></header>
-    {message && <p role="status" className="text-sm text-white/70">{message}</p>}
-    <form onSubmit={create} className="grid gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 sm:grid-cols-2">
-      <input aria-label="Name" placeholder="Name" value={name} onChange={(event) => setName(event.target.value)} required minLength={2} maxLength={100} className="rounded-xl border border-white/10 bg-black/40 px-3 py-2.5 text-sm" />
-      <input aria-label="Email" placeholder="Email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required className="rounded-xl border border-white/10 bg-black/40 px-3 py-2.5 text-sm" />
-      <input aria-label="Password" placeholder="Password (8+ characters)" type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} required className="rounded-xl border border-white/10 bg-black/40 px-3 py-2.5 text-sm" />
-      <button disabled={busy} className="rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-black disabled:opacity-50">{busy ? "Creating…" : "Create Captain"}</button>
+    <header><h1 className="text-2xl font-bold text-neutral-900 sm:text-3xl">Captain Access</h1><p className="mt-1 text-sm text-neutral-500">Create and manage staff accounts for your restaurant.</p></header>
+    {message && <p role="status" className="text-sm text-neutral-600">{message}</p>}
+    <form onSubmit={create} className="grid gap-3 rounded-2xl border border-neutral-200 bg-neutral-50 p-4 sm:grid-cols-2">
+      <input aria-label="Name" placeholder="Name" value={name} onChange={(event) => setName(event.target.value)} required minLength={2} maxLength={100} className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2.5 text-sm" />
+      <input aria-label="Email" placeholder="Email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2.5 text-sm" />
+      <input aria-label="Password" placeholder="Password (8+ characters)" type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} required className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2.5 text-sm" />
+      <button disabled={busy} className="rounded-xl bg-neutral-900 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{busy ? "Creating…" : "Create Captain"}</button>
     </form>
     <section className="space-y-3">
       {captains.map((captain) => {
         const isPasswordVisible = visibleIds.includes(captain.id);
         const loginUrl = getLoginPath();
-        return <article key={captain.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+        return <article key={captain.id} className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <div><h2 className="font-semibold text-white">{captain.name}</h2><p className="text-sm text-white/55">{captain.email} · {captain.isActive ? "Enabled" : "Disabled"}</p></div>
-            <button type="button" disabled={pendingId === captain.id} onClick={() => void toggle(captain)} className="rounded-lg border border-white/15 px-3 py-2 text-xs text-white/80 disabled:opacity-50">{pendingId === captain.id ? "Working…" : captain.isActive ? "Disable" : "Enable"}</button>
+            <div><h2 className="font-semibold text-neutral-900">{captain.name}</h2><p className="text-sm text-neutral-500">{captain.email} · {captain.isActive ? "Enabled" : "Disabled"}</p></div>
+            <button type="button" disabled={pendingId === captain.id} onClick={() => void toggle(captain)} className="rounded-lg border border-neutral-300 px-3 py-2 text-xs text-neutral-700 disabled:opacity-50">{pendingId === captain.id ? "Working…" : captain.isActive ? "Disable" : "Enable"}</button>
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-            <span className="min-w-44 rounded-lg border border-white/10 bg-black/25 px-3 py-2 font-mono text-white/75">{isPasswordVisible ? savedPasswords[captain.id] : captain.passwordConfigured ? "••••••••••••" : "No recoverable password saved"}</span>
+            <span className="min-w-44 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 font-mono text-neutral-700">{isPasswordVisible ? savedPasswords[captain.id] : captain.passwordConfigured ? "••••••••••••" : "No recoverable password saved"}</span>
             {captain.passwordConfigured ? <>
-              <button type="button" disabled={pendingId === captain.id} onClick={() => void togglePassword(captain)} className="rounded-lg border border-white/15 px-3 py-2 text-white/80 disabled:opacity-50">{isPasswordVisible ? "Hide password" : "Show password"}</button>
-              <button type="button" disabled={pendingId === captain.id} onClick={() => void copyPassword(captain)} className="rounded-lg border border-white/15 px-3 py-2 text-white/80 disabled:opacity-50">Copy password</button>
-            </> : <button type="button" disabled={pendingId === captain.id} onClick={() => void setNewPassword(captain)} className="rounded-lg border border-amber-300/25 px-3 py-2 text-amber-200 disabled:opacity-50">Set retrievable password</button>}
+              <button type="button" disabled={pendingId === captain.id} onClick={() => void togglePassword(captain)} className="rounded-lg border border-neutral-300 px-3 py-2 text-neutral-700 disabled:opacity-50">{isPasswordVisible ? "Hide password" : "Show password"}</button>
+              <button type="button" disabled={pendingId === captain.id} onClick={() => void copyPassword(captain)} className="rounded-lg border border-neutral-300 px-3 py-2 text-neutral-700 disabled:opacity-50">Copy password</button>
+            </> : <button type="button" disabled={pendingId === captain.id} onClick={() => void setNewPassword(captain)} className="rounded-lg border border-amber-200 px-3 py-2 text-amber-700 disabled:opacity-50">Set retrievable password</button>}
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
-            <button type="button" onClick={() => void copy(captain.email, "Captain email copied.")} className="rounded-lg border border-white/15 px-3 py-2 text-xs text-white/80">Copy email</button>
+            <button type="button" onClick={() => void copy(captain.email, "Captain email copied.")} className="rounded-lg border border-neutral-300 px-3 py-2 text-xs text-neutral-700">Copy email</button>
             {loginUrl && <>
-              <a href={loginUrl} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-white/15 px-3 py-2 text-xs text-white/80">Open Captain Login</a>
-              <button type="button" onClick={() => void copy(new URL(loginUrl, window.location.origin).toString(), "Captain login URL copied.")} className="rounded-lg border border-white/15 px-3 py-2 text-xs text-white/80">Copy login URL</button>
+              <a href={loginUrl} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-neutral-300 px-3 py-2 text-xs text-neutral-700">Open Captain Login</a>
+              <button type="button" onClick={() => void copy(new URL(loginUrl, window.location.origin).toString(), "Captain login URL copied.")} className="rounded-lg border border-neutral-300 px-3 py-2 text-xs text-neutral-700">Copy login URL</button>
             </>}
           </div>
         </article>;
       })}
-      {captains.length === 0 && <p className="rounded-2xl border border-dashed border-white/15 p-8 text-center text-sm text-white/45">No Captains added yet.</p>}
+      {captains.length === 0 && <p className="rounded-2xl border border-dashed border-neutral-300 p-8 text-center text-sm text-neutral-500">No Captains added yet.</p>}
     </section>
   </div>;
 }

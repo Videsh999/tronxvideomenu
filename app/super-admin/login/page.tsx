@@ -2,6 +2,7 @@
 
 import { FormEvent, Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import AuthLayout, { AuthError, AuthFallback, AuthField, AuthSubmit, PasswordInput, authInputClass } from "@/components/shared/AuthLayout";
 
 function SuperAdminLoginForm() {
   const searchParams = useSearchParams();
@@ -44,70 +45,41 @@ function SuperAdminLoginForm() {
   };
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-black px-4 text-white">
-      <form
-        onSubmit={handleSubmit}
-        className="w-full max-w-sm space-y-5 rounded-2xl border border-white/10 bg-white/5 p-6 shadow-2xl"
-      >
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/40">
-            TRONX
-          </p>
-          <h1 className="mt-2 text-2xl font-bold tracking-tight">
-            Super Admin
-          </h1>
-          <p className="mt-1 text-sm text-white/50">
-            Sign in to manage all restaurants.
-          </p>
-        </div>
-
-        {error ? <p className="text-sm text-rose-400">{error}</p> : null}
-
-        <label className="block text-sm text-white/70">
-          Email
+    <AuthLayout
+      eyebrow="Super Admin"
+      title="Platform control"
+      description="Sign in to manage every restaurant on TRONX."
+      highlights={[
+        "Onboard restaurants and control their branding",
+        "Toggle plans and features per restaurant",
+        "Provision and verify restaurant admin credentials",
+      ]}
+    >
+      <form onSubmit={handleSubmit} className="space-y-5">
+        <AuthError message={error} />
+        <AuthField label="Email">
           <input
             type="email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             autoComplete="username"
+            placeholder="admin@tronx.app"
             required
-            className="mt-1.5 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white outline-none focus:border-white/30"
+            className={authInputClass}
           />
-        </label>
-
-        <label className="block text-sm text-white/70">
-          Password
-          <input
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            autoComplete="current-password"
-            required
-            className="mt-1.5 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white outline-none focus:border-white/30"
-          />
-        </label>
-
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="w-full rounded-xl bg-white px-4 py-2.5 text-xs font-bold text-black transition hover:bg-white/90 disabled:opacity-50"
-        >
-          {isSubmitting ? "Signing in…" : "Sign in"}
-        </button>
+        </AuthField>
+        <AuthField label="Password">
+          <PasswordInput value={password} onChange={setPassword} />
+        </AuthField>
+        <AuthSubmit busy={isSubmitting} label="Sign in" busyLabel="Signing in…" />
       </form>
-    </main>
+    </AuthLayout>
   );
 }
 
 export default function SuperAdminLoginPage() {
   return (
-    <Suspense
-      fallback={
-        <main className="flex min-h-screen items-center justify-center bg-black px-4 text-white">
-          Loading…
-        </main>
-      }
-    >
+    <Suspense fallback={<AuthFallback />}>
       <SuperAdminLoginForm />
     </Suspense>
   );

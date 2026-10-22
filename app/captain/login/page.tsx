@@ -1,7 +1,9 @@
 "use client";
 
 import { FormEvent, Suspense, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import AuthLayout, { AuthError, AuthFallback, AuthField, AuthSubmit, PasswordInput, authInputClass } from "@/components/shared/AuthLayout";
 
 function CaptainLoginForm() {
   const params = useSearchParams();
@@ -20,16 +22,31 @@ function CaptainLoginForm() {
       window.location.assign(next.startsWith(`/captain/${result.data.restaurantSlug}`) ? next : `/captain/${result.data.restaurantSlug}`);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to sign in"); setBusy(false); }
   };
-  return <main className="flex min-h-screen items-center justify-center bg-black px-4 text-white"><form onSubmit={submit} className="w-full max-w-sm space-y-5 rounded-2xl border border-white/10 bg-white/5 p-6">
-    <div><p className="text-xs font-semibold uppercase tracking-wider text-white/40">TRONX CAPTAIN</p><h1 className="mt-2 text-2xl font-bold">Sign in</h1><p className="mt-1 text-sm text-white/50">Access your restaurant’s tables and orders.</p></div>
-    {error && <p role="alert" className="text-sm text-rose-300">{error}</p>}
-    <label className="block text-sm text-white/70">Restaurant slug<input value={restaurantSlug} onChange={(e) => setRestaurantSlug(e.target.value)} autoComplete="organization" required className="mt-1.5 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-white" /></label>
-    <label className="block text-sm text-white/70">Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" required className="mt-1.5 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-white" /></label>
-    <label className="block text-sm text-white/70">Password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required className="mt-1.5 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-white" /></label>
-    <button disabled={busy} className="w-full rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-black disabled:opacity-50">{busy ? "Signing in…" : "Sign in"}</button>
-  </form></main>;
+  return <AuthLayout
+    eyebrow="Captain"
+    title="Start your shift"
+    description="Sign in to see your restaurant’s live orders and tables."
+    highlights={[
+      "Live order queue with one-tap status updates",
+      "Table status at a glance across the floor",
+      "Record payments without leaving the order",
+    ]}
+  >
+    <form onSubmit={submit} className="space-y-5">
+      <AuthError message={error || null} />
+      <AuthField label="Restaurant ID"><input value={restaurantSlug} onChange={(e) => setRestaurantSlug(e.target.value)} autoComplete="organization" autoCapitalize="none" spellCheck={false} placeholder="e.g. moai-kitchen" required className={`${authInputClass} font-mono`} /></AuthField>
+      <AuthField label="Email"><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" placeholder="captain@restaurant.com" required className={authInputClass} /></AuthField>
+      <AuthField label="Password"><PasswordInput value={password} onChange={setPassword} /></AuthField>
+      <AuthSubmit busy={busy} label="Sign in" busyLabel="Signing in…" />
+      <p className="text-center text-xs text-neutral-400">
+        Prefer your restaurant link? Use <span className="font-mono text-neutral-600">/menu/your-restaurant/captain</span>
+        {" · "}
+        Restaurant owner? <Link href="/admin/login" className="font-semibold text-neutral-600 underline-offset-4 hover:text-neutral-900 hover:underline">Admin sign in</Link>
+      </p>
+    </form>
+  </AuthLayout>;
 }
 
 export default function CaptainLoginPage() {
-  return <Suspense fallback={<main className="flex min-h-screen items-center justify-center bg-black text-white">Loading…</main>}><CaptainLoginForm /></Suspense>;
+  return <Suspense fallback={<AuthFallback />}><CaptainLoginForm /></Suspense>;
 }

@@ -1,7 +1,9 @@
 "use client";
 
 import { FormEvent, Suspense, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import AuthLayout, { AuthError, AuthFallback, AuthField, AuthSubmit, PasswordInput, authInputClass } from "@/components/shared/AuthLayout";
 
 function AdminLoginForm() {
   const searchParams = useSearchParams();
@@ -58,68 +60,51 @@ function AdminLoginForm() {
   };
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-black px-4 text-white">
-      <form
-        onSubmit={handleSubmit}
-        className="w-full max-w-sm space-y-5 rounded-2xl border border-white/10 bg-white/2 p-6 shadow-2xl"
-      >
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-white/40">
-            TRONX ADMIN
+    <AuthLayout
+      eyebrow="Restaurant Admin"
+      title="Welcome back"
+      description="Sign in to manage your menu, tables, orders, and team."
+      highlights={[
+        "Update dishes, prices, videos, and add-ons in seconds",
+        "Track every order live and record payments",
+        "Generate table QR codes and manage reservations",
+      ]}
+    >
+      <form onSubmit={handleSubmit} className="space-y-5">
+        <AuthError message={error} />
+        {requestedRestaurant ? (
+          <p className="rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 text-xs text-neutral-500">
+            Signing in to <span className="font-mono text-neutral-800">{requestedRestaurant}</span>
           </p>
-          <h1 className="mt-2 text-2xl font-bold tracking-tight">Sign in</h1>
-          <p className="mt-1 text-sm text-white/50">
-            Access the restaurant management console.
-          </p>
-        </div>
-
-        {error ? <p className="text-sm text-rose-400">{error}</p> : null}
-
-        <label className="block text-sm text-white/70">
-          Email
+        ) : null}
+        <AuthField label="Email">
           <input
             type="email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             autoComplete="username"
+            placeholder="you@restaurant.com"
             required
-            className="mt-1.5 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white outline-none focus:border-white/30"
+            className={authInputClass}
           />
-        </label>
-
-        <label className="block text-sm text-white/70">
-          Password
-          <input
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            autoComplete="current-password"
-            required
-            className="mt-1.5 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white outline-none focus:border-white/30"
-          />
-        </label>
-
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="w-full rounded-xl bg-white px-4 py-2.5 text-xs font-bold text-black transition hover:bg-white/90 disabled:opacity-50"
-        >
-          {isSubmitting ? "Signing in…" : "Sign in"}
-        </button>
+        </AuthField>
+        <AuthField label="Password">
+          <PasswordInput value={password} onChange={setPassword} />
+        </AuthField>
+        <AuthSubmit busy={isSubmitting} label="Sign in" busyLabel="Signing in…" />
+        <p className="text-center text-xs text-neutral-400">
+          Prefer your restaurant link? Use <span className="font-mono text-neutral-600">/menu/your-restaurant/admin</span>
+          {" · "}
+          Floor staff? <Link href="/captain/login" className="font-semibold text-neutral-600 underline-offset-4 hover:text-neutral-900 hover:underline">Captain sign in</Link>
+        </p>
       </form>
-    </main>
+    </AuthLayout>
   );
 }
 
 export default function AdminLoginPage() {
   return (
-    <Suspense
-      fallback={
-        <main className="flex min-h-screen items-center justify-center bg-black px-4 text-white">
-          Loading…
-        </main>
-      }
-    >
+    <Suspense fallback={<AuthFallback />}>
       <AdminLoginForm />
     </Suspense>
   );

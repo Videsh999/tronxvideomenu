@@ -80,26 +80,26 @@ export default function MediaPicker({
   return (
     <AdminModal title={title} open={open} onClose={onClose}>
       {isLoading ? (
-        <div className="flex min-h-40 items-center justify-center text-sm text-white/50">
+        <div className="flex min-h-40 items-center justify-center text-sm text-neutral-500">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           Loading media library…
         </div>
       ) : error ? (
-        <div className="flex min-h-40 items-center justify-center gap-2 text-sm text-rose-300">
+        <div className="flex min-h-40 items-center justify-center gap-2 text-sm text-rose-600">
           <AlertCircle className="h-4 w-4" />
           {error}
         </div>
       ) : media.length === 0 ? (
         <div className="flex min-h-40 flex-col items-center justify-center text-center">
           {mediaType === "IMAGE" ? (
-            <ImageIcon className="h-8 w-8 text-white/25" />
+            <ImageIcon className="h-8 w-8 text-neutral-300" />
           ) : (
-            <FileVideo className="h-8 w-8 text-white/25" />
+            <FileVideo className="h-8 w-8 text-neutral-300" />
           )}
-          <p className="mt-3 text-sm font-semibold text-white/70">
+          <p className="mt-3 text-sm font-semibold text-neutral-600">
             No {mediaType === "IMAGE" ? "images" : "videos"} found
           </p>
-          <p className="mt-1 text-xs text-white/40">
+          <p className="mt-1 text-xs text-neutral-400">
             Upload media from the Media Library before selecting it here.
           </p>
         </div>
@@ -113,9 +113,9 @@ export default function MediaPicker({
                 onSelect(item);
                 onClose();
               }}
-              className="group overflow-hidden rounded-xl border border-white/10 bg-white/3 text-left transition hover:border-white/35 hover:bg-white/8 focus:outline-none focus:ring-2 focus:ring-white/60"
+              className="group overflow-hidden rounded-xl border border-neutral-200 bg-white text-left transition hover:border-neutral-400 hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-neutral-300"
             >
-              <div className="relative aspect-square bg-zinc-900">
+              <div className="relative aspect-square bg-neutral-100">
                 {mediaType === "IMAGE" ? (
                   canUseNextImage(item.url) ? (
                     <Image
@@ -144,7 +144,7 @@ export default function MediaPicker({
                   {item.format ?? mediaType}
                 </span>
               </div>
-              <span className="block truncate px-2.5 py-2 text-xs text-white/60">
+              <span className="block truncate px-2.5 py-2 text-xs text-neutral-500">
                 Select media
               </span>
             </button>
