@@ -17,9 +17,8 @@ export class CaptainService {
   async authenticate(restaurantId: string, email: string, password: string) {
     const captain = await this.repository.findByRestaurantAndEmail(restaurantId, email.trim().toLowerCase());
     if (!captain || !captain.isActive || !(await verifyCaptainPassword(password, captain.passwordHash))) return null;
-    void this.repository.updateForRestaurant(restaurantId, captain.id, {
-      lastActiveAt: new Date().toISOString(),
-    });
+    // Do not bump updatedAt here — sessions bind to captainUpdatedAt and would immediately 403.
+    void this.repository.touchLastActiveAt(restaurantId, captain.id, new Date().toISOString());
     return captain;
   }
 

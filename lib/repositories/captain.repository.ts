@@ -67,6 +67,12 @@ export class CaptainRepository {
     return captain ? toCaptain(captain) : null;
   }
 
+  /** Activity heartbeat only — must not bump updatedAt (that would invalidate captain sessions). */
+  async touchLastActiveAt(restaurantId: string, id: string, lastActiveAt: string) {
+    await connectToDatabase();
+    await CaptainModel.updateOne({ restaurantId, id }, { $set: { lastActiveAt } });
+  }
+
   async findActiveByAssignedTable(restaurantId: string, tableId: string) {
     await connectToDatabase();
     const captains = await CaptainModel.find({
