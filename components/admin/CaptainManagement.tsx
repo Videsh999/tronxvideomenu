@@ -227,10 +227,10 @@ export default function CaptainManagement({
     <div className="space-y-6">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-neutral-900 sm:text-3xl">Captain Access</h1>
-          <p className="mt-1 text-sm text-neutral-500">
-            Create floor staff accounts and share the Captain sign-in portal. Passwords are recoverable for
-            authorized restaurant admins.
+          <h1 className="text-2xl font-bold text-neutral-900 sm:text-3xl">Captains & table sections</h1>
+          <p className="mt-1 max-w-2xl text-sm text-neutral-500">
+            Create captains, assign their tables, then share the portal. Each captain runs walk-in ordering and
+            QR approval only for their assigned tables.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -256,28 +256,47 @@ export default function CaptainManagement({
         <p className="font-semibold text-neutral-900">Captain sign-in portal</p>
         <p className="mt-1 font-mono text-xs break-all text-neutral-700">{absoluteLogin}</p>
         <p className="mt-2 text-xs text-neutral-500">
-          Assign any number of tables per captain (e.g. 50 tables → 10 captains × 5 tables). Captains place
-          walk-in orders like POS, and must tick-approve QR orders for their tables before kitchen/KOT. Separate from the
-          restaurant admin console.
+          Floor staff login. After tables are assigned below, captains take walk-in orders and tick-approve QR
+          orders for their section only.
         </p>
       </section>
 
-      {activeTables.length ? (
-        <section className="rounded-2xl border border-sky-100 bg-sky-50 p-4 text-sm text-sky-950">
-          <p className="font-semibold">Table assignment</p>
-          <p className="mt-1 text-sky-900/80">
-            Select tables under each captain and save. A table can only be actively assigned to one captain
-            (reassignment removes it from others). No hard table limit.
+      <section className="rounded-3xl border-2 border-neutral-900 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-neutral-400">Required setup</p>
+            <h2 className="mt-1 text-xl font-bold text-neutral-900">Assign tables to each captain</h2>
+            <p className="mt-1 max-w-2xl text-sm text-neutral-600">
+              You decide the split — e.g. 50 tables and 10 captains (5 each), or any unequal mix. Tick tables under a
+              captain and press <strong>Save table assignment</strong>. One table → one active captain.
+            </p>
+          </div>
+          <a
+            href={`/admin/${restaurantSlug}/tables`}
+            className="inline-flex min-h-10 items-center rounded-full border border-neutral-300 px-4 text-sm font-semibold"
+          >
+            Manage tables & QR
+          </a>
+        </div>
+        {!activeTables.length ? (
+          <p className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+            No active tables yet. Create tables under <strong>Tables & QR</strong>, then return here to assign them.
           </p>
-          <p className="mt-2 text-xs text-sky-800/80">
-            Unassigned tables:{" "}
-            {activeTables
-              .filter((table) => !captains.some((captain) => (captain.assignedTableIds ?? []).includes(table.id)))
-              .map((table) => table.tableNumber)
-              .join(", ") || "none"}
+        ) : (
+          <p className="mt-4 text-sm text-neutral-600">
+            Unassigned now:{" "}
+            <span className="font-semibold text-neutral-900">
+              {activeTables
+                .filter((table) => !captains.some((captain) => (captain.assignedTableIds ?? []).includes(table.id)))
+                .map((table) => `T${table.tableNumber}`)
+                .join(", ") || "none — all covered"}
+            </span>
+            {" · "}
+            {activeTables.length} active table{activeTables.length === 1 ? "" : "s"} · {captains.length} captain
+            {captains.length === 1 ? "" : "s"}
           </p>
-        </section>
-      ) : null}
+        )}
+      </section>
 
       {message ? (
         <p role="status" className="rounded-xl border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-700">
@@ -348,48 +367,67 @@ export default function CaptainManagement({
                   {pendingId === captain.id ? "Working…" : captain.isActive ? "Disable" : "Enable"}
                 </button>
               </div>
-              {activeTables.length ? (
-                <div className="mt-3 rounded-xl border border-neutral-100 bg-neutral-50 p-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
-                    Assigned tables
+              <div className="mt-4 rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-bold text-neutral-900">
+                    Tables for this captain
+                    <span className="ml-2 text-xs font-semibold text-neutral-500">
+                      ({(assignDraft[captain.id] ?? []).length} selected)
+                    </span>
                   </p>
-                  <div className="mt-2 flex max-h-40 flex-wrap gap-2 overflow-y-auto">
-                    {activeTables.map((table) => {
-                      const checked = (assignDraft[captain.id] ?? []).includes(table.id);
-                      const conflict = assignedElsewhere(table.id, captain.id);
-                      return (
-                        <label
-                          key={table.id}
-                          className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs ${
-                            checked
-                              ? "border-neutral-900 bg-neutral-900 text-white"
-                              : "border-neutral-200 bg-white text-neutral-700"
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            className="sr-only"
-                            checked={checked}
-                            onChange={() => toggleTableDraft(captain.id, table.id)}
-                          />
-                          T{table.tableNumber}
-                          {conflict && !checked ? (
-                            <span className="text-[10px] opacity-70">({conflict.name})</span>
-                          ) : null}
-                        </label>
-                      );
-                    })}
-                  </div>
-                  <button
-                    type="button"
-                    disabled={pendingId === captain.id}
-                    onClick={() => void saveTableAssignment(captain)}
-                    className="mt-3 rounded-lg bg-neutral-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
-                  >
-                    Save table assignment
-                  </button>
+                  {!activeTables.length ? (
+                    <span className="text-xs text-amber-800">Add tables first</span>
+                  ) : null}
                 </div>
-              ) : null}
+                {activeTables.length ? (
+                  <>
+                    <div className="mt-3 flex max-h-48 flex-wrap gap-2 overflow-y-auto">
+                      {activeTables.map((table) => {
+                        const checked = (assignDraft[captain.id] ?? []).includes(table.id);
+                        const conflict = assignedElsewhere(table.id, captain.id);
+                        return (
+                          <label
+                            key={table.id}
+                            className={`inline-flex min-h-10 cursor-pointer items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-semibold ${
+                              checked
+                                ? "border-neutral-900 bg-neutral-900 text-white"
+                                : "border-neutral-200 bg-white text-neutral-700"
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              className="sr-only"
+                              checked={checked}
+                              onChange={() => toggleTableDraft(captain.id, table.id)}
+                            />
+                            T{table.tableNumber}
+                            {table.label ? (
+                              <span className={`text-xs font-normal ${checked ? "text-white/70" : "text-neutral-400"}`}>
+                                {table.label}
+                              </span>
+                            ) : null}
+                            {conflict && !checked ? (
+                              <span className="text-[10px] font-normal opacity-70">→ {conflict.name}</span>
+                            ) : null}
+                          </label>
+                        );
+                      })}
+                    </div>
+                    <button
+                      type="button"
+                      disabled={pendingId === captain.id}
+                      onClick={() => void saveTableAssignment(captain)}
+                      className="mt-3 inline-flex min-h-11 items-center rounded-xl bg-neutral-900 px-4 text-sm font-bold text-white disabled:opacity-50"
+                    >
+                      {pendingId === captain.id ? "Saving…" : "Save table assignment"}
+                    </button>
+                  </>
+                ) : (
+                  <p className="mt-2 text-sm text-neutral-500">
+                    No tables to assign yet. Open Tables & QR, create tables, then assign them here.
+                  </p>
+                )}
+              </div>
               <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
                 <span className="min-w-44 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 font-mono text-neutral-700">
                   {isPasswordVisible
