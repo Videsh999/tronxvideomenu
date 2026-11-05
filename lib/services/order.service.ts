@@ -14,6 +14,11 @@ import { hasRestaurantFeature } from "@/lib/features";
 import { lineItemTotal, computeBillTotals, amountRemaining, roundMoney } from "@/lib/order-pricing";
 import type { OrderLineCancellation } from "@/types";
 import { canTransition } from "@/lib/order-transitions";
+import {
+  defaultAuthorizationForSource,
+  isCaptainKitchenEligible,
+  resolveAuthorization,
+} from "@/lib/order-authorization";
 import type {
   OrderStatus,
   RestaurantOrder,
@@ -25,6 +30,7 @@ import type {
   OrderEvent,
   KitchenStation,
   OrderItemSnapshot,
+  CaptainAuthorization,
 } from "@/types";
 import type { PlaceOrderInput, PlacePosOrderInput, RefundPaymentInput } from "@/lib/validations";
 
@@ -38,6 +44,7 @@ const staffOrderView = (order: RestaurantOrder) => ({
   source: order.source ?? "QR",
   guestCount: order.guestCount,
   orderNote: order.orderNote,
+  captainAuthorization: order.captainAuthorization,
   items: order.items,
   subtotal: order.subtotal,
   billDiscountAmount: order.billDiscountAmount ?? 0,
@@ -111,7 +118,23 @@ export class OrderService {
   }
 
   async listKitchen(restaurantId: string, station?: KitchenStation) {
-    return (await orderRepository.findKitchenActive(restaurantId, station)).map(staffOrderView);
+    return (await orderRepository.findKitchenActive(restaurantId, station))
+      .filter((order) => isCaptainKitchenEligible(order))
+      .map(staffOrderView);
+  }
+
+  async listPendingCaptainApprovals(restaurantId: string, tableNumbers?: number[]) {
+    const orders = await orderRepository.findByRestaurantId(restaurantId);
+    return orders
+      .filter((order) => {
+        if (order.status !== "PENDING") return false;
+        if (resolveAuthorization(order).status !== "PENDING_CAPTAIN_APPROVAL") return false;
+        if (tableNumbers && tableNumbers.length > 0 && !tableNumbers.includes(order.tableNumber)) {
+          return false;
+        }
+        return true;
+      })
+      .map(staffOrderView);
   }
 
   async getForRestaurant(restaurantId: string, id: string) {
@@ -233,8 +256,10 @@ export class OrderService {
       throw new OrderServiceError("This table became unavailable. Please ask restaurant staff for help.");
     }
     const customerToken = randomBytes(32).toString("base64url");
-    const createdEvent = makeEvent("CREATED", "Order placed via QR menu", undefined, {
+    const captainAuthorization = defaultAuthorizationForSource("CUSTOMER_QR");
+    const createdEvent = makeEvent("CREATED", "Order placed via QR menu — awaiting captain approval", undefined, {
       billSnapshot: bill,
+      captainAuthorization,
     });
     const created = await orderRepository.create({
       id: `order-${randomUUID()}`,
@@ -246,6 +271,7 @@ export class OrderService {
       status: "PENDING",
       channel: "QR",
       source: "QR",
+      captainAuthorization,
       items,
       subtotal: bill.itemsSubtotal,
       billDiscountAmount: 0,
@@ -459,10 +485,23 @@ export class OrderService {
       total: bill.total,
     };
 
+    const isCaptainActor = actor.role === "CAPTAIN";
+    const captainAuthorization: CaptainAuthorization = isCaptainActor
+      ? {
+          ...defaultAuthorizationForSource("CAPTAIN_DIRECT"),
+          status: "CAPTAIN_APPROVED",
+          authorizedCaptainId: actor.id,
+          authorizedCaptainName: actor.name,
+          authorizedAt: new Date().toISOString(),
+        }
+      : defaultAuthorizationForSource("POS");
+
     const orderId = `order-${randomUUID()}`;
     const createdEvent = makeEvent(
       "CREATED",
-      `POS order (${input.channel}) created`,
+      isCaptainActor
+        ? `Captain direct order (${input.channel}) authorized`
+        : `POS order (${input.channel}) created`,
       actor,
       {
         channel: input.channel,
@@ -470,6 +509,7 @@ export class OrderService {
         couponDiscountAmount,
         loyaltyPointsRedeemed,
         billSnapshot: bill,
+        captainAuthorization,
       },
     );
 
@@ -519,9 +559,10 @@ export class OrderService {
         idempotencyKey: input.idempotencyKey,
         status: "PENDING",
         channel: input.channel,
-        source: "POS",
+        source: isCaptainActor ? "CAPTAIN" : "POS",
         guestCount: input.guestCount,
         orderNote: input.orderNote,
+        captainAuthorization,
         items,
         subtotal: totals.itemsSubtotal,
         billDiscountAmount: totals.billDiscount,
@@ -751,6 +792,97 @@ export class OrderService {
     });
 
     if (!updated) throw new OrderServiceError("Unable to update order.", 500);
+    return staffOrderView(updated);
+  }
+
+  /**
+   * Captain (or manager) authorization decision for a QR (or correction) order.
+   * Atomic: only one APPROVE may win. Idempotent via decisionIdempotencyKey.
+   */
+  async decideCaptainAuthorization(
+    restaurantId: string,
+    orderId: string,
+    input: {
+      decision: "APPROVE" | "REJECT" | "CORRECTION";
+      reason?: string;
+      idempotencyKey: string;
+      sendToKitchen?: boolean;
+    },
+    actor: PaymentAuditActor,
+  ) {
+    const current = await orderRepository.findByRestaurantAndId(restaurantId, orderId);
+    if (!current) throw new OrderServiceError("Order not found.", 404);
+
+    const existing = resolveAuthorization(current);
+    if (existing.decisionIdempotencyKey === input.idempotencyKey) {
+      return staffOrderView(current);
+    }
+
+    if (existing.status === "CAPTAIN_APPROVED" && input.decision === "APPROVE") {
+      throw new OrderServiceError("This order was already approved.", 409);
+    }
+    if (existing.status === "REJECTED" && input.decision !== "APPROVE") {
+      throw new OrderServiceError("This order was already rejected.", 409);
+    }
+
+    if (input.decision !== "APPROVE" && !input.reason?.trim()) {
+      throw new OrderServiceError("A reason is required for rejection or correction.", 400);
+    }
+
+    const nextStatus =
+      input.decision === "APPROVE"
+        ? ("CAPTAIN_APPROVED" as const)
+        : input.decision === "REJECT"
+          ? ("REJECTED" as const)
+          : ("CORRECTION_REQUESTED" as const);
+
+    const authorization: CaptainAuthorization = {
+      status: nextStatus,
+      entrySource: existing.entrySource || "CUSTOMER_QR",
+      authorizedCaptainId: actor.id,
+      authorizedCaptainName: actor.name,
+      authorizedAt: new Date().toISOString(),
+      decisionReason: input.reason?.trim() || undefined,
+      decisionIdempotencyKey: input.idempotencyKey,
+    };
+
+    const event = makeEvent(
+      "CAPTAIN_AUTHORIZATION",
+      input.decision === "APPROVE"
+        ? "Captain approved order and cleared kitchen gate"
+        : input.decision === "REJECT"
+          ? `Captain rejected order: ${input.reason}`
+          : `Captain requested correction: ${input.reason}`,
+      actor,
+      { decision: input.decision, authorization },
+    );
+
+    const updated = await orderRepository.setCaptainAuthorization(
+      restaurantId,
+      orderId,
+      {
+        authorization,
+        event,
+        // Only transition from pending-like authorization states.
+        expectedAuthorizationStatuses: [
+          "PENDING_CAPTAIN_APPROVAL",
+          "CORRECTION_REQUESTED",
+        ],
+        orderStatusOnReject: input.decision === "REJECT" ? "REJECTED" : undefined,
+      },
+    );
+
+    if (!updated) {
+      throw new OrderServiceError(
+        "Authorization conflict — another captain may have already decided. Refresh and try again.",
+        409,
+      );
+    }
+
+    if (input.decision === "APPROVE" && input.sendToKitchen !== false && updated.status === "PENDING") {
+      return this.acceptToKitchen(restaurantId, orderId, updated, actor);
+    }
+
     return staffOrderView(updated);
   }
 
@@ -995,6 +1127,17 @@ export class OrderService {
       return this.acceptToKitchen(restaurantId, id, current, actor);
     }
 
+    if (
+      current.status === "PENDING" &&
+      (status === "ACCEPTED" || status === "PREPARING") &&
+      !isCaptainKitchenEligible(current)
+    ) {
+      throw new OrderServiceError(
+        "Captain approval is required before this order can enter the kitchen.",
+        409,
+      );
+    }
+
     let table = null;
     if (status === "ACCEPTED" && current.tableNumber > 0) {
       table = await tableRepository.findByRestaurantAndId(restaurantId, current.tableId);
@@ -1160,6 +1303,16 @@ export class OrderService {
     current: RestaurantOrder,
     actor?: PaymentAuditActor,
   ) {
+    if (!isCaptainKitchenEligible(current)) {
+      const auth = resolveAuthorization(current);
+      throw new OrderServiceError(
+        auth.status === "PENDING_CAPTAIN_APPROVAL"
+          ? "This QR order is waiting for captain approval before it can enter the kitchen."
+          : `Order cannot enter the kitchen while authorization is ${auth.status}.`,
+        409,
+      );
+    }
+
     if (current.tableNumber > 0) {
       const table = await tableRepository.findByRestaurantAndId(restaurantId, current.tableId);
       if (!table || !table.isActive || table.status === "CLOSED") {

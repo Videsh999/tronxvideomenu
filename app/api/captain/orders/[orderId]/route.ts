@@ -19,7 +19,12 @@ export async function PATCH(request: Request, context: RouteContext) {
   try {
     const { status } = captainOrderStatusSchema.parse(await request.json());
     const { orderId } = await context.params;
-    const order = await orderService.updateStatus(captain.restaurantId, orderId, status);
+    const order = await orderService.updateStatus(captain.restaurantId, orderId, status, {
+      role: "CAPTAIN",
+      id: captain.id,
+      email: captain.email,
+      name: captain.name,
+    });
     return order ? NextResponse.json({ success: true, data: order }) : NextResponse.json({ success: false, error: "Order not found" }, { status: 404 });
   } catch (cause) {
     const validation = cause && typeof cause === "object" && "issues" in cause;

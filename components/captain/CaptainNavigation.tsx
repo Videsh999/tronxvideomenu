@@ -8,6 +8,7 @@ import {
   Flame,
   LayoutDashboard,
   LogOut,
+  ShieldCheck,
   Table2,
   UtensilsCrossed,
   Wallet,
@@ -18,10 +19,12 @@ export default function CaptainNavigation({
   slug,
   restaurantName,
   captainName,
+  pendingApprovals = 0,
 }: {
   slug: string;
   restaurantName?: string;
   captainName?: string;
+  pendingApprovals?: number;
 }) {
   const pathname = usePathname();
   const root = `/captain/${slug}`;
@@ -29,11 +32,18 @@ export default function CaptainNavigation({
     { href: root, label: "Dashboard", icon: LayoutDashboard, exact: true },
     { href: `${root}/tables`, label: "My Tables", icon: Table2, exact: false },
     { href: `${root}/take-order`, label: "New Order", icon: UtensilsCrossed, exact: false },
+    {
+      href: `${root}/approvals`,
+      label: "Approvals",
+      icon: ShieldCheck,
+      exact: false,
+      badge: pendingApprovals,
+    },
     { href: `${root}/orders`, label: "Active", icon: ClipboardList, exact: false },
     { href: `${root}/kitchen`, label: "Kitchen", icon: Flame, exact: false },
     { href: `${root}/requests`, label: "Requests", icon: BellRing, exact: false },
     { href: `${root}/shift`, label: "Shift", icon: Wallet, exact: false },
-  ];
+  ] as const;
   const isActive = (href: string, exact: boolean) =>
     exact ? pathname === href : pathname.startsWith(href);
   const logout = async () => {
@@ -58,12 +68,14 @@ export default function CaptainNavigation({
           </div>
         ) : null}
         <nav className="space-y-0.5">
-          {links.map(({ href, label, icon: Icon, exact }) => {
-            const active = isActive(href, exact);
+          {links.map((link) => {
+            const active = isActive(link.href, link.exact);
+            const badge = "badge" in link ? link.badge : 0;
+            const Icon = link.icon;
             return (
               <Link
-                key={href}
-                href={href}
+                key={link.href}
+                href={link.href}
                 aria-current={active ? "page" : undefined}
                 className={`group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
                   active
@@ -72,7 +84,16 @@ export default function CaptainNavigation({
                 }`}
               >
                 <Icon className={`h-4 w-4 ${active ? "text-white" : "text-neutral-500"}`} />
-                {label}
+                <span className="flex-1">{link.label}</span>
+                {badge && badge > 0 ? (
+                  <span
+                    className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                      active ? "bg-white text-neutral-900" : "bg-amber-500 text-white"
+                    }`}
+                  >
+                    {badge}
+                  </span>
+                ) : null}
               </Link>
             );
           })}
@@ -105,15 +126,17 @@ export default function CaptainNavigation({
         aria-label="Captain navigation"
         className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-neutral-200 bg-white/95 px-1 pt-1.5 backdrop-blur-xl lg:hidden"
       >
-        <ul className="mx-auto grid max-w-2xl grid-cols-7 gap-0.5">
-          {links.map(({ href, label, icon: Icon, exact }) => {
-            const active = isActive(href, exact);
+        <ul className="mx-auto grid max-w-3xl grid-cols-8 gap-0.5">
+          {links.map((link) => {
+            const active = isActive(link.href, link.exact);
+            const badge = "badge" in link ? link.badge : 0;
+            const Icon = link.icon;
             return (
-              <li key={href}>
+              <li key={link.href}>
                 <Link
-                  href={href}
+                  href={link.href}
                   aria-current={active ? "page" : undefined}
-                  className={`flex flex-col items-center gap-0.5 rounded-xl py-1 text-[9px] font-semibold transition ${
+                  className={`relative flex flex-col items-center gap-0.5 rounded-xl py-1 text-[9px] font-semibold transition ${
                     active ? "text-neutral-900" : "text-neutral-500"
                   }`}
                 >
@@ -122,7 +145,12 @@ export default function CaptainNavigation({
                   >
                     <Icon className="h-4 w-4" />
                   </span>
-                  {label.split(" ")[0]}
+                  {link.label.split(" ")[0]}
+                  {badge && badge > 0 ? (
+                    <span className="absolute right-1 top-0 rounded-full bg-amber-500 px-1 text-[8px] font-bold text-white">
+                      {badge}
+                    </span>
+                  ) : null}
                 </Link>
               </li>
             );

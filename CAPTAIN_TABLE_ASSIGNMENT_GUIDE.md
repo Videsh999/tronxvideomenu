@@ -11,8 +11,9 @@
 ## Captain runtime
 
 - Empty `assignedTableIds` → no floor tables / cannot place dine-in orders.
-- `assertCaptainMayServeTable` guards order place + table workspace + requests.
-- Dashboard / Active orders / Kitchen / Requests are scoped to assigned tables.
+- `assertCaptainMayServeTable` guards order place, table workspace, requests, and **QR approve/reject**.
+- Dashboard / Active orders / Kitchen / Approvals / Requests are scoped to assigned tables.
+- Unrelated captains cannot authorize another section’s QR orders; reassign tables in Admin → Captains first.
 
 ## Conflict prevention
 

@@ -373,6 +373,50 @@ export class OrderRepository implements IOrderRepository {
     const order = await OrderModel.findOne({ restaurantId, idempotencyKey: key }).lean();
     return order ? this.mapOrder(order) : null;
   }
+
+  async setCaptainAuthorization(
+    restaurantId: string,
+    id: string,
+    patch: {
+      authorization: import("@/types").CaptainAuthorization;
+      event: OrderEvent;
+      expectedAuthorizationStatuses: string[];
+      orderStatusOnReject?: RestaurantOrder["status"];
+    },
+  ) {
+    await connectToDatabase();
+    const now = new Date().toISOString();
+    const set: Record<string, unknown> = {
+      captainAuthorization: patch.authorization,
+      updatedAt: now,
+    };
+    if (patch.orderStatusOnReject) {
+      set.status = patch.orderStatusOnReject;
+    }
+
+    const order = await OrderModel.findOneAndUpdate(
+      {
+        restaurantId,
+        id,
+        status: { $in: ["PENDING", "ACCEPTED"] },
+        $or: [
+          { "captainAuthorization.status": { $in: patch.expectedAuthorizationStatuses } },
+          // Legacy QR without field — treat as pending approval.
+          {
+            captainAuthorization: { $exists: false },
+            source: "QR",
+            status: "PENDING",
+          },
+        ],
+      },
+      {
+        $set: set,
+        $push: { events: patch.event },
+      },
+      { new: true, runValidators: true },
+    ).lean();
+    return order ? this.mapOrder(order) : null;
+  }
 }
 
 export const orderRepository = new OrderRepository();

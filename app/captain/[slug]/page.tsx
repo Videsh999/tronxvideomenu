@@ -4,6 +4,7 @@ import {
   BellRing,
   ClipboardList,
   Flame,
+  ShieldCheck,
   Table2,
   Timer,
   UtensilsCrossed,
@@ -15,6 +16,7 @@ import { orderService } from "@/lib/services/order.service";
 import { tableService } from "@/lib/services/table.service";
 import { serviceRequestService } from "@/lib/services/service-request.service";
 import { enrichCaptainTables } from "@/lib/captain-floor";
+import { isPendingCaptainApproval } from "@/lib/order-authorization";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +41,9 @@ export default async function CaptainDashboardPage({ params }: { params: Promise
       myTableNumbers.has(order.tableNumber) &&
       !["COMPLETED", "CANCELLED", "REJECTED"].includes(order.status),
   );
+  const pendingApprovals = myOrders.filter((order) => isPendingCaptainApproval(order)).length;
+  const awaitingKitchen = myOrders.filter((order) => order.status === "PENDING" && !isPendingCaptainApproval(order)).length;
+  const preparing = myOrders.filter((order) => ["ACCEPTED", "PREPARING"].includes(order.status)).length;
   const ready = myOrders.filter((order) => order.status === "READY").length;
   const delayed = myOrders.filter((order) => {
     if (["READY", "SERVED", "COMPLETED"].includes(order.status)) return false;
@@ -53,16 +58,19 @@ export default async function CaptainDashboardPage({ params }: { params: Promise
   ).length;
 
   const metrics = [
-    { label: "Assigned tables", value: myTables.length, hint: `${available} available` },
-    { label: "In service", value: occupied, hint: "Occupied / bill pending" },
-    { label: "Orders live", value: myOrders.length, hint: `${ready} ready to serve` },
-    { label: "Delayed", value: delayed, hint: "> 25 min in kitchen" },
-    { label: "Bill requests", value: billRequests, hint: "Awaiting cashier" },
-    { label: "Guest requests", value: requests.length, hint: "Open assistance" },
+    { label: "Assigned tables", value: myTables.length, hint: `${available} available`, href: `/captain/${slug}/tables` },
+    { label: "In service", value: occupied, hint: "Occupied / bill pending", href: `/captain/${slug}/tables` },
+    { label: "Pending approvals", value: pendingApprovals, hint: "QR waiting on you", href: `/captain/${slug}/approvals` },
+    { label: "Awaiting kitchen", value: awaitingKitchen, hint: "Authorized, not cooking", href: `/captain/${slug}/orders` },
+    { label: "Preparing", value: preparing, hint: `${ready} ready to serve`, href: `/captain/${slug}/kitchen` },
+    { label: "Delayed", value: delayed, hint: "> 25 min in kitchen", href: `/captain/${slug}/kitchen` },
+    { label: "Bill requests", value: billRequests, hint: "Awaiting cashier", href: `/captain/${slug}/tables` },
+    { label: "Guest requests", value: requests.length, hint: "Open assistance", href: `/captain/${slug}/requests` },
   ];
 
   const quick = [
     { href: `/captain/${slug}/take-order`, label: "New Order", icon: UtensilsCrossed, primary: true },
+    { href: `/captain/${slug}/approvals`, label: "Pending Approvals", icon: ShieldCheck },
     { href: `/captain/${slug}/tables`, label: "Open My Tables", icon: Table2 },
     { href: `/captain/${slug}/kitchen`, label: "Kitchen Updates", icon: Flame },
     { href: `/captain/${slug}/requests`, label: "View Requests", icon: BellRing },
@@ -76,8 +84,18 @@ export default async function CaptainDashboardPage({ params }: { params: Promise
           {captain.name.split(" ")[0]} · floor console
         </h1>
         <p className="mt-2 max-w-xl text-sm text-white/70">
-          Run assigned tables end-to-end — seat guests, take orders without a phone, track kitchen, and hand off bills.
+          Two ways to order — you place it for guests without a phone, or tick-approve what they ordered on QR. Only then does kitchen get the ticket.
         </p>
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+          <div className="rounded-2xl border border-white/20 bg-white/10 p-3 text-sm">
+            <p className="font-bold text-white">1 · Guest has no phone</p>
+            <p className="mt-1 text-white/70">Open their table → New Order → you enter dishes → Confirm & authorize → KOT goes to kitchen.</p>
+          </div>
+          <div className="rounded-2xl border border-white/20 bg-white/10 p-3 text-sm">
+            <p className="font-bold text-white">2 · Guest ordered on QR</p>
+            <p className="mt-1 text-white/70">Opens in Approvals for your tables → review → Approve tick → then KOT. Without your tick, kitchen sees nothing.</p>
+          </div>
+        </div>
         <div className="mt-5 flex flex-wrap gap-2">
           {quick.map(({ href, label, icon: Icon, primary }) => (
             <Link
@@ -96,18 +114,19 @@ export default async function CaptainDashboardPage({ params }: { params: Promise
         </div>
       </header>
 
-      <section aria-label="Live floor metrics" className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <section aria-label="Live floor metrics" className="grid grid-cols-2 gap-3 md:grid-cols-4">
         {metrics.map((metric) => (
-          <article
+          <Link
             key={metric.label}
-            className="rounded-3xl border border-neutral-200 bg-white p-4 shadow-sm"
+            href={metric.href}
+            className="rounded-3xl border border-neutral-200 bg-white p-4 shadow-sm transition hover:border-neutral-900"
           >
             <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
               {metric.label}
             </p>
             <p className="mt-2 text-3xl font-bold tabular-nums tracking-tight">{metric.value}</p>
             <p className="mt-1 text-xs text-neutral-500">{metric.hint}</p>
-          </article>
+          </Link>
         ))}
       </section>
 

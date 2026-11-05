@@ -256,7 +256,8 @@ export default function CaptainManagement({
         <p className="font-semibold text-neutral-900">Captain sign-in portal</p>
         <p className="mt-1 font-mono text-xs break-all text-neutral-700">{absoluteLogin}</p>
         <p className="mt-2 text-xs text-neutral-500">
-          Captains take walk-in orders on assigned tables, send KOTs, and hand off bills — separate from the
+          Assign any number of tables per captain (e.g. 50 tables → 10 captains × 5 tables). Captains place
+          walk-in orders like POS, and must tick-approve QR orders for their tables before kitchen/KOT. Separate from the
           restaurant admin console.
         </p>
       </section>

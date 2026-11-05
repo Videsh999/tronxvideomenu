@@ -551,7 +551,28 @@ export type OrderEventType =
   | "ITEM_PREP"
   | "RECEIPT_REPRINT"
   | "REFUND"
-  | "LINE_CANCELLED";
+  | "LINE_CANCELLED"
+  | "CAPTAIN_AUTHORIZATION";
+
+/** Captain gate — separate from kitchen OrderStatus. QR must stay pending until approved. */
+export type CaptainAuthorizationStatus =
+  | "PENDING_CAPTAIN_APPROVAL"
+  | "CAPTAIN_APPROVED"
+  | "REJECTED"
+  | "CORRECTION_REQUESTED"
+  | "NOT_REQUIRED";
+
+export type OrderEntrySource = "CAPTAIN_DIRECT" | "CUSTOMER_QR" | "POS";
+
+export type CaptainAuthorization = {
+  status: CaptainAuthorizationStatus;
+  entrySource: OrderEntrySource;
+  authorizedCaptainId?: string;
+  authorizedCaptainName?: string;
+  authorizedAt?: string;
+  decisionReason?: string;
+  decisionIdempotencyKey?: string;
+};
 
 export type OrderEvent = {
   id: string;
@@ -572,9 +593,11 @@ export type RestaurantOrder = {
   idempotencyKey: string;
   status: OrderStatus;
   channel?: OrderChannel;
-  source?: "QR" | "POS";
+  source?: "QR" | "POS" | "CAPTAIN";
   guestCount?: number;
   orderNote?: string;
+  /** Captain authorization gate (QR pending until approved). */
+  captainAuthorization?: CaptainAuthorization;
   items: OrderItemSnapshot[];
   subtotal: number;
   /** Bill-level discount absolute amount (snapshotted). */
@@ -611,6 +634,7 @@ export type OrderSummary = Pick<
   | "channel"
   | "source"
   | "guestCount"
+  | "captainAuthorization"
   | "items"
   | "subtotal"
   | "billDiscountAmount"

@@ -235,8 +235,11 @@ export default function CaptainOrderPad({
           <Link href={`/captain/${slug}`} className="inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-900">
             <ArrowLeft className="h-4 w-4" /> Dashboard
           </Link>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Take order</h1>
-          <p className="text-sm text-neutral-500">Walk-in guests — phone optional. Prices validated on the server.</p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Take order for guest</h1>
+          <p className="text-sm text-neutral-500">
+            Like POS for walk-ins (elderly / no phone). Pick their table, enter the order, then Confirm & authorize —
+            KOT goes to kitchen right away. No customer app needed.
+          </p>
         </div>
         <label className="text-sm font-medium text-neutral-700">
           Table
@@ -446,7 +449,7 @@ export default function CaptainOrderPad({
             onClick={placeOrder}
             className="mt-3 min-h-12 rounded-xl bg-[#e7c27d] text-base font-bold text-neutral-900 disabled:opacity-40"
           >
-            {pending ? "Sending…" : "Confirm & send to kitchen"}
+            {pending ? "Authorizing…" : "Confirm & authorize order"}
           </button>
         </aside>
       </div>

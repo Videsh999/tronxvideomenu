@@ -67,7 +67,8 @@ export default function CaptainTables({
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-neutral-400">Floor</p>
           <h1 className="mt-1 text-3xl font-bold tracking-tight">My Tables</h1>
           <p className="mt-1 text-sm text-neutral-500">
-            Tap a table to open its workspace — take orders, track kitchen, request bill.
+            Only tables your manager assigned to you. Tap a table to take a walk-in order, or check Approvals for QR
+            orders waiting your tick.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
