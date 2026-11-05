@@ -56,11 +56,16 @@ export function resolveWifiConfigurationUpdate(
   throw new Error("Enter a password for this secured Wi-Fi network.");
 }
 
+/** True when guests should see the Wi-Fi control (SSID saved). Feature flag is checked separately. */
+export function isWifiConfiguredForGuests(wifi?: RestaurantWifiConfiguration | null): boolean {
+  return Boolean(wifi?.ssid?.trim());
+}
+
 export function getWifiCustomerDetails(
   wifi: RestaurantWifiConfiguration | undefined,
   decryptPassword: (password: EncryptedWifiPassword) => string,
 ): WifiCustomerDetails | null {
-  if (!wifi?.ssid) return null;
+  if (!isWifiConfiguredForGuests(wifi)) return null;
   const password = hasEncryptedPassword(wifi) ? decryptPassword(wifi) : undefined;
-  return { ssid: wifi.ssid, security: wifi.security, ...(password !== undefined ? { password } : {}) };
+  return { ssid: wifi!.ssid.trim(), security: wifi!.security, ...(password !== undefined ? { password } : {}) };
 }

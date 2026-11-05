@@ -3,6 +3,7 @@ import test from "node:test";
 import { restaurantWifiUpdateSchema } from "../lib/validations/index";
 import {
   getWifiCustomerDetails,
+  isWifiConfiguredForGuests,
   resolveWifiConfigurationUpdate,
 } from "../lib/wifi-configuration";
 import type { RestaurantWifiConfiguration } from "../types/index";
@@ -117,6 +118,13 @@ test("secured Wi-Fi without a saved or new password keeps the existing validatio
     }, encryptForTest),
     { message: "Enter a password for this secured Wi-Fi network." },
   );
+});
+
+test("guest Wi-Fi control stays hidden until an SSID is saved", () => {
+  assert.equal(isWifiConfiguredForGuests(undefined), false);
+  assert.equal(isWifiConfiguredForGuests({ ssid: "   ", security: "OPEN" }), false);
+  assert.equal(isWifiConfiguredForGuests({ ssid: "Cafe Guest", security: "OPEN" }), true);
+  assert.equal(getWifiCustomerDetails({ ssid: "  ", security: "OPEN" }, () => ""), null);
 });
 
 test("public Wi-Fi details omit a password when none is configured", () => {

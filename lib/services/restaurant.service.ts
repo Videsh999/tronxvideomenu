@@ -75,6 +75,13 @@ export class RestaurantService {
     return getWifiCustomerDetails(restaurant.wifi, decryptWifiPassword);
   }
 
+  /** Feature-safe check: Wi-Fi details exist for guests (SSID configured). Does not decrypt passwords. */
+  async hasWifiConfiguredForGuests(slug: string): Promise<boolean> {
+    const restaurant = await restaurantRepository.findWifiBySlug(slug);
+    if (!restaurant || restaurant.isActive === false) return false;
+    return Boolean(restaurant.wifi?.ssid?.trim());
+  }
+
   async create(input: CreateRestaurantInput): Promise<Restaurant> {
     const existing = await restaurantRepository.findBySlug(input.slug);
     if (existing) {

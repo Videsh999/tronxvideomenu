@@ -29,7 +29,11 @@ export default async function RestaurantMenuPage({
     : null;
   const invalidTable = Boolean(tableValue) && (!tableNumber || !table);
   const reservationsEnabled = hasRestaurantFeature(menu.restaurant, "RESERVATIONS");
-  const wifiEnabled = hasRestaurantFeature(menu.restaurant, "WIFI");
+  // Only show Wi-Fi when the plan allows it AND an SSID is actually configured.
+  // Otherwise guests open an empty “not configured” modal.
+  const wifiEnabled =
+    hasRestaurantFeature(menu.restaurant, "WIFI") &&
+    (await restaurantService.hasWifiConfiguredForGuests(menu.restaurant.slug));
   const videoMenuEnabled = hasRestaurantFeature(menu.restaurant, "VIDEO_MENU");
   const tableOrderingEnabled = hasRestaurantFeature(menu.restaurant, "TABLE_ORDERING");
   const view = Array.isArray(rawView) ? rawView[0] : rawView;
