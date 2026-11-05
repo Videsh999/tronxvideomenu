@@ -17,6 +17,15 @@ import {
   ClipboardList,
   Users,
   CalendarDays,
+  FileSpreadsheet,
+  MonitorSmartphone,
+  ChefHat,
+  Package,
+  Truck,
+  HeartHandshake,
+  BarChart3,
+  Sparkles,
+  Cpu,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -78,15 +87,43 @@ export default function AdminSidebar({
         { label: "Categories", href: buildRoute("/menu/categories"), icon: FolderTree },
         { label: "Dishes", href: buildRoute("/menu/dishes"), icon: UtensilsCrossed },
         { label: "Add-ons", href: buildRoute("/menu/addons"), icon: Sliders },
+        ...(features.MENU_IMPORT ? [{ label: "Import Excel", href: buildRoute("/menu/import"), icon: FileSpreadsheet }] : []),
       ],
     },
     {
       title: "Operations",
       items: [
         ...(features.ORDER_MANAGEMENT ? [{ label: "Orders", href: buildRoute("/orders"), icon: ClipboardList }] : []),
+        ...(features.POS ? [{ label: "POS", href: buildRoute("/pos"), icon: MonitorSmartphone }] : []),
+        ...(features.KITCHEN_DISPLAY ? [{ label: "Kitchen", href: buildRoute("/kitchen"), icon: ChefHat }] : []),
+        ...(features.HARDWARE_SIMULATOR ||
+        features.HARDWARE_PRINTING ||
+        features.HARDWARE_LOCAL_CONNECTOR
+          ? [{ label: "Devices", href: buildRoute("/devices"), icon: Cpu }]
+          : []),
         ...(features.TABLE_MANAGEMENT ? [{ label: "Tables & QR", href: buildRoute("/tables"), icon: QrCode }] : []),
         ...(features.RESERVATIONS ? [{ label: "Reservations", href: buildRoute("/reservations"), icon: CalendarDays }] : []),
         ...(features.CAPTAIN_ACCESS ? [{ label: "Captains", href: buildRoute("/captains"), icon: Users }] : []),
+      ],
+    },
+    {
+      title: "Back office",
+      items: [
+        ...(features.INVENTORY ? [{ label: "Inventory", href: buildRoute("/inventory"), icon: Package }] : []),
+        ...(features.INVENTORY ? [{ label: "Recipes", href: buildRoute("/inventory/recipes"), icon: Package }] : []),
+        ...(features.PROCUREMENT ? [{ label: "Procurement", href: buildRoute("/procurement"), icon: Truck }] : []),
+        ...(features.CRM_LOYALTY ? [{ label: "CRM", href: buildRoute("/crm"), icon: HeartHandshake }] : []),
+        ...(features.MULTI_OUTLET ? [{ label: "Organization", href: buildRoute("/organization"), icon: Store }] : []),
+        ...(features.ANALYTICS || features.ORDER_MANAGEMENT
+          ? [{ label: "Reports", href: buildRoute("/reports"), icon: BarChart3 }]
+          : []),
+        ...(features.AI_BUSINESS_ASSISTANT ||
+        features.AI_SALES_FORECAST ||
+        features.AI_INVENTORY_INTELLIGENCE ||
+        features.AI_MENU_INTELLIGENCE ||
+        features.AI_OPERATIONAL_ALERTS
+          ? [{ label: "AI Intelligence", href: buildRoute("/ai"), icon: Sparkles }]
+          : []),
       ],
     },
     {

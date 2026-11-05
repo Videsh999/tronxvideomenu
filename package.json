@@ -7,7 +7,17 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "seed:mongodb": "node --env-file=.env.local --import tsx scripts/seed-mongodb.ts"
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts",
+    "test:unit": "tsx --test tests/*.test.ts",
+    "test:integration": "tsx --test tests/integration/*.test.ts",
+    "seed:mongodb": "node --env-file=.env.local --import tsx scripts/seed-mongodb.ts",
+    "demo:workbook": "node --import tsx scripts/generate-demo-menu-workbook.ts",
+    "demo:workbook:reupload": "node --import tsx scripts/generate-demo-reupload-workbook.ts",
+    "demo:seed": "node --env-file=.env.local --import tsx scripts/seed-tronx-demo-kitchen.ts",
+    "demo:seed:http": "curl -sS -X POST http://localhost:3000/api/dev/seed-demo-kitchen",
+    "demo:verify:reupload": "node scripts/verify-demo-reupload-import.mjs",
+    "bench:menu": "node scripts/load-benchmark-menu.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",
@@ -21,6 +31,7 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-hook-form": "^7.89.0",
+    "xlsx": "^0.18.5",
     "zod": "^4.6.5"
   },
   "devDependencies": {

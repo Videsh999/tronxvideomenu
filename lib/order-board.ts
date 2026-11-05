@@ -12,7 +12,12 @@ export const ORDER_BOARD_STAGES: {
   { id: "new", title: "New", hint: "Waiting for the captain to accept", statuses: ["PENDING"] },
   { id: "kitchen", title: "Kitchen", hint: "Cooking — ticket already printed", statuses: ["ACCEPTED", "PREPARING"] },
   { id: "ready", title: "Ready", hint: "Pass is ready — take to the table", statuses: ["READY"] },
-  { id: "done", title: "Done", hint: "Served or cancelled", statuses: ["SERVED", "CANCELLED"] },
+  {
+    id: "done",
+    title: "Done",
+    hint: "Served, completed, cancelled, or refunded",
+    statuses: ["SERVED", "COMPLETED", "CANCELLED", "REJECTED", "REFUNDED"],
+  },
 ];
 
 export function stageForStatus(status: OrderStatus): OrderBoardStage {
@@ -34,7 +39,10 @@ export function statusLabel(status: OrderStatus): string {
     PREPARING: "Cooking",
     READY: "Ready to serve",
     SERVED: "Served",
+    COMPLETED: "Completed",
     CANCELLED: "Cancelled",
+    REJECTED: "Rejected",
+    REFUNDED: "Refunded",
   };
   return labels[status];
 }
@@ -56,6 +64,7 @@ export function primaryFloorAction(status: OrderStatus): { status: OrderStatus; 
   if (status === "ACCEPTED") return { status: "PREPARING", label: "Start cooking" };
   if (status === "PREPARING") return { status: "READY", label: "Mark ready" };
   if (status === "READY") return { status: "SERVED", label: "Mark served" };
+  if (status === "SERVED") return { status: "COMPLETED", label: "Complete order" };
   return null;
 }
 

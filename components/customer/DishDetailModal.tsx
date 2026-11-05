@@ -254,11 +254,11 @@ export default function DishDetailModal({
                 <div className="mt-1 flex items-start gap-3">
                   <h2
                     id="dish-modal-title"
-                    className="font-serif min-w-0 flex-1 text-4xl uppercase text-[var(--restaurant-text)] sm:text-5xl"
+                    className="font-serif min-w-0 flex-1 text-4xl uppercase text-[var(--restaurant-text,#241416)] sm:text-5xl"
                   >
-                    {tc(dish.name)}
+                    {tc(dish.name) || dish.name}
                   </h2>
-                  <SpeakButton text={tc(dish.name)} originalText={dish.name} size="md" className="mt-0.5" />
+                  <SpeakButton text={tc(dish.name) || dish.name} originalText={dish.name} size="md" className="mt-0.5" />
                 </div>
               </div>
 
@@ -269,7 +269,9 @@ export default function DishDetailModal({
                 </p>
               )}
 
-              <p className="text-2xl font-bold tabular-nums text-[var(--restaurant-text)]">₹{dish.price}</p>
+              <p className="text-2xl font-bold tabular-nums text-[var(--restaurant-text,#241416)]">
+                ₹{Number.isFinite(dish.price) ? dish.price : "—"}
+              </p>
             </div>
 
             {/* 3. ADD-ONS SECTION */}

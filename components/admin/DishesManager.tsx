@@ -19,6 +19,7 @@ import {
   ArrowDown,
   Trash2,
   ImagePlus,
+  Download,
 } from "lucide-react";
 import type { AddonGroup, Category, Dish, DishMediaItem } from "@/types";
 import { api } from "@/lib/api";
@@ -277,15 +278,24 @@ export default function DishesManager({
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={openCreate}
-          disabled={categories.length === 0}
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-neutral-900 px-5 text-sm font-bold text-white transition hover:bg-neutral-800 disabled:opacity-40"
-        >
-          <Plus className="h-4 w-4" />
-          <span>Add dish</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <a
+            href="/api/admin/menu-export?format=xlsx"
+            className={secondaryButtonClass}
+          >
+            <Download className="h-4 w-4" />
+            <span>Export Excel</span>
+          </a>
+          <button
+            type="button"
+            onClick={openCreate}
+            disabled={categories.length === 0}
+            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-neutral-900 px-5 text-sm font-bold text-white transition hover:bg-neutral-800 disabled:opacity-40"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Add dish</span>
+          </button>
+        </div>
       </div>
 
       {categories.length === 0 ? (

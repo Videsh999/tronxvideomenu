@@ -112,6 +112,7 @@ export async function POST(request: Request, { params }: RouteContext) {
       orderId,
       parsed.data.method,
       actor,
+      parsed.data.amount,
     );
 
     return NextResponse.json({ success: true, data: updated });

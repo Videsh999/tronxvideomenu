@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -41,6 +41,11 @@ export default function RestaurantProfileForm({
     security: "WPA2",
     passwordConfigured: false,
   });
+  const [wifiSeed, setWifiSeed] = useState(initialWifi);
+  if (initialWifi !== wifiSeed) {
+    setWifiSeed(initialWifi);
+    if (initialWifi) setWifi(initialWifi);
+  }
   const [wifiPassword, setWifiPassword] = useState("");
   const [clearWifiPassword, setClearWifiPassword] = useState(false);
   const [wifiPasswordFocused, setWifiPasswordFocused] = useState(false);
@@ -48,11 +53,6 @@ export default function RestaurantProfileForm({
   const [wifiSaving, setWifiSaving] = useState(false);
   const [wifiMessage, setWifiMessage] = useState("");
   const [wifiError, setWifiError] = useState("");
-
-  useEffect(() => {
-    if (!initialWifi) return;
-    setWifi(initialWifi);
-  }, [initialWifi]);
 
   const saveWifi = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();

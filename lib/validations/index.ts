@@ -71,15 +71,25 @@ export const restaurantSchema = z.object({
 });
 
 export const updateRestaurantSchema = restaurantSchema.partial();
-export const restaurantAdminProfileSchema = updateRestaurantSchema.omit({
-  slug: true,
-  isActive: true,
-  subscriptionPlan: true,
-  subscriptionStatus: true,
-  subscriptionEnabled: true,
-  featureOverrides: true,
-  theme: true,
-}).strict();
+export const restaurantAdminProfileSchema = updateRestaurantSchema
+  .omit({
+    slug: true,
+    isActive: true,
+    subscriptionPlan: true,
+    subscriptionStatus: true,
+    subscriptionEnabled: true,
+    featureOverrides: true,
+    theme: true,
+  })
+  .extend({
+    billing: z
+      .object({
+        taxRatePercent: z.number().min(0).max(100).optional(),
+        taxLabel: z.string().trim().max(40).optional(),
+      })
+      .optional(),
+  })
+  .strict();
 export type CreateRestaurantInput = z.infer<typeof restaurantSchema>;
 export type UpdateRestaurantInput = z.infer<typeof updateRestaurantSchema>;
 export type RestaurantAdminProfileInput = z.infer<
@@ -223,6 +233,21 @@ export const dishSchema = z.object({
     .optional(),
   sortOrder: z.number().int().min(0).default(0),
   addonGroupIds: z.array(z.string()).optional(),
+  sku: z.string().trim().max(64).optional(),
+  kitchenStation: z.enum(["MAIN", "BAR", "BAKERY", "DESSERT", "OTHER"]).optional(),
+  variants: z
+    .array(
+      z.object({
+        id: z.string().min(1).max(64),
+        name: z.string().trim().min(1).max(80),
+        price: z.number().min(0),
+        isAvailable: z.boolean().optional(),
+        sortOrder: z.number().int().min(0).optional(),
+        sku: z.string().trim().max(64).optional(),
+      }),
+    )
+    .max(20)
+    .optional(),
 });
 
 export const updateDishSchema = dishSchema
@@ -326,12 +351,21 @@ export const createCaptainSchema = z.object({
 export const updateCaptainSchema = z.object({ isActive: z.boolean() });
 export const resetCaptainPasswordSchema = z.object({ password: z.string().min(8).max(256) });
 export const captainOrderStatusSchema = z.object({
-  status: z.enum(["ACCEPTED", "PREPARING", "READY", "SERVED", "CANCELLED"]),
+  status: z.enum([
+    "ACCEPTED",
+    "PREPARING",
+    "READY",
+    "SERVED",
+    "COMPLETED",
+    "CANCELLED",
+    "REJECTED",
+  ]),
 });
 
 export const recordPaymentSchema = z
   .object({
     method: z.enum(["CASH", "UPI", "CARD"]),
+    amount: z.number().positive().max(1_000_000).optional(),
   })
   .strict();
 export type RecordPaymentInput = z.infer<typeof recordPaymentSchema>;
@@ -352,3 +386,342 @@ export const correctPaymentSchema = z
     path: ["method"],
   });
 export type CorrectPaymentInput = z.infer<typeof correctPaymentSchema>;
+
+export const refundPaymentSchema = z
+  .object({
+    amount: z.number().positive().max(1_000_000),
+    method: z.enum(["CASH", "UPI", "CARD"]),
+    reason: z.string().trim().min(5).max(300),
+  })
+  .strict();
+export type RefundPaymentInput = z.infer<typeof refundPaymentSchema>;
+
+export const placePosOrderSchema = z
+  .object({
+    channel: z.enum(["POS_DINE_IN", "POS_TAKEAWAY", "POS_DELIVERY"]),
+    tableNumber: z.number().int().min(0).max(9999).optional(),
+    guestCount: z.number().int().min(1).max(100).optional(),
+    orderNote: z.string().trim().max(1000).optional(),
+    billDiscountAmount: z.number().min(0).max(1_000_000).optional(),
+    /** Server validates; client must not send discount amounts. */
+    couponCode: z.string().trim().min(3).max(40).optional(),
+    customerPhone: z.string().trim().min(7).max(24).optional(),
+    redeemLoyaltyPoints: z.number().int().min(0).max(1_000_000).optional(),
+    idempotencyKey: z.string().uuid(),
+    shiftId: z.string().min(1).optional(),
+    items: z
+      .array(
+        z.object({
+          dishId: z.string().min(1),
+          variantId: z.string().min(1).optional(),
+          quantity: z.number().int().min(1).max(99),
+          itemDiscountAmount: z.number().min(0).max(1_000_000).optional(),
+          note: z.string().trim().max(500).optional(),
+          selections: z
+            .array(
+              z.object({
+                groupId: z.string().min(1),
+                addons: z
+                  .array(z.object({ addonId: z.string().min(1) }))
+                  .max(20),
+              }),
+            )
+            .max(30)
+            .default([]),
+        }),
+      )
+      .min(1)
+      .max(80),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.channel === "POS_DINE_IN" && (value.tableNumber == null || value.tableNumber < 1)) {
+      context.addIssue({
+        code: "custom",
+        path: ["tableNumber"],
+        message: "Select a table for dine-in orders.",
+      });
+    }
+  });
+export type PlacePosOrderInput = z.infer<typeof placePosOrderSchema>;
+
+export const kitchenItemPrepSchema = z
+  .object({
+    lineId: z.string().min(1),
+    preparationStatus: z.enum(["QUEUED", "PREPARING", "READY"]),
+  })
+  .strict();
+export type KitchenItemPrepInput = z.infer<typeof kitchenItemPrepSchema>;
+
+export const openPosShiftSchema = z
+  .object({
+    openingFloat: z.number().min(0).max(1_000_000),
+  })
+  .strict();
+export type OpenPosShiftInput = z.infer<typeof openPosShiftSchema>;
+
+export const closePosShiftSchema = z
+  .object({
+    closingCashCounted: z.number().min(0).max(1_000_000),
+    notes: z.string().trim().max(1000).optional(),
+  })
+  .strict();
+export type ClosePosShiftInput = z.infer<typeof closePosShiftSchema>;
+
+export const receiptReprintSchema = z
+  .object({
+    reason: z.string().trim().min(3).max(300).optional(),
+  })
+  .strict();
+export type ReceiptReprintInput = z.infer<typeof receiptReprintSchema>;
+
+const inventoryUnitSchema = z.enum(["g", "kg", "ml", "l", "pcs", "dozen"]);
+
+export const createIngredientSchema = z
+  .object({
+    name: z.string().trim().min(1).max(120),
+    baseUnit: inventoryUnitSchema,
+    sku: z.string().trim().max(64).optional(),
+    conversions: z.record(z.string(), z.number().positive()).optional(),
+    quantityOnHand: z.number().min(0).optional(),
+    reorderLevel: z.number().min(0).optional(),
+    reorderQuantity: z.number().min(0).optional(),
+    averageUnitCost: z.number().min(0).optional(),
+    expiryDate: z.string().optional(),
+  })
+  .strict();
+
+/** Metadata update — stock quantity changes must go through stockAdjustSchema / movements. */
+export const updateIngredientSchema = z
+  .object({
+    name: z.string().trim().min(1).max(120).optional(),
+    sku: z.string().trim().max(64).optional().nullable(),
+    baseUnit: inventoryUnitSchema.optional(),
+    conversions: z.record(z.string(), z.number().positive()).optional(),
+    reorderLevel: z.number().min(0).optional().nullable(),
+    reorderQuantity: z.number().min(0).optional().nullable(),
+    averageUnitCost: z.number().min(0).optional().nullable(),
+    expiryDate: z.string().trim().max(40).optional().nullable(),
+    isActive: z.boolean().optional(),
+  })
+  .strict()
+  .refine((value) => Object.keys(value).length > 0, {
+    message: "Provide at least one field to update.",
+  });
+
+export const upsertRecipeSchema = z
+  .object({
+    dishId: z.string().min(1),
+    name: z.string().trim().min(1).max(120),
+    yieldPortions: z.number().int().min(1).max(1000),
+    lines: z
+      .array(
+        z.object({
+          ingredientId: z.string().min(1),
+          quantity: z.number().positive(),
+          unit: inventoryUnitSchema,
+        }),
+      )
+      .min(1)
+      .max(100),
+  })
+  .strict();
+
+export const stockAdjustSchema = z
+  .object({
+    ingredientId: z.string().min(1),
+    quantityDelta: z.number(),
+    kind: z.enum(["ADJUSTMENT", "WASTAGE", "RECONCILIATION"]),
+    note: z.string().trim().max(500).optional(),
+    countedQuantity: z.number().min(0).optional(),
+  })
+  .strict();
+
+export const createSupplierSchema = z
+  .object({
+    name: z.string().trim().min(1).max(120),
+    contactName: z.string().trim().max(120).optional(),
+    phone: z.string().trim().max(40).optional(),
+    email: z.string().trim().email().optional().or(z.literal("")),
+    address: z.string().trim().max(500).optional(),
+    notes: z.string().trim().max(1000).optional(),
+  })
+  .strict();
+
+export const createPurchaseOrderSchema = z
+  .object({
+    supplierId: z.string().min(1),
+    expectedAt: z.string().optional(),
+    notes: z.string().trim().max(1000).optional(),
+    lines: z
+      .array(
+        z.object({
+          ingredientId: z.string().min(1),
+          quantity: z.number().positive(),
+          unit: inventoryUnitSchema,
+          unitCost: z.number().min(0),
+        }),
+      )
+      .min(1)
+      .max(200),
+  })
+  .strict();
+
+export const receivePurchaseOrderSchema = z
+  .object({
+    invoiceNumber: z.string().trim().max(80).optional(),
+    notes: z.string().trim().max(1000).optional(),
+    lines: z
+      .array(
+        z.object({
+          ingredientId: z.string().min(1),
+          quantity: z.number().positive(),
+          unit: inventoryUnitSchema,
+          unitCost: z.number().min(0),
+        }),
+      )
+      .min(1),
+  })
+  .strict();
+
+export const upsertCustomerSchema = z
+  .object({
+    phone: z.string().trim().min(7).max(24),
+    name: z.string().trim().max(120).optional(),
+    email: z.string().trim().email().optional().or(z.literal("")),
+    marketingOptIn: z.boolean().optional(),
+    smsOptIn: z.boolean().optional(),
+    emailOptIn: z.boolean().optional(),
+    notes: z.string().trim().max(1000).optional(),
+  })
+  .strict();
+
+export const createCouponSchema = z
+  .object({
+    code: z.string().trim().min(3).max(40),
+    description: z.string().trim().max(200).optional(),
+    discountType: z.enum(["PERCENT", "FIXED"]),
+    discountValue: z.number().positive(),
+    minOrderTotal: z.number().min(0).optional(),
+    maxRedemptions: z.number().int().min(1).optional(),
+    pointsCost: z.number().int().min(0).optional(),
+    startsAt: z.string().optional(),
+    endsAt: z.string().optional(),
+  })
+  .strict();
+
+export const customerFeedbackSchema = z
+  .object({
+    rating: z.number().int().min(1).max(5),
+    comment: z.string().trim().max(2000).optional(),
+    customerId: z.string().optional(),
+    orderId: z.string().optional(),
+  })
+  .strict();
+
+export const createOrganizationSchema = z
+  .object({
+    name: z.string().trim().min(2).max(120),
+    slug: z
+      .string()
+      .trim()
+      .min(2)
+      .max(80)
+      .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+  })
+  .strict();
+
+export const attachOutletSchema = z
+  .object({
+    restaurantId: z.string().min(1),
+    organizationId: z.string().min(1),
+  })
+  .strict();
+
+export const createStockTransferSchema = z
+  .object({
+    organizationId: z.string().min(1),
+    fromRestaurantId: z.string().min(1),
+    toRestaurantId: z.string().min(1),
+    lines: z
+      .array(
+        z.object({
+          ingredientId: z.string().min(1),
+          quantity: z.number().positive(),
+          unit: inventoryUnitSchema,
+        }),
+      )
+      .min(1),
+  })
+  .strict();
+
+export const deviceCommandSchema = z
+  .object({
+    name: z.enum([
+      "PRINT",
+      "OPEN_DRAWER",
+      "CLOSE_DRAWER",
+      "SCAN",
+      "DISPLAY_UPDATE",
+      "PAYMENT_REQUEST",
+      "PAYMENT_CANCEL",
+      "HEALTH_CHECK",
+      "SIMULATE_PAPER_OUT",
+      "SIMULATE_OFFLINE",
+      "SIMULATE_RECOVER",
+      "SIMULATE_PRINT_FAIL",
+    ]),
+    payload: z.record(z.string(), z.unknown()).optional(),
+    timeoutMs: z.number().int().positive().max(30_000).optional(),
+    idempotencyKey: z.string().max(120).optional(),
+  })
+  .strict();
+
+export const registerSampleDevicesSchema = z
+  .object({
+    outletId: z.string().min(1).optional(),
+  })
+  .strict();
+
+export const updateDeviceSchema = z
+  .object({
+    name: z.string().trim().min(1).max(120).optional(),
+    enabled: z.boolean().optional(),
+    kitchenStation: z.string().trim().min(1).max(40).optional(),
+    printerRole: z
+      .enum(["RECEIPT", "KITCHEN", "BAR", "SECONDARY_RECEIPT", "OTHER"])
+      .optional(),
+    outletId: z.string().min(1).optional(),
+    configuration: z.record(z.string(), z.unknown()).optional(),
+  })
+  .strict();
+
+export const registerPrinterSchema = z
+  .object({
+    name: z.string().trim().min(1).max(120),
+    deviceType: z.enum(["RECEIPT_PRINTER", "KITCHEN_PRINTER"]),
+    printerRole: z
+      .enum(["RECEIPT", "KITCHEN", "BAR", "SECONDARY_RECEIPT", "OTHER"])
+      .optional(),
+    kitchenStation: z.string().trim().min(1).max(40).optional(),
+    manufacturer: z.string().trim().max(80).optional(),
+    model: z.string().trim().max(80).optional(),
+    outletId: z.string().min(1).optional(),
+    connectorId: z.string().min(1).optional(),
+    configuration: z.record(z.string(), z.unknown()).optional(),
+  })
+  .strict();
+
+export const assignDeviceConnectorSchema = z
+  .object({
+    connectorId: z.string().min(1),
+    outletId: z.string().min(1).optional(),
+  })
+  .strict();
+
+export const authorizedFallbackSchema = z
+  .object({
+    fallbackDeviceId: z.string().min(1),
+    outletId: z.string().min(1).optional(),
+  })
+  .strict();

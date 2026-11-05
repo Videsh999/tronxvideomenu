@@ -67,6 +67,11 @@ export default function OrdersManager({
   const [correctionReason, setCorrectionReason] = useState("");
   const [paymentBusy, setPaymentBusy] = useState(false);
   const [paymentError, setPaymentError] = useState("");
+  const [lineCancelOrder, setLineCancelOrder] = useState<OrderSummary | null>(null);
+  const [lineCancelQty, setLineCancelQty] = useState<Record<string, number>>({});
+  const [lineCancelReason, setLineCancelReason] = useState("");
+  const [lineCancelConfirm, setLineCancelConfirm] = useState(false);
+  const [lineCancelBusy, setLineCancelBusy] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -319,6 +324,23 @@ export default function OrdersManager({
                             Edit payment
                           </button>
                         ) : null}
+                        {canCancelOrder(order.status) ||
+                        ["ACCEPTED", "PREPARING"].includes(order.status) ? (
+                          <button
+                            type="button"
+                            disabled={busyId === order.id}
+                            onClick={() => {
+                              setLineCancelOrder(order);
+                              setLineCancelQty({});
+                              setLineCancelReason("");
+                              setLineCancelConfirm(false);
+                              setPaymentError("");
+                            }}
+                            className="h-11 rounded-xl border border-amber-200 px-3.5 text-sm font-semibold text-amber-800 disabled:opacity-50"
+                          >
+                            Cancel lines
+                          </button>
+                        ) : null}
                         {canCancelOrder(order.status) ? (
                           <button
                             type="button"
@@ -440,6 +462,126 @@ export default function OrdersManager({
               </button>
               <button type="button" disabled={paymentBusy} onClick={() => void handleCorrectPayment()} className="rounded-xl bg-neutral-900 px-5 py-2 text-sm font-bold text-white disabled:opacity-50">
                 {paymentBusy ? "Saving…" : "Apply"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {lineCancelOrder ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-900/40 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-lg space-y-3 rounded-2xl bg-white p-5 shadow-xl">
+            <h3 className="text-base font-semibold text-neutral-900">
+              Cancel lines · Order #{lineCancelOrder.orderNumber}
+            </h3>
+            <p className="text-xs text-neutral-500">
+              Only queued lines can be cancelled. Prepared or ready items are blocked. Inventory restores only for eligible unprepared quantities.
+            </p>
+            <ul className="max-h-56 space-y-2 overflow-y-auto">
+              {lineCancelOrder.items.map((item) => {
+                const lineId = item.lineId ?? "";
+                const cancelled = item.cancelledQuantity ?? 0;
+                const remaining = item.quantity - cancelled;
+                const blocked =
+                  item.preparationStatus === "PREPARING" || item.preparationStatus === "READY";
+                if (!lineId || remaining < 1) return null;
+                return (
+                  <li key={lineId} className="flex items-center justify-between gap-3 rounded-xl border border-neutral-200 px-3 py-2 text-sm">
+                    <div>
+                      <div className="font-medium text-neutral-900">{item.dishNameSnapshot}</div>
+                      <div className="text-xs text-neutral-500">
+                        Remaining {remaining}
+                        {blocked ? " · in prep (blocked)" : ""}
+                      </div>
+                    </div>
+                    <input
+                      type="number"
+                      min={0}
+                      max={remaining}
+                      disabled={blocked || lineCancelBusy}
+                      value={lineCancelQty[lineId] ?? 0}
+                      onChange={(event) =>
+                        setLineCancelQty((current) => ({
+                          ...current,
+                          [lineId]: Math.max(0, Math.min(remaining, Number(event.target.value) || 0)),
+                        }))
+                      }
+                      className="h-10 w-20 rounded-lg border border-neutral-300 px-2 text-sm"
+                    />
+                  </li>
+                );
+              })}
+            </ul>
+            <input
+              type="text"
+              value={lineCancelReason}
+              onChange={(event) => setLineCancelReason(event.target.value)}
+              placeholder="Cancellation reason (required)"
+              className="w-full rounded-xl border border-neutral-300 bg-white px-3 py-2 text-sm"
+            />
+            <label className="flex items-center gap-2 text-sm text-rose-700">
+              <input
+                type="checkbox"
+                checked={lineCancelConfirm}
+                onChange={(event) => setLineCancelConfirm(event.target.checked)}
+              />
+              Confirm cancellation
+            </label>
+            {paymentError ? <p className="text-sm text-rose-600">{paymentError}</p> : null}
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                disabled={lineCancelBusy}
+                onClick={() => setLineCancelOrder(null)}
+                className="rounded-xl border border-neutral-300 px-4 py-2 text-sm"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                disabled={lineCancelBusy || !lineCancelConfirm}
+                onClick={() => {
+                  void (async () => {
+                    if (!lineCancelOrder) return;
+                    const lines = Object.entries(lineCancelQty)
+                      .filter(([, quantity]) => quantity > 0)
+                      .map(([lineId, quantity]) => ({ lineId, quantity }));
+                    if (!lines.length) {
+                      setPaymentError("Select at least one quantity to cancel.");
+                      return;
+                    }
+                    if (lineCancelReason.trim().length < 3) {
+                      setPaymentError("Enter a cancellation reason.");
+                      return;
+                    }
+                    setLineCancelBusy(true);
+                    setPaymentError("");
+                    try {
+                      const result = await api.cancelOrderLines(lineCancelOrder.id, {
+                        lines,
+                        reason: lineCancelReason.trim(),
+                        idempotencyKey: `ui-cancel-${lineCancelOrder.id}-${Date.now()}`,
+                        confirm: true,
+                      });
+                      setOrders((current) =>
+                        current.map((entry) => (entry.id === result.order.id ? result.order : entry)),
+                      );
+                      setMessage(
+                        result.refundSuggested > 0
+                          ? `Lines cancelled. Suggested refund ${result.refundSuggested}.`
+                          : "Lines cancelled.",
+                      );
+                      setLineCancelOrder(null);
+                    } catch (error) {
+                      setPaymentError(error instanceof Error ? error.message : "Unable to cancel lines.");
+                    } finally {
+                      setLineCancelBusy(false);
+                    }
+                  })();
+                }}
+                className="rounded-xl bg-rose-600 px-5 py-2 text-sm font-bold text-white disabled:opacity-50"
+              >
+                {lineCancelBusy ? "Cancelling…" : "Cancel selected"}
               </button>
             </div>
           </div>

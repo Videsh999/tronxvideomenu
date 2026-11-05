@@ -58,6 +58,23 @@ export const api = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+  cancelOrderLines: (
+    id: string,
+    data: {
+      lines: { lineId: string; quantity: number }[];
+      reason: string;
+      idempotencyKey: string;
+      confirm: true;
+    },
+  ) =>
+    fetcher<{
+      order: OrderSummary;
+      refundSuggested: number;
+      duplicate: boolean;
+    }>(`/api/orders/${id}/cancel-lines`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
   // Public Menu
   getPublicMenu: (restaurantIdOrSlug: string) =>
     fetcher<RestaurantMenu>(`/api/restaurants/${restaurantIdOrSlug}?fullMenu=true`),

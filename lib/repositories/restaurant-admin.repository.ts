@@ -10,6 +10,12 @@ const encryptedCredentialFields = "+passwordCiphertext +passwordIv +passwordAuth
 const credentialStatusFields = "+passwordHash +passwordCiphertext +passwordIv +passwordAuthTag";
 
 export class RestaurantAdminRepository {
+  async findById(id: string) {
+    await connectToDatabase();
+    const account = await RestaurantAdminAccountModel.findOne({ id }).lean();
+    return account ? toAccount(account) : null;
+  }
+
   async findByRestaurantId(restaurantId: string) {
     await connectToDatabase();
     const account = await RestaurantAdminAccountModel.findOne({ restaurantId }).lean();
@@ -100,6 +106,42 @@ export class RestaurantAdminRepository {
       { $set: { isActive, updatedAt: new Date().toISOString() } },
       { returnDocument: "after", runValidators: true },
     ).select(credentialStatusFields).lean();
+    return account ? toAccount(account) : null;
+  }
+
+  async listByOrganization(organizationId: string) {
+    await connectToDatabase();
+    const accounts = await RestaurantAdminAccountModel.find({ organizationId }).lean();
+    return accounts.map(toAccount);
+  }
+
+  async countOrgOwners(organizationId: string) {
+    await connectToDatabase();
+    return RestaurantAdminAccountModel.countDocuments({
+      organizationId,
+      orgRole: "ORG_OWNER",
+      isActive: true,
+    });
+  }
+
+  async updateAccessAssignment(
+    accountId: string,
+    patch: Pick<RestaurantAdminAccount, "organizationId" | "orgRole" | "outletIds" | "isActive">,
+  ) {
+    await connectToDatabase();
+    const account = await RestaurantAdminAccountModel.findOneAndUpdate(
+      { id: accountId },
+      {
+        $set: {
+          organizationId: patch.organizationId,
+          orgRole: patch.orgRole,
+          outletIds: patch.outletIds,
+          isActive: patch.isActive,
+          updatedAt: new Date().toISOString(),
+        },
+      },
+      { returnDocument: "after", runValidators: true },
+    ).lean();
     return account ? toAccount(account) : null;
   }
 }

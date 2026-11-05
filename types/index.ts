@@ -30,6 +30,9 @@ export type CaptainView = Omit<Captain, "passwordHash" | "passwordCiphertext" | 
   passwordConfigured: boolean;
 };
 
+/** Organization / outlet RBAC (Phase 4.1). Additive — legacy admins without orgRole keep single-outlet access. */
+export type OrgRole = "ORG_OWNER" | "ORG_ADMIN" | "OUTLET_MANAGER" | "OUTLET_STAFF";
+
 export type RestaurantAdminAccount = {
   id: string;
   restaurantId: string;
@@ -39,6 +42,11 @@ export type RestaurantAdminAccount = {
   passwordIv?: string;
   passwordAuthTag?: string;
   isActive: boolean;
+  /** When set, admin belongs to an organization for multi-outlet RBAC. */
+  organizationId?: string;
+  orgRole?: OrgRole;
+  /** For OUTLET_MANAGER / OUTLET_STAFF: allowed restaurant (outlet) ids. Empty/undefined with ORG_* = all org outlets. */
+  outletIds?: string[];
   createdAt: string;
   updatedAt: string;
 };
@@ -127,7 +135,33 @@ export type FeatureKey =
   | "CAPTAIN_ACCESS"
   | "WIFI"
   | "CUSTOM_THEME"
-  | "ANALYTICS";
+  | "ANALYTICS"
+  | "MENU_IMPORT"
+  | "POS"
+  | "KITCHEN_DISPLAY"
+  | "INVENTORY"
+  | "PROCUREMENT"
+  | "CRM_LOYALTY"
+  | "MULTI_OUTLET"
+  | "AI_BUSINESS_ASSISTANT"
+  | "AI_SALES_FORECAST"
+  | "AI_INVENTORY_INTELLIGENCE"
+  | "AI_MENU_INTELLIGENCE"
+  | "AI_OPERATIONAL_ALERTS"
+  | "HARDWARE_SIMULATOR"
+  | "HARDWARE_PRINTING"
+  | "HARDWARE_CASH_DRAWER"
+  | "HARDWARE_BARCODE"
+  | "HARDWARE_PAYMENT_TERMINAL"
+  | "HARDWARE_CUSTOMER_DISPLAY"
+  | "HARDWARE_LOCAL_CONNECTOR";
+
+export type KitchenStation = "MAIN" | "BAR" | "BAKERY" | "DESSERT" | "OTHER";
+
+export type RestaurantBillingSettings = {
+  taxRatePercent?: number;
+  taxLabel?: string;
+};
 
 // Restaurant Profile
 export type Restaurant = {
@@ -160,6 +194,29 @@ export type Restaurant = {
   theme?: RestaurantTheme;
   // Private server-side configuration; public serializers must omit it.
   wifi?: RestaurantWifiConfiguration;
+  billing?: RestaurantBillingSettings;
+  /** When set, this restaurant is an outlet of an organization. */
+  organizationId?: string;
+  inventorySettings?: RestaurantInventorySettings;
+  loyaltySettings?: RestaurantLoyaltySettings;
+};
+
+export type InventoryConsumptionPoint = "ACCEPTED" | "PREPARING" | "READY" | "SERVED";
+
+export type RestaurantInventorySettings = {
+  /** Order status at which recipe stock is consumed (default PREPARING). */
+  consumptionPoint?: InventoryConsumptionPoint;
+  /** Auto-restore stock only when cancelling before this status and no item has started prep. */
+  allowRestoreBefore?: InventoryConsumptionPoint;
+  lowStockAlertEnabled?: boolean;
+  /** When true, consumption fails if on-hand would go below zero (atomic conditional update). */
+  enforceStock?: boolean;
+};
+
+export type RestaurantLoyaltySettings = {
+  pointsPerCurrencyUnit?: number;
+  currencyPerPoint?: number;
+  enabled?: boolean;
 };
 
 // Category
@@ -171,6 +228,8 @@ export type Category = {
   description?: string;
   sortOrder: number;
   isActive: boolean;
+  /** Default kitchen station for dishes in this category (KDS routing). */
+  kitchenStation?: KitchenStation;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -214,6 +273,16 @@ export type DishMediaItem = {
   posterUrl?: string;
 };
 
+/** First-class size/portion options. QR may still use Size add-on groups; POS prefers variants. */
+export type DishVariant = {
+  id: string;
+  name: string;
+  price: number;
+  isAvailable?: boolean;
+  sortOrder?: number;
+  sku?: string;
+};
+
 export type Dish = {
   id: string;
   restaurantId?: string;
@@ -237,6 +306,11 @@ export type Dish = {
   sortOrder: number;
   addonGroupIds?: string[];
   addonGroups?: AddonGroup[];
+  variants?: DishVariant[];
+  /** Optional stable product code from POS/Excel imports. */
+  sku?: string;
+  /** Future multi-outlet: base menu item may override price per outlet later. */
+  kitchenStation?: KitchenStation;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -317,7 +391,12 @@ export type OrderStatus =
   | "PREPARING"
   | "READY"
   | "SERVED"
-  | "CANCELLED";
+  | "COMPLETED"
+  | "CANCELLED"
+  | "REJECTED"
+  | "REFUNDED";
+
+export type OrderChannel = "QR" | "POS_DINE_IN" | "POS_TAKEAWAY" | "POS_DELIVERY";
 
 export type OrderAddonSnapshot = {
   addonId: string;
@@ -328,18 +407,27 @@ export type OrderAddonSnapshot = {
 };
 
 export type OrderItemSnapshot = {
+  lineId?: string;
   dishId: string;
   dishNameSnapshot: string;
+  variantId?: string;
+  variantNameSnapshot?: string;
   quantity: number;
   unitPriceSnapshot: number;
   addons: OrderAddonSnapshot[];
+  itemDiscountAmount?: number;
+  note?: string;
+  kitchenStation?: KitchenStation;
+  preparationStatus?: "QUEUED" | "PREPARING" | "READY";
+  /** Cumulative quantity cancelled on this line (partial cancel). */
+  cancelledQuantity?: number;
   itemTotal: number;
 };
 
 // Payment Recording Types
 export type PaymentMethod = "CASH" | "UPI" | "CARD";
-export type PaymentStatus = "NOT_RECORDED" | "UNPAID" | "PAID";
-export type PaymentAuditAction = "RECORD" | "CORRECTION" | "REVERSAL";
+export type PaymentStatus = "NOT_RECORDED" | "UNPAID" | "PARTIAL" | "PAID" | "REFUNDED";
+export type PaymentAuditAction = "RECORD" | "PARTIAL" | "CORRECTION" | "REVERSAL" | "REFUND";
 
 export type PaymentAuditActor = {
   role: "RESTAURANT_ADMIN" | "CAPTAIN";
@@ -361,19 +449,50 @@ export type PaymentAuditEvent = {
   timestamp: string;
 };
 
+export type PaymentLedgerEntry = {
+  id: string;
+  kind: "CHARGE" | "REFUND";
+  method: PaymentMethod;
+  amount: number;
+  recordedAt: string;
+  recordedBy: PaymentAuditActor;
+  reason?: string;
+};
+
 export type PaymentSummary = {
   status: PaymentStatus;
   method?: PaymentMethod;
   amount?: number;
+  amountPaid?: number;
   recordedAt?: string;
   recordedBy?: PaymentAuditActor;
   auditTrail?: PaymentAuditEvent[];
+  ledger?: PaymentLedgerEntry[];
 };
 
 export type CustomerPaymentSummary = {
   status: PaymentStatus;
   method?: PaymentMethod;
   recordedAt?: string;
+};
+
+export type OrderEventType =
+  | "CREATED"
+  | "STATUS_CHANGED"
+  | "PAYMENT"
+  | "NOTE"
+  | "ITEM_PREP"
+  | "RECEIPT_REPRINT"
+  | "REFUND"
+  | "LINE_CANCELLED";
+
+export type OrderEvent = {
+  id: string;
+  type: OrderEventType;
+  at: string;
+  actor?: PaymentAuditActor;
+  message: string;
+  meta?: Record<string, unknown>;
 };
 
 export type RestaurantOrder = {
@@ -385,12 +504,27 @@ export type RestaurantOrder = {
   customerTokenHash: string;
   idempotencyKey: string;
   status: OrderStatus;
+  channel?: OrderChannel;
+  source?: "QR" | "POS";
+  guestCount?: number;
+  orderNote?: string;
   items: OrderItemSnapshot[];
   subtotal: number;
+  /** Bill-level discount absolute amount (snapshotted). */
+  billDiscountAmount?: number;
+  couponCodeSnapshot?: string;
+  couponDiscountAmount?: number;
+  loyaltyPointsRedeemed?: number;
+  customerId?: string;
+  taxRatePercent?: number;
+  taxAmount?: number;
   total: number;
   payment: PaymentSummary;
+  events?: OrderEvent[];
+  shiftId?: string;
   createdAt: string;
   updatedAt: string;
+  completedAt?: string;
 };
 
 export type OrderSummary = Pick<
@@ -398,14 +532,419 @@ export type OrderSummary = Pick<
   | "id"
   | "orderNumber"
   | "tableNumber"
+  | "tableId"
   | "status"
+  | "channel"
+  | "source"
   | "items"
   | "subtotal"
+  | "billDiscountAmount"
+  | "taxRatePercent"
+  | "taxAmount"
   | "total"
   | "payment"
+  | "orderNote"
   | "createdAt"
   | "updatedAt"
+  | "completedAt"
 >;
+
+export type PosShift = {
+  id: string;
+  restaurantId: string;
+  openedBy: PaymentAuditActor;
+  openedAt: string;
+  openingFloat: number;
+  closedAt?: string;
+  closedBy?: PaymentAuditActor;
+  closingCashCounted?: number;
+  expectedCash?: number;
+  notes?: string;
+  status: "OPEN" | "CLOSED";
+};
+
+// --- Phase 4: Organization / multi-outlet ---
+export type Organization = {
+  id: string;
+  name: string;
+  slug: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type InventoryUnit = "g" | "kg" | "ml" | "l" | "pcs" | "dozen";
+
+export type Ingredient = {
+  id: string;
+  restaurantId: string;
+  organizationId?: string;
+  name: string;
+  sku?: string;
+  /** Canonical stock unit for ledger quantities. */
+  baseUnit: InventoryUnit;
+  /** Convert other units into baseUnit: multiplier * qty = base qty. */
+  conversions: Partial<Record<InventoryUnit, number>>;
+  /** Current on-hand in baseUnit (denormalized from ledger for speed). */
+  quantityOnHand: number;
+  reorderLevel?: number;
+  reorderQuantity?: number;
+  averageUnitCost?: number;
+  lastPurchaseUnitCost?: number;
+  expiryDate?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type RecipeLine = {
+  ingredientId: string;
+  quantity: number;
+  unit: InventoryUnit;
+};
+
+export type Recipe = {
+  id: string;
+  restaurantId: string;
+  dishId: string;
+  name: string;
+  yieldPortions: number;
+  lines: RecipeLine[];
+  estimatedCostPerPortion?: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type InventoryMovementKind =
+  | "PURCHASE_RECEIPT"
+  | "SALE_CONSUMPTION"
+  | "ADJUSTMENT"
+  | "WASTAGE"
+  | "TRANSFER_OUT"
+  | "TRANSFER_IN"
+  | "RECONCILIATION"
+  | "RESTORE_CANCEL";
+
+export type InventoryMovement = {
+  id: string;
+  restaurantId: string;
+  ingredientId: string;
+  kind: InventoryMovementKind;
+  /** Signed delta in ingredient baseUnit. */
+  quantityDelta: number;
+  unitCost?: number;
+  balanceAfter: number;
+  referenceType?: string;
+  referenceId?: string;
+  /** Dedup key e.g. consume:orderId or restore:orderId */
+  idempotencyKey: string;
+  note?: string;
+  actor?: PaymentAuditActor;
+  createdAt: string;
+};
+
+export type InventoryConsumptionLine = {
+  ingredientId: string;
+  quantityBase: number;
+  movementId: string;
+  /** Order item lineId when consumption is attributable to a specific line. */
+  orderLineId?: string;
+  restoredQuantityBase?: number;
+};
+
+export type InventoryConsumptionRecord = {
+  id: string;
+  restaurantId: string;
+  orderId: string;
+  idempotencyKey: string;
+  status: "CONSUMED" | "RESTORED" | "PARTIALLY_RESTORED" | "BLOCKED_NO_RESTORE";
+  lines: InventoryConsumptionLine[];
+  reason?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type MenuSyncStatus = "DRAFT" | "PREVIEW" | "PUBLISHED" | "ROLLED_BACK";
+
+export type MenuSyncDishSnapshot = {
+  restaurantId: string;
+  dishId: string;
+  payload: Record<string, unknown>;
+  capturedAt: string;
+};
+
+export type MenuSyncJob = {
+  id: string;
+  organizationId: string;
+  sourceRestaurantId: string;
+  targetRestaurantIds: string[];
+  status: MenuSyncStatus;
+  /** Fields that branch outlets may keep locally and must not be overwritten. */
+  preserveBranchFields: Array<"price" | "isAvailable" | "sortOrder" | "kitchenStation">;
+  snapshotSummary?: string;
+  /** Pre-publish snapshots of target dishes for rollback. */
+  prePublishSnapshots?: MenuSyncDishSnapshot[];
+  /** Content hashes at publish time to detect post-publish edits. */
+  publishFingerprints?: { restaurantId: string; dishId: string; hash: string }[];
+  rollbackPreview?: string;
+  createdAt: string;
+  updatedAt: string;
+  publishedAt?: string;
+  rolledBackAt?: string;
+  createdBy: PaymentAuditActor;
+};
+
+export type Supplier = {
+  id: string;
+  restaurantId: string;
+  organizationId?: string;
+  name: string;
+  contactName?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  notes?: string;
+  /** Expected days from PO send to receipt. Default 2 when unset. */
+  leadTimeDays?: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type FiguresSource = "ACTUAL" | "ESTIMATED" | "INSUFFICIENT_DATA";
+
+export type AiForecastHorizon = "TOMORROW" | "NEXT_7_DAYS" | "NEXT_30_DAYS";
+
+export type AiForecastPoint = {
+  date: string;
+  revenueP10: number;
+  revenueP50: number;
+  revenueP90: number;
+  orderVolumeP10: number;
+  orderVolumeP50: number;
+  orderVolumeP90: number;
+};
+
+export type AiForecastRun = {
+  id: string;
+  restaurantId: string;
+  organizationId?: string;
+  horizon: AiForecastHorizon;
+  modelVersion: string;
+  inputFrom: string;
+  inputTo: string;
+  generatedAt: string;
+  figuresSource: FiguresSource;
+  points: AiForecastPoint[];
+  note?: string;
+};
+
+export type AiAlertSeverity = "INFO" | "WARNING" | "CRITICAL";
+export type AiAlertStatus = "NEW" | "ACKNOWLEDGED" | "RESOLVED" | "DISMISSED";
+
+export type AiAlert = {
+  id: string;
+  restaurantId: string;
+  organizationId?: string;
+  type: string;
+  dedupeKey: string;
+  title: string;
+  severity: AiAlertSeverity;
+  status: AiAlertStatus;
+  detectionFrom: string;
+  detectionTo: string;
+  supportingData: Record<string, unknown>;
+  reason: string;
+  suggestedAction: string;
+  createdAt: string;
+  updatedAt: string;
+  acknowledgedAt?: string;
+  resolvedAt?: string;
+};
+
+export type AiUsageEvent = {
+  id: string;
+  restaurantId: string;
+  organizationId?: string;
+  accountId: string;
+  route: string;
+  provider?: string;
+  model?: string;
+  promptTokens?: number;
+  completionTokens?: number;
+  estimatedCostUsd?: number;
+  createdAt: string;
+};
+
+export type MenuDishClass = "STAR" | "PLOWHORSE" | "PUZZLE" | "DOG" | "UNCLASSIFIED";
+
+export type PurchaseOrderLine = {
+  ingredientId: string;
+  nameSnapshot: string;
+  quantity: number;
+  unit: InventoryUnit;
+  unitCost: number;
+  receivedQuantity: number;
+};
+
+export type PurchaseOrderStatus = "DRAFT" | "SENT" | "PARTIAL" | "RECEIVED" | "CANCELLED";
+
+export type PurchaseOrder = {
+  id: string;
+  restaurantId: string;
+  supplierId: string;
+  status: PurchaseOrderStatus;
+  orderNumber: number;
+  lines: PurchaseOrderLine[];
+  expectedAt?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+  receivedAt?: string;
+};
+
+export type GoodsReceipt = {
+  id: string;
+  restaurantId: string;
+  purchaseOrderId: string;
+  supplierId: string;
+  lines: {
+    ingredientId: string;
+    quantity: number;
+    unit: InventoryUnit;
+    unitCost: number;
+  }[];
+  receivedAt: string;
+  receivedBy: PaymentAuditActor;
+  invoiceNumber?: string;
+  notes?: string;
+};
+
+export type CustomerProfile = {
+  id: string;
+  restaurantId: string;
+  organizationId?: string;
+  phone: string;
+  email?: string;
+  name?: string;
+  segment?: "NEW" | "REGULAR" | "VIP" | "LAPSED";
+  loyaltyPoints: number;
+  totalOrders: number;
+  totalSpend: number;
+  marketingOptIn: boolean;
+  smsOptIn: boolean;
+  emailOptIn: boolean;
+  lastOrderAt?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type LoyaltyTransactionKind = "EARN" | "REDEEM" | "ADJUST" | "EXPIRE";
+
+export type LoyaltyTransaction = {
+  id: string;
+  restaurantId: string;
+  customerId: string;
+  kind: LoyaltyTransactionKind;
+  points: number;
+  balanceAfter: number;
+  orderId?: string;
+  couponId?: string;
+  idempotencyKey: string;
+  note?: string;
+  createdAt: string;
+};
+
+export type Coupon = {
+  id: string;
+  restaurantId: string;
+  code: string;
+  description?: string;
+  discountType: "PERCENT" | "FIXED";
+  discountValue: number;
+  minOrderTotal?: number;
+  maxRedemptions?: number;
+  redemptionCount: number;
+  pointsCost?: number;
+  startsAt?: string;
+  endsAt?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** Ledger of coupon uses — unique idempotencyKey prevents duplicate redemptions. */
+export type CouponRedemption = {
+  id: string;
+  restaurantId: string;
+  couponId: string;
+  codeSnapshot: string;
+  orderId?: string;
+  customerId?: string;
+  discountAmount: number;
+  idempotencyKey: string;
+  status: "RESERVED" | "CONFIRMED" | "RELEASED";
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AccessAssignmentAudit = {
+  id: string;
+  restaurantAdminAccountId: string;
+  organizationId?: string;
+  previous: {
+    organizationId?: string;
+    orgRole?: OrgRole;
+    outletIds?: string[];
+    isActive?: boolean;
+  };
+  next: {
+    organizationId?: string;
+    orgRole?: OrgRole;
+    outletIds?: string[];
+    isActive?: boolean;
+  };
+  changedBy: { role: "SUPER_ADMIN"; email: string };
+  reason?: string;
+  createdAt: string;
+};
+
+export type OrderLineCancellation = {
+  id: string;
+  restaurantId: string;
+  orderId: string;
+  orderLineId: string;
+  quantityCancelled: number;
+  reason: string;
+  inventoryRestoreStatus: "RESTORED" | "BLOCKED" | "NONE";
+  idempotencyKey: string;
+  actor: PaymentAuditActor;
+  createdAt: string;
+};
+
+export type CustomerFeedback = {
+  id: string;
+  restaurantId: string;
+  customerId?: string;
+  orderId?: string;
+  rating: number;
+  comment?: string;
+  createdAt: string;
+};
+
+export type StockTransfer = {
+  id: string;
+  organizationId: string;
+  fromRestaurantId: string;
+  toRestaurantId: string;
+  status: "DRAFT" | "SENT" | "RECEIVED" | "CANCELLED";
+  lines: { ingredientId: string; quantity: number; unit: InventoryUnit }[];
+  createdAt: string;
+  updatedAt: string;
+  receivedAt?: string;
+};
 
 // Standard API Response envelope
 export type ApiResponse<T> =

@@ -63,23 +63,58 @@ export function AuthField({ label, children }: { label: string; children: ReactN
   return <label className="block text-sm font-medium text-neutral-700">{label}{children}</label>;
 }
 
-export function PasswordInput({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+type PasswordInputProps = {
+  value: string;
+  onChange: (value: string) => void;
+  autoComplete?: string;
+  required?: boolean;
+  minLength?: number;
+  maxLength?: number;
+  placeholder?: string;
+  className?: string;
+  id?: string;
+  name?: string;
+  "aria-label"?: string;
+};
+
+const authPasswordInputClass =
+  "h-12 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 pr-12 text-sm text-neutral-900 outline-none transition placeholder:text-neutral-400 focus:border-neutral-400 focus:bg-neutral-100 focus:ring-4 focus:ring-neutral-900/10";
+
+export function PasswordInput({
+  value,
+  onChange,
+  autoComplete = "current-password",
+  required = true,
+  minLength,
+  maxLength,
+  placeholder,
+  className,
+  id,
+  name,
+  "aria-label": ariaLabel,
+}: PasswordInputProps) {
   const [visible, setVisible] = useState(false);
   return (
-    <div className="relative">
+    <div className={className ? "relative" : "relative mt-2"}>
       <input
+        id={id}
+        name={name}
         type={visible ? "text" : "password"}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        autoComplete="current-password"
-        required
-        className={`${authInputClass} pr-12`}
+        autoComplete={autoComplete}
+        required={required}
+        minLength={minLength}
+        maxLength={maxLength}
+        placeholder={placeholder}
+        aria-label={ariaLabel}
+        className={className ?? authPasswordInputClass}
       />
       <button
         type="button"
         onClick={() => setVisible((current) => !current)}
         aria-label={visible ? "Hide password" : "Show password"}
-        className="absolute right-1.5 top-[calc(50%+4px)] grid h-9 w-9 -translate-y-1/2 place-items-center rounded-lg text-neutral-500 transition hover:bg-neutral-50 hover:text-neutral-900"
+        className="absolute right-1.5 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-lg text-neutral-500 transition hover:bg-neutral-50 hover:text-neutral-900"
       >
         {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
       </button>

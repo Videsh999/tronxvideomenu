@@ -7,7 +7,15 @@ import { restaurantService } from "@/lib/services/restaurant.service";
 import { requireRestaurantFeature } from "@/lib/feature-access";
 
 const statusSchema = z.object({
-  status: z.enum(["ACCEPTED", "PREPARING", "READY", "SERVED", "CANCELLED"]),
+  status: z.enum([
+    "ACCEPTED",
+    "PREPARING",
+    "READY",
+    "SERVED",
+    "COMPLETED",
+    "CANCELLED",
+    "REJECTED",
+  ]),
 });
 type RouteContext = { params: Promise<{ orderId: string }> };
 

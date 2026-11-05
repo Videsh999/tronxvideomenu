@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import RestaurantEditor from "@/components/super-admin/RestaurantEditor";
+import AccessAssignmentPanel from "@/components/super-admin/AccessAssignmentPanel";
 import { getSuperAdminContext } from "@/lib/auth-server";
 import { restaurantService } from "@/lib/services/restaurant.service";
 
@@ -17,5 +18,13 @@ export default async function EditRestaurantPage({
   const { restaurantId } = await params;
   const restaurant = await restaurantService.getById(restaurantId);
   if (!restaurant) notFound();
-  return <RestaurantEditor restaurant={restaurant} />;
+  return (
+    <div className="space-y-6">
+      <RestaurantEditor restaurant={restaurant} />
+      <AccessAssignmentPanel
+        restaurantId={restaurant.id}
+        organizationId={restaurant.organizationId}
+      />
+    </div>
+  );
 }

@@ -10,11 +10,15 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const restaurant = context?.role === "RESTAURANT_ADMIN" && context.restaurantId
     ? await restaurantService.getById(context.restaurantId)
     : null;
-  const features = restaurant ? getAllRestaurantFeatures(restaurant) : {
-    VIDEO_MENU: false, TABLE_MANAGEMENT: false, TABLE_ORDERING: false,
-    ORDER_MANAGEMENT: false, MEDIA_LIBRARY: false, RESERVATIONS: false,
-    CAPTAIN_ACCESS: false, WIFI: false, CUSTOM_THEME: false, ANALYTICS: false,
-  };
+  const features = restaurant
+    ? getAllRestaurantFeatures(restaurant)
+    : getAllRestaurantFeatures({
+        id: "",
+        name: "",
+        slug: "",
+        isOpen: false,
+        subscriptionEnabled: false,
+      });
   return (
     <AdminShell
       features={features}

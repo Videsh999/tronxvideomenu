@@ -32,7 +32,10 @@ const orderStatusMessage: Record<OrderSummary["status"], MessageKey> = {
   PREPARING: "statusPreparing",
   READY: "statusReady",
   SERVED: "statusServed",
+  COMPLETED: "statusCompleted",
   CANCELLED: "statusCancelled",
+  REJECTED: "statusRejected",
+  REFUNDED: "statusRefunded",
 };
 
 const orderSteps: { status: OrderSummary["status"]; label: MessageKey }[] = [
@@ -45,15 +48,16 @@ const orderSteps: { status: OrderSummary["status"]; label: MessageKey }[] = [
 
 function OrderProgress({ status }: { status: OrderSummary["status"] }) {
   const { t } = useI18n();
-  if (status === "CANCELLED") return null;
-  const current = orderSteps.findIndex((step) => step.status === status);
+  if (status === "CANCELLED" || status === "REJECTED" || status === "REFUNDED") return null;
+  const normalized = status === "COMPLETED" ? "SERVED" : status;
+  const current = orderSteps.findIndex((step) => step.status === normalized);
   return (
     <ol className="mt-3 grid grid-cols-5 gap-1.5">
       {orderSteps.map((step, index) => {
         const done = index <= current;
         return (
           <li key={step.status} className="min-w-0">
-            <span className={`block h-1.5 rounded-full transition-colors ${done ? "bg-[var(--restaurant-primary)]" : "bg-[var(--customer-border)]"} ${index === current && status !== "SERVED" ? "animate-pulse" : ""}`} />
+            <span className={`block h-1.5 rounded-full transition-colors ${done ? "bg-[var(--restaurant-primary)]" : "bg-[var(--customer-border)]"} ${index === current && normalized !== "SERVED" ? "animate-pulse" : ""}`} />
             <span className={`mt-1.5 block truncate text-[10px] font-semibold uppercase tracking-wider ${done ? "text-[var(--restaurant-primary)]" : "text-[var(--restaurant-text-muted)]/70"}`}>{t(step.label)}</span>
           </li>
         );

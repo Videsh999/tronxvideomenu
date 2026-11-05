@@ -26,6 +26,7 @@ export default function RestaurantAdminCredentials({
   const [password, setPassword] = useState("");
   const [savedPassword, setSavedPassword] = useState<string | null>(null);
   const [passwordVisible, setPasswordVisible] = useState(false);
+  const [editorPasswordVisible, setEditorPasswordVisible] = useState(false);
   const [editorOpen, setEditorOpen] = useState(initialStatus.credentialSource === "NONE" || initialStatus.needsPasswordSetup);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -140,7 +141,29 @@ export default function RestaurantAdminCredentials({
       <button type="button" onClick={() => setEditorOpen((open) => !open)} className="text-xs font-medium text-sky-700 underline underline-offset-2">{editorOpen ? "Cancel credential editor" : status.credentialSource === "NONE" ? "Create admin account" : "Update credentials"}</button>
       {editorOpen && <form onSubmit={(event) => void saveCredentials(event)} className="mt-3 grid gap-2 sm:grid-cols-2">
         <label className="text-[11px] text-neutral-500">Administrator email<input type="email" required maxLength={254} value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="username" className="mt-1 block h-9 w-full rounded-md border border-neutral-300 bg-neutral-100 px-2.5 text-xs text-neutral-900" /></label>
-        <label className="text-[11px] text-neutral-500">{status.credentialSource === "NONE" ? "Password" : "New password"}<input type="password" required minLength={8} maxLength={256} value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="new-password" className="mt-1 block h-9 w-full rounded-md border border-neutral-300 bg-neutral-100 px-2.5 text-xs text-neutral-900" /></label>
+        <label className="text-[11px] text-neutral-500">
+          {status.credentialSource === "NONE" ? "Password" : "New password"}
+          <span className="relative mt-1 block">
+            <input
+              type={editorPasswordVisible ? "text" : "password"}
+              required
+              minLength={8}
+              maxLength={256}
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              autoComplete="new-password"
+              className="block h-9 w-full rounded-md border border-neutral-300 bg-neutral-100 px-2.5 pr-10 text-xs text-neutral-900"
+            />
+            <button
+              type="button"
+              onClick={() => setEditorPasswordVisible((open) => !open)}
+              aria-label={editorPasswordVisible ? "Hide password" : "Show password"}
+              className="absolute right-1 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded text-neutral-500 hover:bg-neutral-200/70"
+            >
+              {editorPasswordVisible ? "Hide" : "Show"}
+            </button>
+          </span>
+        </label>
         <button type="submit" disabled={busy} className="rounded-md bg-neutral-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50 sm:col-span-2">{busy ? "Saving…" : status.credentialSource === "NONE" ? "Create account" : "Save new credentials"}</button>
       </form>}
     </div>

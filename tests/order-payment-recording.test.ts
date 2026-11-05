@@ -18,14 +18,10 @@ test("recordPaymentSchema validates supported payment methods and rejects unreco
     },
   );
 
-  // Reject client-supplied amount (strict schema)
-  assert.throws(
-    () => recordPaymentSchema.parse({ method: "CASH", amount: 500 }),
-    (error: unknown) => {
-      assert(error && typeof error === "object" && "issues" in error);
-      return true;
-    },
-  );
+  // Partial payments may include a positive amount; reject non-positive.
+  const withAmount = recordPaymentSchema.parse({ method: "CASH", amount: 500 });
+  assert.equal(withAmount.amount, 500);
+  assert.throws(() => recordPaymentSchema.parse({ method: "CASH", amount: 0 }));
 });
 
 test("correctPaymentSchema requires reason >= 5 characters and method for CORRECTION", () => {

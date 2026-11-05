@@ -1,16 +1,19 @@
 "use client";
 
 import Image from "next/image";
-import { useRef, useState } from "react";
+import Link from "next/link";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
+  Check,
   FileVideo,
   Image as ImageIcon,
+  Info,
   Loader2,
   Trash2,
   Upload,
 } from "lucide-react";
-import type { Media } from "@/types";
+import type { Dish, Media } from "@/types";
 import { api } from "@/lib/api";
 
 const allowedMimeTypes = new Set([
@@ -51,11 +54,32 @@ export default function MediaManager({
 }: MediaManagerProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [media, setMedia] = useState(initialMedia);
+  const [dishes, setDishes] = useState<Dish[]>([]);
   const [error, setError] = useState<string | null>(initialError);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [assigningId, setAssigningId] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [selectedDishByMedia, setSelectedDishByMedia] = useState<Record<string, string>>({});
+
+  const dishesHref = `/admin/${encodeURIComponent(restaurantId)}/menu/dishes`;
+
+  const dishOptions = useMemo(
+    () => [...dishes].sort((a, b) => a.name.localeCompare(b.name)),
+    [dishes],
+  );
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const list = await api.getDishes(restaurantId);
+        setDishes(list);
+      } catch {
+        /* dishes optional for assign UI */
+      }
+    })();
+  }, [restaurantId]);
 
   const refreshMedia = async () => {
     setIsRefreshing(true);
@@ -94,7 +118,9 @@ export default function MediaManager({
     try {
       await api.uploadMedia(file, restaurantId);
       await refreshMedia();
-      setFeedback(`${file.name} uploaded successfully.`);
+      setFeedback(
+        `${file.name} uploaded to the library. Assign it to a dish below (or in Dishes → Edit → Choose from library) so it appears on the customer menu and POS.`,
+      );
     } catch (uploadError) {
       setError(
         uploadError instanceof Error ? uploadError.message : "Upload failed",
@@ -129,6 +155,45 @@ export default function MediaManager({
     }
   };
 
+  const assignToDish = async (item: Media) => {
+    const dishId = selectedDishByMedia[item.id];
+    if (!dishId) {
+      setError("Choose a dish before assigning this media.");
+      return;
+    }
+    const dish = dishes.find((entry) => entry.id === dishId);
+    if (!dish) {
+      setError("Selected dish was not found.");
+      return;
+    }
+
+    setAssigningId(item.id);
+    setError(null);
+    setFeedback(null);
+    try {
+      const isVideo = item.type === "VIDEO" || item.resourceType === "video";
+      if (isVideo) {
+        await api.updateDish(dish.id, {
+          videoUrl: item.url,
+          videoPosterUrl: dish.videoPosterUrl || dish.imageUrl || dish.image,
+        });
+        setFeedback(`Video linked to “${dish.name}”. It will show on the customer menu when Video Menu is enabled.`);
+      } else {
+        await api.updateDish(dish.id, {
+          imageUrl: item.url,
+          image: item.url,
+        });
+        setFeedback(`Photo linked to “${dish.name}”. Refresh the customer menu / POS to see it.`);
+      }
+      const list = await api.getDishes(restaurantId);
+      setDishes(list);
+    } catch (assignError) {
+      setError(assignError instanceof Error ? assignError.message : "Could not assign media");
+    } finally {
+      setAssigningId(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -137,7 +202,7 @@ export default function MediaManager({
             Media Library
           </h1>
           <p className="mt-1 text-sm text-neutral-500">
-            Manage restaurant images and videos used across the menu.
+            Asset bank for photos and videos. Uploading here does not put them on the menu until you assign a dish.
           </p>
         </div>
 
@@ -159,6 +224,26 @@ export default function MediaManager({
         </label>
       </div>
 
+      <section className="rounded-2xl border border-sky-100 bg-sky-50 p-4 text-sm text-sky-950">
+        <h2 className="flex items-center gap-2 font-semibold">
+          <Info className="h-4 w-4" /> How media reaches the menu &amp; POS
+        </h2>
+        <ol className="mt-2 list-decimal space-y-1 pl-5 text-sky-900/90">
+          <li>Upload images/videos into this library (Cloudinary-backed when configured).</li>
+          <li>
+            Assign media to a dish here, or open{" "}
+            <Link href={dishesHref} className="font-semibold underline underline-offset-2">
+              Dishes → Edit
+            </Link>{" "}
+            → <em>Choose from library</em> for the main photo/video.
+          </li>
+          <li>Save the dish. The customer QR menu and POS cards then show that image/video.</li>
+        </ol>
+        <p className="mt-2 text-xs text-sky-800/80">
+          Excel import adds names and prices only — photos are never auto-attached from the spreadsheet.
+        </p>
+      </section>
+
       {error ? (
         <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-600">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -167,7 +252,7 @@ export default function MediaManager({
       ) : null}
 
       {feedback ? (
-        <p role="status" className="text-sm text-emerald-700">
+        <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
           {feedback}
         </p>
       ) : null}
@@ -184,7 +269,7 @@ export default function MediaManager({
             No media files yet
           </p>
           <p className="mt-1 text-xs text-neutral-400">
-            Upload an image or video to start building the restaurant library.
+            Upload an image or video, then assign it to a dish so guests see it.
           </p>
         </div>
       ) : (
@@ -241,6 +326,48 @@ export default function MediaManager({
                   >
                     {item.publicId}
                   </p>
+
+                  <div className="space-y-2 rounded-xl border border-neutral-100 bg-neutral-50 p-2.5">
+                    <label className="block text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
+                      Assign to dish
+                    </label>
+                    <select
+                      value={selectedDishByMedia[item.id] ?? ""}
+                      onChange={(event) =>
+                        setSelectedDishByMedia((current) => ({
+                          ...current,
+                          [item.id]: event.target.value,
+                        }))
+                      }
+                      className="h-10 w-full rounded-lg border border-neutral-200 bg-white px-2 text-sm"
+                    >
+                      <option value="">Select dish…</option>
+                      {dishOptions.map((dish) => (
+                        <option key={dish.id} value={dish.id}>
+                          {dish.name}
+                          {dish.imageUrl || dish.image ? " · has photo" : ""}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      disabled={assigningId === item.id || !selectedDishByMedia[item.id]}
+                      onClick={() => void assignToDish(item)}
+                      className="inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-lg bg-neutral-900 text-xs font-bold text-white disabled:opacity-40"
+                    >
+                      {assigningId === item.id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Check className="h-3.5 w-3.5" />
+                      )}
+                      {assigningId === item.id
+                        ? "Linking…"
+                        : isVideo
+                          ? "Set as dish video"
+                          : "Set as dish photo"}
+                    </button>
+                  </div>
+
                   <button
                     type="button"
                     onClick={() => handleDelete(item)}

@@ -1,0 +1,29 @@
+{
+  "name": "@tronx/device-connector",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TRONX local Windows device connector — bridges cloud print jobs to ESC/POS hardware",
+  "type": "module",
+  "bin": {
+    "tronx-device-connector": "./dist/main.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js",
+    "dev": "tsx src/main.ts",
+    "pair": "tsx src/main.ts pair",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsx --test test/*.test.ts"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "tsx": "^4.23.15",
+    "typescript": "^5"
+  }
+}

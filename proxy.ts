@@ -1,28 +1,18 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { CAPTAIN_SESSION_COOKIE, RESTAURANT_ADMIN_SESSION_COOKIE, SUPER_ADMIN_SESSION_COOKIE, readAdminSession } from "@/lib/auth-core";
+import { apiSessionAllowed, classifyApiRequest } from "@/lib/api-authz";
 
 export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const isAdminLoginRoute = pathname === "/admin/login";
   const isSuperAdminLoginRoute = pathname === "/super-admin/login";
-  const isAuthLoginRoute = pathname === "/api/auth/login";
-  const isLogoutRoute = pathname === "/api/auth/logout";
-  const isCaptainAuthRoute = pathname === "/api/captain/login" || pathname === "/api/captain/logout";
-  const isPublicReservationRoute = request.method === "POST" && (
-    pathname === "/api/public/reservations/availability" ||
-    pathname === "/api/public/reservations" ||
-    pathname === "/api/public/orders"
-  );
-  const isPublicWifiRoute = request.method === "GET" && /^\/api\/public\/restaurants\/[^/]+\/(?:wifi|translations)$/.test(pathname);
-  const isCustomerOrderStatusRoute = request.method === "GET" && /^\/api\/orders\/[^/]+\/status$/.test(pathname);
   const isApiRequest = pathname.startsWith("/api/");
-  const isPublicCustomerRoute =
+  const isPublicPage =
     pathname === "/" ||
-    pathname.startsWith("/menu/") ||
-    (request.method === "GET" && pathname.startsWith("/api/restaurants/"));
+    pathname.startsWith("/menu/");
 
-  if (isAuthLoginRoute || isLogoutRoute || isCaptainAuthRoute || isPublicCustomerRoute || isCustomerOrderStatusRoute || isPublicReservationRoute || isPublicWifiRoute) {
+  if (isPublicPage) {
     return NextResponse.next();
   }
 
@@ -95,16 +85,19 @@ export async function proxy(request: NextRequest) {
   }
 
   if (!isApiRequest) return NextResponse.next();
-  if (pathname.startsWith("/api/captain/")) {
-    if (captainSession?.role === "CAPTAIN") return NextResponse.next();
+
+  const authClass = classifyApiRequest(request.method, pathname);
+  const allowed = apiSessionAllowed(authClass, {
+    restaurantAdmin: restaurantSession?.role === "RESTAURANT_ADMIN",
+    superAdmin: superSession?.role === "SUPER_ADMIN",
+    captain: captainSession?.role === "CAPTAIN",
+  });
+
+  if (!allowed) {
     return NextResponse.json({ success: false, error: "Authentication required" }, { status: 401 });
   }
-  if (restaurantSession || superSession || captainSession) return NextResponse.next();
 
-  return NextResponse.json(
-    { success: false, error: "Authentication required" },
-    { status: 401 },
-  );
+  return NextResponse.next();
 }
 
 export const config = {

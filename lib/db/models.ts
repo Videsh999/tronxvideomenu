@@ -92,6 +92,28 @@ const restaurantSchema = new Schema<Restaurant>(
       default: {},
     },
     wifi: { type: restaurantWifiSchema, default: undefined },
+    billing: {
+      taxRatePercent: { type: Number, min: 0, max: 100 },
+      taxLabel: { type: String, maxlength: 40 },
+    },
+    organizationId: { type: String, index: true },
+    inventorySettings: {
+      consumptionPoint: {
+        type: String,
+        enum: ["ACCEPTED", "PREPARING", "READY", "SERVED"],
+      },
+      allowRestoreBefore: {
+        type: String,
+        enum: ["ACCEPTED", "PREPARING", "READY", "SERVED"],
+      },
+      lowStockAlertEnabled: { type: Boolean, default: true },
+      enforceStock: { type: Boolean, default: false },
+    },
+    loyaltySettings: {
+      pointsPerCurrencyUnit: { type: Number, min: 0 },
+      currencyPerPoint: { type: Number, min: 0 },
+      enabled: { type: Boolean, default: false },
+    },
   },
   { ...baseOptions, collection: "restaurants" },
 );
@@ -105,6 +127,10 @@ const categorySchema = new Schema<Category>(
     description: String,
     sortOrder: { type: Number, required: true, default: 0 },
     isActive: { type: Boolean, required: true, default: true },
+    kitchenStation: {
+      type: String,
+      enum: ["MAIN", "BAR", "BAKERY", "DESSERT", "OTHER"],
+    },
     createdAt: String,
     updatedAt: String,
   },
@@ -144,11 +170,33 @@ const dishSchema = new Schema<Dish>(
     },
     sortOrder: { type: Number, required: true, default: 0 },
     addonGroupIds: { type: [String], default: [] },
+    variants: {
+      type: [
+        new Schema(
+          {
+            id: { type: String, required: true },
+            name: { type: String, required: true },
+            price: { type: Number, required: true, min: 0 },
+            isAvailable: { type: Boolean, default: true },
+            sortOrder: { type: Number, default: 0 },
+            sku: String,
+          },
+          { _id: false, strict: true },
+        ),
+      ],
+      default: [],
+    },
+    sku: { type: String, trim: true, maxlength: 64 },
+    kitchenStation: {
+      type: String,
+      enum: ["MAIN", "BAR", "BAKERY", "DESSERT", "OTHER"],
+    },
     createdAt: String,
     updatedAt: String,
   },
   { ...baseOptions, collection: "dishes" },
 );
+dishSchema.index({ restaurantId: 1, sku: 1 }, { sparse: true });
 
 const addonGroupSchema = new Schema<AddonGroup>(
   {
@@ -239,11 +287,25 @@ const orderAddonSnapshotSchema = new Schema(
 
 const orderItemSnapshotSchema = new Schema(
   {
+    lineId: String,
     dishId: { type: String, required: true },
     dishNameSnapshot: { type: String, required: true },
+    variantId: String,
+    variantNameSnapshot: String,
     quantity: { type: Number, required: true, min: 1 },
     unitPriceSnapshot: { type: Number, required: true, min: 0 },
     addons: { type: [orderAddonSnapshotSchema], default: [] },
+    itemDiscountAmount: { type: Number, min: 0 },
+    note: { type: String, maxlength: 500 },
+    kitchenStation: {
+      type: String,
+      enum: ["MAIN", "BAR", "BAKERY", "DESSERT", "OTHER"],
+    },
+    preparationStatus: {
+      type: String,
+      enum: ["QUEUED", "PREPARING", "READY"],
+      default: "QUEUED",
+    },
     itemTotal: { type: Number, required: true, min: 0 },
   },
   { _id: false, strict: true },
@@ -254,17 +316,17 @@ const paymentAuditEventSchema = new Schema(
     eventId: { type: String, required: true },
     action: {
       type: String,
-      enum: ["RECORD", "CORRECTION", "REVERSAL"],
+      enum: ["RECORD", "PARTIAL", "CORRECTION", "REVERSAL", "REFUND"],
       required: true,
     },
     previousStatus: {
       type: String,
-      enum: ["NOT_RECORDED", "UNPAID", "PAID"],
+      enum: ["NOT_RECORDED", "UNPAID", "PARTIAL", "PAID", "REFUNDED"],
       required: true,
     },
     newStatus: {
       type: String,
-      enum: ["NOT_RECORDED", "UNPAID", "PAID"],
+      enum: ["NOT_RECORDED", "UNPAID", "PARTIAL", "PAID", "REFUNDED"],
       required: true,
     },
     previousMethod: {
@@ -292,11 +354,29 @@ const paymentAuditEventSchema = new Schema(
   { _id: false, strict: true },
 );
 
+const paymentLedgerEntrySchema = new Schema(
+  {
+    id: { type: String, required: true },
+    kind: { type: String, enum: ["CHARGE", "REFUND"], required: true },
+    method: { type: String, enum: ["CASH", "UPI", "CARD"], required: true },
+    amount: { type: Number, required: true, min: 0 },
+    recordedAt: { type: String, required: true },
+    recordedBy: {
+      role: { type: String, enum: ["RESTAURANT_ADMIN", "CAPTAIN"], required: true },
+      id: { type: String, required: true },
+      email: String,
+      name: String,
+    },
+    reason: String,
+  },
+  { _id: false, strict: true },
+);
+
 const paymentSummarySchema = new Schema(
   {
     status: {
       type: String,
-      enum: ["NOT_RECORDED", "UNPAID", "PAID"],
+      enum: ["NOT_RECORDED", "UNPAID", "PARTIAL", "PAID", "REFUNDED"],
       required: true,
       default: "UNPAID",
     },
@@ -305,6 +385,7 @@ const paymentSummarySchema = new Schema(
       enum: ["CASH", "UPI", "CARD"],
     },
     amount: { type: Number, min: 0 },
+    amountPaid: { type: Number, min: 0 },
     recordedAt: String,
     recordedBy: {
       role: {
@@ -316,6 +397,7 @@ const paymentSummarySchema = new Schema(
       name: String,
     },
     auditTrail: { type: [paymentAuditEventSchema], default: [] },
+    ledger: { type: [paymentLedgerEntrySchema], default: [] },
   },
   { _id: false, strict: true },
 );
@@ -337,27 +419,74 @@ const orderSchema = new Schema<RestaurantOrder>(
         "PREPARING",
         "READY",
         "SERVED",
+        "COMPLETED",
         "CANCELLED",
+        "REJECTED",
+        "REFUNDED",
       ],
       required: true,
       default: "PENDING",
     },
+    channel: {
+      type: String,
+      enum: ["QR", "POS_DINE_IN", "POS_TAKEAWAY", "POS_DELIVERY"],
+      default: "QR",
+    },
+    source: { type: String, enum: ["QR", "POS"], default: "QR" },
+    guestCount: { type: Number, min: 1 },
+    orderNote: { type: String, maxlength: 1000 },
     items: { type: [orderItemSnapshotSchema], required: true },
     subtotal: { type: Number, required: true, min: 0 },
+    billDiscountAmount: { type: Number, min: 0, default: 0 },
+    couponCodeSnapshot: String,
+    couponDiscountAmount: { type: Number, min: 0 },
+    loyaltyPointsRedeemed: { type: Number, min: 0 },
+    customerId: String,
+    taxRatePercent: { type: Number, min: 0, max: 100 },
+    taxAmount: { type: Number, min: 0, default: 0 },
     total: { type: Number, required: true, min: 0 },
     payment: {
       type: paymentSummarySchema,
       required: true,
-      default: () => ({ status: "UNPAID", auditTrail: [] }),
+      default: () => ({ status: "UNPAID", auditTrail: [], ledger: [], amountPaid: 0 }),
     },
+    events: {
+      type: [
+        new Schema(
+          {
+            id: { type: String, required: true },
+            type: {
+              type: String,
+              enum: ["CREATED", "STATUS_CHANGED", "PAYMENT", "NOTE", "ITEM_PREP", "RECEIPT_REPRINT", "REFUND", "LINE_CANCELLED"],
+              required: true,
+            },
+            at: { type: String, required: true },
+            actor: {
+              role: { type: String, enum: ["RESTAURANT_ADMIN", "CAPTAIN"] },
+              id: String,
+              email: String,
+              name: String,
+            },
+            message: { type: String, required: true },
+            meta: Schema.Types.Mixed,
+          },
+          { _id: false, strict: true },
+        ),
+      ],
+      default: [],
+    },
+    shiftId: String,
     createdAt: { type: String, required: true },
     updatedAt: { type: String, required: true },
+    completedAt: String,
   },
   { ...baseOptions, collection: "orders" },
 );
 orderSchema.index({ restaurantId: 1, orderNumber: 1 }, { unique: true });
 orderSchema.index({ restaurantId: 1, idempotencyKey: 1 }, { unique: true });
 orderSchema.index({ restaurantId: 1, createdAt: -1 });
+orderSchema.index({ restaurantId: 1, status: 1, createdAt: -1 });
+orderSchema.index({ restaurantId: 1, customerId: 1, createdAt: -1 });
 
 const orderCounterSchema = new Schema(
   {
@@ -393,12 +522,19 @@ const restaurantAdminAccountSchema = new Schema<RestaurantAdminAccount>(
     passwordIv: { type: String, select: false },
     passwordAuthTag: { type: String, select: false },
     isActive: { type: Boolean, required: true, default: true },
+    organizationId: { type: String, index: true },
+    orgRole: {
+      type: String,
+      enum: ["ORG_OWNER", "ORG_ADMIN", "OUTLET_MANAGER", "OUTLET_STAFF"],
+    },
+    outletIds: { type: [String], default: undefined },
     createdAt: { type: String, required: true },
     updatedAt: { type: String, required: true },
   },
   { ...baseOptions, collection: "restaurantAdminAccounts" },
 );
 restaurantAdminAccountSchema.index({ restaurantId: 1 }, { unique: true });
+restaurantAdminAccountSchema.index({ organizationId: 1, orgRole: 1 });
 const reservationSchema = new Schema<Reservation>(
   {
     id: { type: String, required: true, unique: true, index: true },
@@ -425,6 +561,34 @@ const reservationSchema = new Schema<Reservation>(
 reservationSchema.index({ restaurantId: 1, tableId: 1, status: 1, startAt: 1, endAt: 1 });
 reservationSchema.index({ restaurantId: 1, reservationDate: 1, startTime: 1 });
 orderCounterSchema.index({ restaurantId: 1 }, { unique: true });
+
+const posShiftSchema = new Schema(
+  {
+    id: { type: String, required: true, unique: true, index: true },
+    restaurantId: { type: String, required: true, index: true },
+    openedBy: {
+      role: { type: String, enum: ["RESTAURANT_ADMIN", "CAPTAIN"], required: true },
+      id: { type: String, required: true },
+      email: String,
+      name: String,
+    },
+    openedAt: { type: String, required: true },
+    openingFloat: { type: Number, required: true, min: 0 },
+    closedAt: String,
+    closedBy: {
+      role: { type: String, enum: ["RESTAURANT_ADMIN", "CAPTAIN"] },
+      id: String,
+      email: String,
+      name: String,
+    },
+    closingCashCounted: { type: Number, min: 0 },
+    expectedCash: { type: Number, min: 0 },
+    notes: { type: String, maxlength: 1000 },
+    status: { type: String, enum: ["OPEN", "CLOSED"], required: true, default: "OPEN" },
+  },
+  { ...baseOptions, collection: "posShifts" },
+);
+posShiftSchema.index({ restaurantId: 1, status: 1 });
 
 export const RestaurantModel =
   mongoose.models.Restaurant ??
@@ -459,3 +623,806 @@ export const RestaurantAdminAccountModel =
 export const ReservationModel =
   mongoose.models.Reservation ??
   mongoose.model<Reservation>("Reservation", reservationSchema);
+export const PosShiftModel =
+  mongoose.models.PosShift ?? mongoose.model("PosShift", posShiftSchema);
+
+const receiptReprintLogSchema = new Schema(
+  {
+    id: { type: String, required: true, unique: true, index: true },
+    restaurantId: { type: String, required: true, index: true },
+    orderId: { type: String, required: true, index: true },
+    orderNumber: { type: Number, required: true },
+    reprintedAt: { type: String, required: true },
+    reprintedBy: {
+      role: { type: String, enum: ["RESTAURANT_ADMIN", "CAPTAIN"], required: true },
+      id: { type: String, required: true },
+      email: String,
+      name: String,
+    },
+    reason: { type: String, maxlength: 300 },
+  },
+  { ...baseOptions, collection: "receiptReprintLogs" },
+);
+receiptReprintLogSchema.index({ restaurantId: 1, orderId: 1, reprintedAt: -1 });
+
+export const ReceiptReprintLogModel =
+  mongoose.models.ReceiptReprintLog ??
+  mongoose.model("ReceiptReprintLog", receiptReprintLogSchema);
+
+const inventoryUnitEnum = ["g", "kg", "ml", "l", "pcs", "dozen"] as const;
+
+const organizationSchema = new Schema(
+  {
+    id: { type: String, required: true, unique: true, index: true },
+    name: { type: String, required: true },
+    slug: { type: String, required: true, unique: true, index: true },
+    isActive: { type: Boolean, required: true, default: true },
+    createdAt: { type: String, required: true },
+    updatedAt: { type: String, required: true },
+  },
+  { ...baseOptions, collection: "organizations" },
+);
+
+const ingredientSchema = new Schema(
+  {
+    id: { type: String, required: true, unique: true, index: true },
+    restaurantId: { type: String, required: true, index: true },
+    organizationId: String,
+    name: { type: String, required: true },
+    sku: String,
+    baseUnit: { type: String, required: true, enum: inventoryUnitEnum },
+    conversions: { type: Schema.Types.Mixed, default: {} },
+    quantityOnHand: { type: Number, required: true, default: 0 },
+    reorderLevel: Number,
+    reorderQuantity: Number,
+    averageUnitCost: Number,
+    lastPurchaseUnitCost: Number,
+    expiryDate: String,
+    isActive: { type: Boolean, required: true, default: true },
+    createdAt: { type: String, required: true },
+    updatedAt: { type: String, required: true },
+  },
+  { ...baseOptions, collection: "ingredients" },
+);
+ingredientSchema.index({ restaurantId: 1, name: 1 });
+
+const recipeSchema = new Schema(
+  {
+    id: { type: String, required: true, unique: true, index: true },
+    restaurantId: { type: String, required: true, index: true },
+    dishId: { type: String, required: true, index: true },
+    name: { type: String, required: true },
+    yieldPortions: { type: Number, required: true, min: 1, default: 1 },
+    lines: {
+      type: [
+        {
+          ingredientId: { type: String, required: true },
+          quantity: { type: Number, required: true, min: 0 },
+          unit: { type: String, required: true, enum: inventoryUnitEnum },
+        },
+      ],
+      default: [],
+    },
+    estimatedCostPerPortion: Number,
+    isActive: { type: Boolean, required: true, default: true },
+    createdAt: { type: String, required: true },
+    updatedAt: { type: String, required: true },
+  },
+  { ...baseOptions, collection: "recipes" },
+);
+recipeSchema.index({ restaurantId: 1, dishId: 1 }, { unique: true });
+
+const inventoryMovementSchema = new Schema(
+  {
+    id: { type: String, required: true, unique: true, index: true },
+    restaurantId: { type: String, required: true, index: true },
+    ingredientId: { type: String, required: true, index: true },
+    kind: {
+      type: String,
+      required: true,
+      enum: [
+        "PURCHASE_RECEIPT",
+        "SALE_CONSUMPTION",
+        "ADJUSTMENT",
+        "WASTAGE",
+        "TRANSFER_OUT",
+        "TRANSFER_IN",
+        "RECONCILIATION",
+        "RESTORE_CANCEL",
+      ],
+    },
+    quantityDelta: { type: Number, required: true },
+    unitCost: Number,
+    balanceAfter: { type: Number, required: true },
+    referenceType: String,
+    referenceId: String,
+    idempotencyKey: { type: String, required: true },
+    note: String,
+    actor: {
+      role: { type: String, enum: ["RESTAURANT_ADMIN", "CAPTAIN"] },
+      id: String,
+      email: String,
+      name: String,
+    },
+    createdAt: { type: String, required: true },
+  },
+  { ...baseOptions, collection: "inventoryMovements" },
+);
+inventoryMovementSchema.index({ restaurantId: 1, idempotencyKey: 1 }, { unique: true });
+inventoryMovementSchema.index({ restaurantId: 1, kind: 1, createdAt: -1 });
+
+const inventoryConsumptionSchema = new Schema(
+  {
+    id: { type: String, required: true, unique: true, index: true },
+    restaurantId: { type: String, required: true, index: true },
+    orderId: { type: String, required: true, index: true },
+    idempotencyKey: { type: String, required: true },
+    status: {
+      type: String,
+      enum: ["CONSUMED", "RESTORED", "PARTIALLY_RESTORED", "BLOCKED_NO_RESTORE"],
+      required: true,
+    },
+    lines: {
+      type: [
+        {
+          ingredientId: String,
+          quantityBase: Number,
+          movementId: String,
+          orderLineId: String,
+          restoredQuantityBase: { type: Number, min: 0, default: 0 },
+        },
+      ],
+      default: [],
+    },
+    reason: String,
+    createdAt: { type: String, required: true },
+    updatedAt: { type: String, required: true },
+  },
+  { ...baseOptions, collection: "inventoryConsumptions" },
+);
+inventoryConsumptionSchema.index({ restaurantId: 1, idempotencyKey: 1 }, { unique: true });
+
+const supplierSchema = new Schema(
+  {
+    id: { type: String, required: true, unique: true, index: true },
+    restaurantId: { type: String, required: true, index: true },
+    organizationId: String,
+    name: { type: String, required: true },
+    contactName: String,
+    phone: String,
+    email: String,
+    address: String,
+    notes: String,
+    leadTimeDays: { type: Number, min: 0 },
+    isActive: { type: Boolean, required: true, default: true },
+    createdAt: { type: String, required: true },
+    updatedAt: { type: String, required: true },
+  },
+  { ...baseOptions, collection: "suppliers" },
+);
+
+const purchaseOrderSchema = new Schema(
+  {
+    id: { type: String, required: true, unique: true, index: true },
+    restaurantId: { type: String, required: true, index: true },
+    supplierId: { type: String, required: true, index: true },
+    status: {
+      type: String,
+      enum: ["DRAFT", "SENT", "PARTIAL", "RECEIVED", "CANCELLED"],
+      required: true,
+      default: "DRAFT",
+    },
+    orderNumber: { type: Number, required: true },
+    lines: {
+      type: [
+        {
+          ingredientId: { type: String, required: true },
+          nameSnapshot: { type: String, required: true },
+          quantity: { type: Number, required: true, min: 0 },
+          unit: { type: String, required: true, enum: inventoryUnitEnum },
+          unitCost: { type: Number, required: true, min: 0 },
+          receivedQuantity: { type: Number, required: true, default: 0, min: 0 },
+        },
+      ],
+      default: [],
+    },
+    expectedAt: String,
+    notes: String,
+    createdAt: { type: String, required: true },
+    updatedAt: { type: String, required: true },
+    receivedAt: String,
+  },
+  { ...baseOptions, collection: "purchaseOrders" },
+);
+purchaseOrderSchema.index({ restaurantId: 1, orderNumber: 1 }, { unique: true });
+
+const goodsReceiptSchema = new Schema(
+  {
+    id: { type: String, required: true, unique: true, index: true },
+    restaurantId: { type: String, required: true, index: true },
+    purchaseOrderId: { type: String, required: true, index: true },
+    supplierId: { type: String, required: true },
+    lines: {
+      type: [
+        {
+          ingredientId: String,
+          quantity: Number,
+          unit: { type: String, enum: inventoryUnitEnum },
+          unitCost: Number,
+        },
+      ],
+      default: [],
+    },
+    receivedAt: { type: String, required: true },
+    receivedBy: {
+      role: { type: String, enum: ["RESTAURANT_ADMIN", "CAPTAIN"], required: true },
+      id: { type: String, required: true },
+      email: String,
+      name: String,
+    },
+    invoiceNumber: String,
+    notes: String,
+  },
+  { ...baseOptions, collection: "goodsReceipts" },
+);
+
+const customerProfileSchema = new Schema(
+  {
+    id: { type: String, required: true, unique: true, index: true },
+    restaurantId: { type: String, required: true, index: true },
+    organizationId: String,
+    phone: { type: String, required: true },
+    email: String,
+    name: String,
+    segment: { type: String, enum: ["NEW", "REGULAR", "VIP", "LAPSED"] },
+    loyaltyPoints: { type: Number, required: true, default: 0 },
+    totalOrders: { type: Number, required: true, default: 0 },
+    totalSpend: { type: Number, required: true, default: 0 },
+    marketingOptIn: { type: Boolean, default: false },
+    smsOptIn: { type: Boolean, default: false },
+    emailOptIn: { type: Boolean, default: false },
+    lastOrderAt: String,
+    notes: String,
+    createdAt: { type: String, required: true },
+    updatedAt: { type: String, required: true },
+  },
+  { ...baseOptions, collection: "customerProfiles" },
+);
+customerProfileSchema.index({ restaurantId: 1, phone: 1 }, { unique: true });
+
+const loyaltyTransactionSchema = new Schema(
+  {
+    id: { type: String, required: true, unique: true, index: true },
+    restaurantId: { type: String, required: true, index: true },
+    customerId: { type: String, required: true, index: true },
+    kind: { type: String, enum: ["EARN", "REDEEM", "ADJUST", "EXPIRE"], required: true },
+    points: { type: Number, required: true },
+    balanceAfter: { type: Number, required: true },
+    orderId: String,
+    couponId: String,
+    idempotencyKey: { type: String, required: true },
+    note: String,
+    createdAt: { type: String, required: true },
+  },
+  { ...baseOptions, collection: "loyaltyTransactions" },
+);
+loyaltyTransactionSchema.index({ restaurantId: 1, idempotencyKey: 1 }, { unique: true });
+
+const couponSchema = new Schema(
+  {
+    id: { type: String, required: true, unique: true, index: true },
+    restaurantId: { type: String, required: true, index: true },
+    code: { type: String, required: true, uppercase: true },
+    description: String,
+    discountType: { type: String, enum: ["PERCENT", "FIXED"], required: true },
+    discountValue: { type: Number, required: true, min: 0 },
+    minOrderTotal: Number,
+    maxRedemptions: Number,
+    redemptionCount: { type: Number, required: true, default: 0 },
+    pointsCost: Number,
+    startsAt: String,
+    endsAt: String,
+    isActive: { type: Boolean, required: true, default: true },
+    createdAt: { type: String, required: true },
+    updatedAt: { type: String, required: true },
+  },
+  { ...baseOptions, collection: "coupons" },
+);
+couponSchema.index({ restaurantId: 1, code: 1 }, { unique: true });
+
+const couponRedemptionSchema = new Schema(
+  {
+    id: { type: String, required: true, unique: true, index: true },
+    restaurantId: { type: String, required: true, index: true },
+    couponId: { type: String, required: true, index: true },
+    codeSnapshot: { type: String, required: true },
+    orderId: String,
+    customerId: String,
+    discountAmount: { type: Number, required: true, min: 0 },
+    idempotencyKey: { type: String, required: true },
+    status: {
+      type: String,
+      enum: ["RESERVED", "CONFIRMED", "RELEASED"],
+      required: true,
+      default: "RESERVED",
+    },
+    createdAt: { type: String, required: true },
+    updatedAt: { type: String, required: true },
+  },
+  { ...baseOptions, collection: "couponRedemptions" },
+);
+couponRedemptionSchema.index({ restaurantId: 1, idempotencyKey: 1 }, { unique: true });
+
+const accessAssignmentAuditSchema = new Schema(
+  {
+    id: { type: String, required: true, unique: true, index: true },
+    restaurantAdminAccountId: { type: String, required: true, index: true },
+    organizationId: String,
+    previous: { type: Schema.Types.Mixed, required: true },
+    next: { type: Schema.Types.Mixed, required: true },
+    changedBy: {
+      role: { type: String, enum: ["SUPER_ADMIN"], required: true },
+      email: { type: String, required: true },
+    },
+    reason: String,
+    createdAt: { type: String, required: true },
+  },
+  { ...baseOptions, collection: "accessAssignmentAudits" },
+);
+
+const orderLineCancellationSchema = new Schema(
+  {
+    id: { type: String, required: true, unique: true, index: true },
+    restaurantId: { type: String, required: true, index: true },
+    orderId: { type: String, required: true, index: true },
+    orderLineId: { type: String, required: true },
+    quantityCancelled: { type: Number, required: true, min: 1 },
+    reason: { type: String, required: true, maxlength: 500 },
+    inventoryRestoreStatus: {
+      type: String,
+      enum: ["RESTORED", "BLOCKED", "NONE"],
+      required: true,
+    },
+    idempotencyKey: { type: String, required: true },
+    actor: {
+      role: { type: String, enum: ["RESTAURANT_ADMIN", "CAPTAIN"], required: true },
+      id: { type: String, required: true },
+      email: String,
+      name: String,
+    },
+    createdAt: { type: String, required: true },
+  },
+  { ...baseOptions, collection: "orderLineCancellations" },
+);
+orderLineCancellationSchema.index({ restaurantId: 1, idempotencyKey: 1 }, { unique: true });
+
+const customerFeedbackSchema = new Schema(
+  {
+    id: { type: String, required: true, unique: true, index: true },
+    restaurantId: { type: String, required: true, index: true },
+    customerId: String,
+    orderId: String,
+    rating: { type: Number, required: true, min: 1, max: 5 },
+    comment: { type: String, maxlength: 2000 },
+    createdAt: { type: String, required: true },
+  },
+  { ...baseOptions, collection: "customerFeedback" },
+);
+
+const stockTransferSchema = new Schema(
+  {
+    id: { type: String, required: true, unique: true, index: true },
+    organizationId: { type: String, required: true, index: true },
+    fromRestaurantId: { type: String, required: true },
+    toRestaurantId: { type: String, required: true },
+    status: {
+      type: String,
+      enum: ["DRAFT", "SENT", "RECEIVED", "CANCELLED"],
+      required: true,
+      default: "DRAFT",
+    },
+    lines: {
+      type: [
+        {
+          ingredientId: String,
+          quantity: Number,
+          unit: { type: String, enum: inventoryUnitEnum },
+        },
+      ],
+      default: [],
+    },
+    createdAt: { type: String, required: true },
+    updatedAt: { type: String, required: true },
+    receivedAt: String,
+  },
+  { ...baseOptions, collection: "stockTransfers" },
+);
+
+export const OrganizationModel =
+  mongoose.models.Organization ?? mongoose.model("Organization", organizationSchema);
+export const IngredientModel =
+  mongoose.models.Ingredient ?? mongoose.model("Ingredient", ingredientSchema);
+export const RecipeModel =
+  mongoose.models.Recipe ?? mongoose.model("Recipe", recipeSchema);
+export const InventoryMovementModel =
+  mongoose.models.InventoryMovement ??
+  mongoose.model("InventoryMovement", inventoryMovementSchema);
+export const InventoryConsumptionModel =
+  mongoose.models.InventoryConsumption ??
+  mongoose.model("InventoryConsumption", inventoryConsumptionSchema);
+export const SupplierModel =
+  mongoose.models.Supplier ?? mongoose.model("Supplier", supplierSchema);
+export const PurchaseOrderModel =
+  mongoose.models.PurchaseOrder ?? mongoose.model("PurchaseOrder", purchaseOrderSchema);
+export const GoodsReceiptModel =
+  mongoose.models.GoodsReceipt ?? mongoose.model("GoodsReceipt", goodsReceiptSchema);
+export const CustomerProfileModel =
+  mongoose.models.CustomerProfile ??
+  mongoose.model("CustomerProfile", customerProfileSchema);
+export const LoyaltyTransactionModel =
+  mongoose.models.LoyaltyTransaction ??
+  mongoose.model("LoyaltyTransaction", loyaltyTransactionSchema);
+export const CouponModel =
+  mongoose.models.Coupon ?? mongoose.model("Coupon", couponSchema);
+export const CouponRedemptionModel =
+  mongoose.models.CouponRedemption ??
+  mongoose.model("CouponRedemption", couponRedemptionSchema);
+export const AccessAssignmentAuditModel =
+  mongoose.models.AccessAssignmentAudit ??
+  mongoose.model("AccessAssignmentAudit", accessAssignmentAuditSchema);
+export const OrderLineCancellationModel =
+  mongoose.models.OrderLineCancellation ??
+  mongoose.model("OrderLineCancellation", orderLineCancellationSchema);
+export const CustomerFeedbackModel =
+  mongoose.models.CustomerFeedback ??
+  mongoose.model("CustomerFeedback", customerFeedbackSchema);
+export const StockTransferModel =
+  mongoose.models.StockTransfer ?? mongoose.model("StockTransfer", stockTransferSchema);
+
+const menuSyncJobSchema = new Schema(
+  {
+    id: { type: String, required: true, unique: true, index: true },
+    organizationId: { type: String, required: true, index: true },
+    sourceRestaurantId: { type: String, required: true },
+    targetRestaurantIds: { type: [String], required: true },
+    status: {
+      type: String,
+      enum: ["DRAFT", "PREVIEW", "PUBLISHED", "ROLLED_BACK"],
+      required: true,
+      default: "DRAFT",
+    },
+    preserveBranchFields: {
+      type: [String],
+      default: ["price", "isAvailable", "sortOrder", "kitchenStation"],
+    },
+    snapshotSummary: String,
+    prePublishSnapshots: { type: [Schema.Types.Mixed], default: [] },
+    publishFingerprints: { type: [Schema.Types.Mixed], default: [] },
+    rollbackPreview: String,
+    createdAt: { type: String, required: true },
+    updatedAt: { type: String, required: true },
+    publishedAt: String,
+    rolledBackAt: String,
+    createdBy: {
+      role: { type: String, enum: ["RESTAURANT_ADMIN", "CAPTAIN"], required: true },
+      id: { type: String, required: true },
+      email: String,
+      name: String,
+    },
+  },
+  { ...baseOptions, collection: "menuSyncJobs" },
+);
+menuSyncJobSchema.index({ organizationId: 1, createdAt: -1 });
+
+export const MenuSyncJobModel =
+  mongoose.models.MenuSyncJob ?? mongoose.model("MenuSyncJob", menuSyncJobSchema);
+
+const aiForecastRunSchema = new Schema(
+  {
+    id: { type: String, required: true, unique: true, index: true },
+    restaurantId: { type: String, required: true, index: true },
+    organizationId: String,
+    horizon: { type: String, enum: ["TOMORROW", "NEXT_7_DAYS", "NEXT_30_DAYS"], required: true },
+    modelVersion: { type: String, required: true },
+    inputFrom: { type: String, required: true },
+    inputTo: { type: String, required: true },
+    generatedAt: { type: String, required: true },
+    figuresSource: {
+      type: String,
+      enum: ["ACTUAL", "ESTIMATED", "INSUFFICIENT_DATA"],
+      required: true,
+    },
+    points: { type: [Schema.Types.Mixed], default: [] },
+    note: String,
+  },
+  { ...baseOptions, collection: "aiForecastRuns" },
+);
+aiForecastRunSchema.index({ restaurantId: 1, horizon: 1, generatedAt: -1 });
+
+const aiAlertSchema = new Schema(
+  {
+    id: { type: String, required: true, unique: true, index: true },
+    restaurantId: { type: String, required: true, index: true },
+    organizationId: String,
+    type: { type: String, required: true },
+    dedupeKey: { type: String, required: true },
+    title: { type: String, required: true },
+    severity: { type: String, enum: ["INFO", "WARNING", "CRITICAL"], required: true },
+    status: {
+      type: String,
+      enum: ["NEW", "ACKNOWLEDGED", "RESOLVED", "DISMISSED"],
+      required: true,
+      default: "NEW",
+    },
+    detectionFrom: { type: String, required: true },
+    detectionTo: { type: String, required: true },
+    supportingData: { type: Schema.Types.Mixed, default: {} },
+    reason: { type: String, required: true },
+    suggestedAction: { type: String, required: true },
+    createdAt: { type: String, required: true },
+    updatedAt: { type: String, required: true },
+    acknowledgedAt: String,
+    resolvedAt: String,
+  },
+  { ...baseOptions, collection: "aiAlerts" },
+);
+aiAlertSchema.index({ restaurantId: 1, dedupeKey: 1 }, { unique: true });
+aiAlertSchema.index({ restaurantId: 1, status: 1, createdAt: -1 });
+
+const aiUsageEventSchema = new Schema(
+  {
+    id: { type: String, required: true, unique: true, index: true },
+    restaurantId: { type: String, required: true, index: true },
+    organizationId: String,
+    accountId: { type: String, required: true, index: true },
+    route: { type: String, required: true },
+    provider: String,
+    model: String,
+    promptTokens: Number,
+    completionTokens: Number,
+    estimatedCostUsd: Number,
+    createdAt: { type: String, required: true, index: true },
+  },
+  { ...baseOptions, collection: "aiUsageEvents" },
+);
+
+const aiAssistantThreadSchema = new Schema(
+  {
+    id: { type: String, required: true, unique: true, index: true },
+    restaurantId: { type: String, required: true, index: true },
+    accountId: { type: String, required: true, index: true },
+    messages: {
+      type: [
+        {
+          role: { type: String, enum: ["user", "assistant"], required: true },
+          content: { type: String, required: true },
+          at: { type: String, required: true },
+          toolName: String,
+        },
+      ],
+      default: [],
+    },
+    createdAt: { type: String, required: true },
+    updatedAt: { type: String, required: true },
+  },
+  { ...baseOptions, collection: "aiAssistantThreads" },
+);
+aiAssistantThreadSchema.index({ restaurantId: 1, accountId: 1, updatedAt: -1 });
+
+export const AiForecastRunModel =
+  mongoose.models.AiForecastRun ?? mongoose.model("AiForecastRun", aiForecastRunSchema);
+export const AiAlertModel =
+  mongoose.models.AiAlert ?? mongoose.model("AiAlert", aiAlertSchema);
+export const AiUsageEventModel =
+  mongoose.models.AiUsageEvent ?? mongoose.model("AiUsageEvent", aiUsageEventSchema);
+export const AiAssistantThreadModel =
+  mongoose.models.AiAssistantThread ??
+  mongoose.model("AiAssistantThread", aiAssistantThreadSchema);
+
+const hardwareDeviceSchema = new Schema(
+  {
+    id: { type: String, required: true, unique: true, index: true },
+    organizationId: { type: String, index: true },
+    restaurantId: { type: String, required: true, index: true },
+    outletId: { type: String, required: true, index: true },
+    name: { type: String, required: true },
+    deviceType: {
+      type: String,
+      required: true,
+      enum: [
+        "RECEIPT_PRINTER",
+        "KITCHEN_PRINTER",
+        "CASH_DRAWER",
+        "BARCODE_SCANNER",
+        "CUSTOMER_DISPLAY",
+        "PAYMENT_TERMINAL",
+      ],
+    },
+    manufacturer: { type: String, required: true },
+    model: { type: String, required: true },
+    connectionType: {
+      type: String,
+      required: true,
+      enum: ["SIMULATOR", "NETWORK", "USB", "BLUETOOTH", "KEYBOARD_WEDGE", "LOCAL_CONNECTOR"],
+    },
+    adapterType: {
+      type: String,
+      required: true,
+      enum: ["SIMULATOR", "ESC_POS", "CONNECTOR", "SDK"],
+    },
+    connectionStatus: {
+      type: String,
+      required: true,
+      enum: ["CONNECTED", "DISCONNECTED", "CONNECTING", "ERROR", "DISABLED"],
+    },
+    healthStatus: {
+      type: String,
+      required: true,
+      enum: ["HEALTHY", "DEGRADED", "UNHEALTHY", "UNKNOWN"],
+    },
+    lastSeenAt: String,
+    capabilities: { type: [String], default: [] },
+    configuration: { type: Schema.Types.Mixed, default: {} },
+    simulated: { type: Boolean, required: true, default: true },
+    enabled: { type: Boolean, required: true, default: true },
+    kitchenStation: String,
+    printerRole: {
+      type: String,
+      enum: ["RECEIPT", "KITCHEN", "BAR", "SECONDARY_RECEIPT", "OTHER"],
+    },
+    lastSuccessfulJobAt: String,
+    createdAt: { type: String, required: true },
+    updatedAt: { type: String, required: true },
+  },
+  { ...baseOptions, collection: "hardwareDevices" },
+);
+hardwareDeviceSchema.index({ restaurantId: 1, outletId: 1, deviceType: 1 });
+hardwareDeviceSchema.index({ restaurantId: 1, outletId: 1, printerRole: 1 });
+hardwareDeviceSchema.index({ "configuration.connectorId": 1 });
+
+const printJobSchema = new Schema(
+  {
+    id: { type: String, required: true, unique: true, index: true },
+    restaurantId: { type: String, required: true, index: true },
+    outletId: { type: String, required: true, index: true },
+    deviceId: { type: String, required: true, index: true },
+    orderId: { type: String, index: true },
+    jobType: {
+      type: String,
+      required: true,
+      enum: ["RECEIPT", "BILL", "KOT", "KOT_CANCEL", "KOT_MODIFY", "REPRINT_RECEIPT", "REPRINT_KOT", "TEST_PAGE"],
+    },
+    dedupeKey: { type: String, required: true, index: true },
+    payloadSnapshot: { type: Schema.Types.Mixed, required: true },
+    status: {
+      type: String,
+      required: true,
+      enum: [
+        "QUEUED",
+        "PROCESSING",
+        "COMPLETED",
+        "FAILED",
+        "CANCELLED",
+        "UNKNOWN",
+        "MANUAL_REVIEW",
+      ],
+      index: true,
+    },
+    attemptCount: { type: Number, required: true, default: 0 },
+    maxAttempts: { type: Number, required: true, default: 3 },
+    isReprint: { type: Boolean, required: true, default: false },
+    simulated: { type: Boolean, required: true, default: true },
+    errorMessage: String,
+    connectorId: { type: String, index: true },
+    payloadHash: String,
+    correlationId: String,
+    leaseConnectorId: { type: String, index: true },
+    leaseExpiresAt: { type: String, index: true },
+    createdAt: { type: String, required: true, index: true },
+    updatedAt: { type: String, required: true },
+    completedAt: String,
+  },
+  { ...baseOptions, collection: "printJobs" },
+);
+printJobSchema.index({ restaurantId: 1, dedupeKey: 1 }, { unique: true });
+printJobSchema.index({ status: 1, leaseExpiresAt: 1 });
+
+const deviceEventSchema = new Schema(
+  {
+    id: { type: String, required: true, unique: true, index: true },
+    restaurantId: { type: String, required: true, index: true },
+    outletId: { type: String, required: true, index: true },
+    deviceId: { type: String, required: true, index: true },
+    type: { type: String, required: true },
+    simulated: { type: Boolean, required: true, default: true },
+    payload: { type: Schema.Types.Mixed, default: {} },
+    createdAt: { type: String, required: true, index: true },
+    actorId: String,
+  },
+  { ...baseOptions, collection: "deviceEvents" },
+);
+deviceEventSchema.index({ restaurantId: 1, deviceId: 1, createdAt: -1 });
+
+export const HardwareDeviceModel =
+  mongoose.models.HardwareDevice ?? mongoose.model("HardwareDevice", hardwareDeviceSchema);
+export const PrintJobModel =
+  mongoose.models.PrintJob ?? mongoose.model("PrintJob", printJobSchema);
+export const DeviceEventModel =
+  mongoose.models.DeviceEvent ?? mongoose.model("DeviceEvent", deviceEventSchema);
+
+const deviceConnectorSchema = new Schema(
+  {
+    id: { type: String, required: true, unique: true, index: true },
+    restaurantId: { type: String, required: true, index: true },
+    outletId: { type: String, required: true, index: true },
+    organizationId: { type: String, index: true },
+    name: { type: String, required: true },
+    credentialHash: { type: String, required: true },
+    credentialVersion: { type: Number, required: true, default: 1 },
+    status: {
+      type: String,
+      required: true,
+      enum: ["ONLINE", "OFFLINE", "REVOKED", "PAIRING"],
+      index: true,
+    },
+    version: String,
+    hostname: String,
+    lastHeartbeatAt: String,
+    lastSeenAt: String,
+    pairedAt: { type: String, required: true },
+    revokedAt: String,
+    createdAt: { type: String, required: true },
+    updatedAt: { type: String, required: true },
+  },
+  { ...baseOptions, collection: "deviceConnectors" },
+);
+deviceConnectorSchema.index({ restaurantId: 1, outletId: 1 });
+
+const connectorPairingCodeSchema = new Schema(
+  {
+    id: { type: String, required: true, unique: true, index: true },
+    restaurantId: { type: String, required: true, index: true },
+    outletId: { type: String, required: true, index: true },
+    organizationId: { type: String, index: true },
+    codeHash: { type: String, required: true, index: true },
+    expiresAt: { type: String, required: true, index: true },
+    usedAt: String,
+    createdBy: { type: String, required: true },
+    createdAt: { type: String, required: true },
+  },
+  { ...baseOptions, collection: "connectorPairingCodes" },
+);
+
+export const DeviceConnectorModel =
+  mongoose.models.DeviceConnector ?? mongoose.model("DeviceConnector", deviceConnectorSchema);
+export const ConnectorPairingCodeModel =
+  mongoose.models.ConnectorPairingCode ??
+  mongoose.model("ConnectorPairingCode", connectorPairingCodeSchema);
+
+const hardwarePilotRunSchema = new Schema(
+  {
+    id: { type: String, required: true, unique: true, index: true },
+    restaurantId: { type: String, required: true, index: true },
+    outletId: { type: String, required: true },
+    connectorId: String,
+    deviceId: String,
+    deviceModel: String,
+    osVersion: String,
+    connectorVersion: String,
+    performedBy: { type: String, required: true },
+    steps: { type: Schema.Types.Mixed, default: [] },
+    overallStatus: {
+      type: String,
+      enum: ["IN_PROGRESS", "PASSED", "FAILED", "PARTIAL", "NOT_PHYSICALLY_RUN"],
+      required: true,
+    },
+    notes: String,
+    createdAt: { type: String, required: true },
+    updatedAt: { type: String, required: true },
+    completedAt: String,
+  },
+  { ...baseOptions, collection: "hardwarePilotRuns" },
+);
+
+export const HardwarePilotRunModel =
+  mongoose.models.HardwarePilotRun ?? mongoose.model("HardwarePilotRun", hardwarePilotRunSchema);

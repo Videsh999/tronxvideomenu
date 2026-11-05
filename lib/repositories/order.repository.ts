@@ -1,7 +1,7 @@
-import type { RestaurantOrder } from "@/types";
+import type { RestaurantOrder, KitchenStation, OrderEvent } from "@/types";
 import type { IOrderRepository } from "./types";
 import { connectToDatabase } from "@/lib/db/mongodb";
-import { OrderCounterModel, OrderModel } from "@/lib/db/models";
+import { OrderCounterModel, OrderModel, ReceiptReprintLogModel } from "@/lib/db/models";
 import { toDomain } from "@/lib/db/mongo-mappers";
 
 export class OrderRepository implements IOrderRepository {
@@ -37,6 +37,27 @@ export class OrderRepository implements IOrderRepository {
     return orders.map((order) => this.mapOrder(order));
   }
 
+  async findKitchenActive(restaurantId: string, station?: KitchenStation) {
+    await connectToDatabase();
+    const statuses = ["PENDING", "ACCEPTED", "PREPARING", "READY"];
+    const orders = await OrderModel.find({
+      restaurantId,
+      status: { $in: statuses },
+    })
+      .sort({ createdAt: 1 })
+      .lean();
+    const mapped = orders.map((order) => this.mapOrder(order));
+    if (!station) return mapped;
+    return mapped
+      .map((order) => ({
+        ...order,
+        items: order.items.filter(
+          (item) => (item.kitchenStation ?? "MAIN") === station,
+        ),
+      }))
+      .filter((order) => order.items.length > 0);
+  }
+
   async findByRestaurantAndId(restaurantId: string, id: string) {
     await connectToDatabase();
     const order = await OrderModel.findOne({ restaurantId, id }).lean();
@@ -49,11 +70,62 @@ export class OrderRepository implements IOrderRepository {
     return order ? this.mapOrder(order) : null;
   }
 
-  async updateStatus(restaurantId: string, id: string, expectedStatus: RestaurantOrder["status"], status: RestaurantOrder["status"]) {
+  async updateStatus(
+    restaurantId: string,
+    id: string,
+    expectedStatus: RestaurantOrder["status"],
+    status: RestaurantOrder["status"],
+    event?: OrderEvent,
+  ) {
     await connectToDatabase();
+    const now = new Date().toISOString();
+    const set: Record<string, unknown> = { status, updatedAt: now };
+    if (status === "COMPLETED" || status === "SERVED") {
+      set.completedAt = now;
+    }
+    const update: Record<string, unknown> = { $set: set };
+    if (event) {
+      update.$push = { events: event };
+    }
     const order = await OrderModel.findOneAndUpdate(
       { restaurantId, id, status: expectedStatus },
-      { $set: { status, updatedAt: new Date().toISOString() } },
+      update,
+      { new: true, runValidators: true },
+    ).lean();
+    return order ? this.mapOrder(order) : null;
+  }
+
+  async appendEvent(restaurantId: string, id: string, event: OrderEvent) {
+    await connectToDatabase();
+    const order = await OrderModel.findOneAndUpdate(
+      { restaurantId, id },
+      {
+        $push: { events: event },
+        $set: { updatedAt: new Date().toISOString() },
+      },
+      { new: true, runValidators: true },
+    ).lean();
+    return order ? this.mapOrder(order) : null;
+  }
+
+  async updateItemPreparation(
+    restaurantId: string,
+    id: string,
+    lineId: string,
+    preparationStatus: "QUEUED" | "PREPARING" | "READY",
+    event: OrderEvent,
+  ) {
+    await connectToDatabase();
+    const now = new Date().toISOString();
+    const order = await OrderModel.findOneAndUpdate(
+      { restaurantId, id, "items.lineId": lineId },
+      {
+        $set: {
+          "items.$.preparationStatus": preparationStatus,
+          updatedAt: now,
+        },
+        $push: { events: event },
+      },
       { new: true, runValidators: true },
     ).lean();
     return order ? this.mapOrder(order) : null;
@@ -76,30 +148,92 @@ export class OrderRepository implements IOrderRepository {
     amount: number,
     actor: import("@/types").PaymentAuditActor,
     event: import("@/types").PaymentAuditEvent,
+    options?: {
+      paymentStatus: import("@/types").PaymentStatus;
+      amountPaid: number;
+      ledgerEntry?: import("@/types").PaymentLedgerEntry;
+      orderEvent?: OrderEvent;
+    },
   ) {
     await connectToDatabase();
     const now = new Date().toISOString();
+    const paymentStatus = options?.paymentStatus ?? "PAID";
+    const amountPaid = options?.amountPaid ?? amount;
+    const push: Record<string, unknown> = {
+      "payment.auditTrail": event,
+    };
+    if (options?.ledgerEntry) {
+      push["payment.ledger"] = options.ledgerEntry;
+    }
+    if (options?.orderEvent) {
+      push.events = options.orderEvent;
+    }
+
+    const filter: Record<string, unknown> = {
+      restaurantId,
+      id,
+      status: { $nin: ["CANCELLED", "REJECTED"] },
+    };
+    if (paymentStatus === "PAID" && !options) {
+      filter.$or = [
+        { "payment.status": { $in: ["UNPAID", "NOT_RECORDED", "PARTIAL"] } },
+        { payment: { $exists: false } },
+      ];
+    } else {
+      filter["payment.status"] = { $in: ["UNPAID", "NOT_RECORDED", "PARTIAL"] };
+    }
+
     const order = await OrderModel.findOneAndUpdate(
-      {
-        restaurantId,
-        id,
-        status: { $ne: "CANCELLED" },
-        $or: [
-          { "payment.status": { $in: ["UNPAID", "NOT_RECORDED"] } },
-          { payment: { $exists: false } },
-        ],
-      },
+      filter,
       {
         $set: {
-          "payment.status": "PAID",
+          "payment.status": paymentStatus,
           "payment.method": method,
           "payment.amount": amount,
+          "payment.amountPaid": amountPaid,
           "payment.recordedAt": now,
           "payment.recordedBy": actor,
           updatedAt: now,
         },
+        $push: push,
+      },
+      { new: true, runValidators: true },
+    ).lean();
+    return order ? this.mapOrder(order) : null;
+  }
+
+  async applyRefund(
+    restaurantId: string,
+    id: string,
+    paymentStatus: import("@/types").PaymentStatus,
+    amountPaid: number,
+    auditEvent: import("@/types").PaymentAuditEvent,
+    ledgerEntry: import("@/types").PaymentLedgerEntry,
+    orderEvent: OrderEvent,
+    orderStatus?: RestaurantOrder["status"],
+  ) {
+    await connectToDatabase();
+    const now = new Date().toISOString();
+    const set: Record<string, unknown> = {
+      "payment.status": paymentStatus,
+      "payment.amountPaid": amountPaid,
+      updatedAt: now,
+    };
+    if (orderStatus) set.status = orderStatus;
+
+    const order = await OrderModel.findOneAndUpdate(
+      {
+        restaurantId,
+        id,
+        "payment.status": { $in: ["PAID", "PARTIAL"] },
+        status: { $nin: ["CANCELLED", "REJECTED", "REFUNDED"] },
+      },
+      {
+        $set: set,
         $push: {
-          "payment.auditTrail": event,
+          "payment.auditTrail": auditEvent,
+          "payment.ledger": ledgerEntry,
+          events: orderEvent,
         },
       },
       { new: true, runValidators: true },
@@ -128,6 +262,7 @@ export class OrderRepository implements IOrderRepository {
       updateSet["payment.method"] = null;
       updateSet["payment.recordedAt"] = null;
       updateSet["payment.recordedBy"] = null;
+      updateSet["payment.amountPaid"] = 0;
     }
 
     const order = await OrderModel.findOneAndUpdate(
@@ -148,20 +283,75 @@ export class OrderRepository implements IOrderRepository {
     return order ? this.mapOrder(order) : null;
   }
 
+  async logReceiptReprint(entry: {
+    id: string;
+    restaurantId: string;
+    orderId: string;
+    orderNumber: number;
+    reprintedAt: string;
+    reprintedBy: import("@/types").PaymentAuditActor;
+    reason?: string;
+  }) {
+    await connectToDatabase();
+    await ReceiptReprintLogModel.create(entry);
+  }
+
   private mapOrder(order: unknown): RestaurantOrder {
     const domain = toDomain<RestaurantOrder>(order);
     if (!domain.payment || !domain.payment.status) {
       domain.payment = {
         status: "NOT_RECORDED",
         auditTrail: [],
+        ledger: [],
+        amountPaid: 0,
       };
     }
+    if (!domain.events) domain.events = [];
+    if (!domain.channel) domain.channel = "QR";
+    if (!domain.source) domain.source = "QR";
     return domain;
+  }
+
+  async replaceItemsAndTotals(
+    restaurantId: string,
+    id: string,
+    items: RestaurantOrder["items"],
+    totals: {
+      subtotal: number;
+      billDiscountAmount: number;
+      taxAmount: number;
+      total: number;
+    },
+    event: OrderEvent,
+  ) {
+    await connectToDatabase();
+    const order = await OrderModel.findOneAndUpdate(
+      { restaurantId, id, status: { $nin: ["CANCELLED", "REJECTED", "REFUNDED"] } },
+      {
+        $set: {
+          items,
+          subtotal: totals.subtotal,
+          billDiscountAmount: totals.billDiscountAmount,
+          taxAmount: totals.taxAmount,
+          total: totals.total,
+          updatedAt: new Date().toISOString(),
+        },
+        $push: { events: event },
+      },
+      { new: true, runValidators: true },
+    ).lean();
+    return order ? this.mapOrder(order) : null;
   }
 
   async hasIdempotencyKey(restaurantId: string, key: string) {
     await connectToDatabase();
     return Boolean(await OrderModel.exists({ restaurantId, idempotencyKey: key }));
+  }
+
+  async findByIdempotencyKey(restaurantId: string, key: string) {
+    await connectToDatabase();
+    const order = await OrderModel.findOne({ restaurantId, idempotencyKey: key }).lean();
+    return order ? this.mapOrder(order) : null;
   }
 }
 

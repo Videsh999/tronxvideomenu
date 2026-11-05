@@ -117,27 +117,33 @@ export default function DishCard({
         )}
       </div>
 
-      <div className="flex flex-1 flex-col px-1 pb-1 pt-3">
+      <div className="relative z-[1] flex flex-1 flex-col px-1 pb-1 pt-3">
         <div className="flex items-start gap-1.5">
-          <h3 className="font-condensed min-w-0 flex-1 text-xl uppercase leading-none text-[var(--restaurant-text)] transition-colors group-hover:text-[var(--restaurant-primary)] sm:text-2xl">
-            {name}
+          <h3 className="font-condensed min-w-0 flex-1 text-xl uppercase leading-none text-[var(--restaurant-text,#241416)] transition-colors group-hover:text-[var(--restaurant-primary)] sm:text-2xl">
+            {name || dish.name}
           </h3>
-          <SpeakButton text={name} originalText={dish.name} className="relative z-20 -mt-0.5" />
+          <SpeakButton text={name || dish.name} originalText={dish.name} className="relative z-20 -mt-0.5" />
         </div>
-        {description && (
-          <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-neutral-500 sm:text-[13px]">
+        {description ? (
+          <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-[var(--restaurant-text-muted,#7e6568)] sm:text-[13px]">
             {description}
           </p>
-        )}
+        ) : null}
 
         <div className="mt-auto flex items-center justify-between gap-2 pt-3">
           <div className="min-w-0">
-            <span className="block text-base font-bold tabular-nums text-[var(--restaurant-text)] sm:text-lg">₹{dish.price}</span>
-            {customisable ? <span className="block truncate text-[10px] font-semibold uppercase tracking-wider text-neutral-400">{t("customisable")}</span> : null}
+            <span className="block text-base font-bold tabular-nums text-[var(--restaurant-text,#241416)] sm:text-lg">
+              ₹{Number.isFinite(dish.price) ? dish.price : "—"}
+            </span>
+            {customisable ? (
+              <span className="block truncate text-[10px] font-semibold uppercase tracking-wider text-neutral-400">
+                {t("customisable")}
+              </span>
+            ) : null}
           </div>
           <span
             aria-hidden="true"
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--restaurant-text)] text-white shadow-[0_8px_18px_-8px_rgba(0,0,0,0.6)] transition group-hover:bg-[var(--restaurant-primary)] sm:h-10 sm:w-10"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--restaurant-text,#241416)] text-[var(--restaurant-on-primary,#ffffff)] shadow-[0_8px_18px_-8px_rgba(0,0,0,0.6)] transition group-hover:bg-[var(--restaurant-primary)] sm:h-10 sm:w-10"
           >
             {canOrder && dish.isAvailable ? <Plus className="h-4 w-4" /> : <ArrowUpRight className="h-4 w-4" />}
           </span>
