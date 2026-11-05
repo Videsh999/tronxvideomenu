@@ -56,10 +56,29 @@ export class TableRepository implements ITableRepository {
   async markOccupiedForAcceptedOrder(restaurantId: string, id: string) {
     await connectToDatabase();
     const result = await TableModel.updateOne(
-      { restaurantId, id, isActive: true, status: { $in: ["OPEN", "OCCUPIED"] } },
+      {
+        restaurantId,
+        id,
+        isActive: true,
+        status: { $in: ["OPEN", "OCCUPIED", "BILL_REQUESTED", "PAYMENT_PENDING"] },
+      },
       { $set: { status: "OCCUPIED", updatedAt: new Date().toISOString() } },
     );
     return result.matchedCount === 1;
+  }
+
+  async setFloorStatus(
+    restaurantId: string,
+    id: string,
+    status: RestaurantTable["status"],
+  ) {
+    await connectToDatabase();
+    const table = await TableModel.findOneAndUpdate(
+      { restaurantId, id, isActive: true },
+      { $set: { status, updatedAt: new Date().toISOString() } },
+      { new: true, runValidators: true },
+    ).lean();
+    return table ? tableToDomain(table) : null;
   }
 
   async deleteIfUnused(restaurantId: string, id: string) {

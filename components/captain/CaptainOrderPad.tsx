@@ -206,7 +206,7 @@ export default function CaptainOrderPad({
         setIdempotencyKey(crypto.randomUUID());
         const warning = json.meta?.warning ? ` · ${json.meta.warning}` : "";
         setMessage(
-          `Order #${json.data.orderNumber} placed for table ${tableNumber}${json.meta?.sentToKitchen ? " · sent to kitchen" : ""}${warning}`,
+          `Order #${json.data.orderNumber} ${json.meta?.appended ? "updated" : "placed"} for table ${tableNumber}${json.meta?.sentToKitchen ? " · sent to kitchen" : ""}${warning}`,
         );
       } catch (error) {
         setMessage(error instanceof Error ? error.message : "Unable to place order");

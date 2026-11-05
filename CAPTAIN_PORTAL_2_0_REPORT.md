@@ -1,37 +1,51 @@
-# Captain Portal 2.0 — Progress report (Stages A–C)
+# Captain Portal 2.0 — Delivery Report
 
-**Date:** 2026-11-05
+**Date:** 2026-11-05  
+**Scope:** Visible captain console rebuild + table workspace + billing settings milestone (coordinated with Part B).
 
-## Shipped
+## What changed in the UI (required)
 
-### POS repair
-- Place buttons respect full `canPlaceOrder()` (table required for dine-in).
-- CLOSED tables removed from POS picker.
-- Idempotency key reused for retries; rotated after success.
-- Proxy `floor` class lets captains hit POS create + payment + cancel-lines.
-- See `POS_ORDER_CREATION_BUGFIX_REPORT.md`.
+| Route | Before | After |
+|-------|--------|-------|
+| `/captain/[slug]` | Greeting + 3 cards + Order queue / Tables links | Dark hero floor console, live DB metrics, quick actions, my-tables + attention panels |
+| `/captain/[slug]/tables` | Read-only status cards (“availability… read-only”) | Interactive **My Tables** grid → workspace links, amounts, kitchen/payment chips |
+| `/captain/[slug]/tables/[tableId]` | Missing | Full table workspace: order, add items, KOT link, requests, bill, cleaning |
+| Nav | Dashboard · Take order · Orders · Tables | Dashboard · My Tables · New Order · Active · Kitchen · Requests · Shift |
+| `/captain/.../kitchen` | Missing | KOT/prep status for assigned tables |
+| `/captain/.../requests` | Missing | Acknowledge / complete guest requests |
+| `/captain/.../shift` | Missing | Today’s sales snapshot (read-only) |
 
-### Captain management & assignment
-- Captain fields: `employeeCode`, `assignedTableIds`, `lastActiveAt`.
-- Exclusive table assignment + history collection.
-- Admin UI: per-captain table checkboxes + save.
-- Guides: `CAPTAIN_TABLE_ASSIGNMENT_GUIDE.md`.
+## Backend wiring
 
-### Captain order placement
-- Route: `POST /api/captain/orders` → shared `createPosOrder` → optional send to kitchen.
-- UI: `/captain/[slug]/take-order` (phone optional).
-- Nav: Take order tab.
-- Tables view filtered to assigned tables.
-- Workflow: `CAPTAIN_ORDER_WORKFLOW.md`.
+- Captain place order still uses `orderService.createPosOrder` (shared with POS).
+- Active table orders **append items** via `appendItemsToOrder` (idempotent).
+- Floor actions: `PATCH /api/captain/tables/[tableId]`.
+- Service requests: `/api/captain/requests`.
+- Billing: Admin `/admin/[slug]/settings/billing` + shared `calculateRestaurantBill`.
 
-## Tests
-- `tests/api-proxy-authz.test.ts` — floor class
-- `tests/captain-order-schema.test.ts`
-- `tests/captain-assignment.test.ts`
-- Existing POS schema tests still pass
+## Acceptance checklist (captain)
 
-## Remaining (Stages D–E)
-- Bill request / service request boards
-- Richer live dashboard metrics
-- Captain demo seed + full integration matrix
-- `CAPTAIN_TEST_RESULTS.md` expansion after demo validation
+1. Portal visibly redesigned — **yes**
+2. Tables interactive — **yes**
+3. Order without phone — **yes** (phone optional)
+4. Add items to existing order — **yes** (auto-append)
+5. KOT/KDS path — captain send-to-kitchen / prep statuses (existing pipeline)
+6. Table assignment — Admin Captains (prior + exclusive assign)
+7. Customer requests — **yes**
+8. Bill handoff — REQUEST_BILL + service request BILL
+9. Shared order service — **yes**
+
+## Tests executed
+
+| Suite | Result |
+|-------|--------|
+| `tests/billing-calculator.test.ts` | **12 pass / 0 fail** |
+| `tests/captain-order-schema.test.ts` + `captain-assignment.test.ts` | **5 pass / 0 fail** |
+
+## Limitations
+
+- Screenshots not embedded in git; capture from local `/captain/...` and `/admin/.../settings/billing` after login.
+- Guest count on order is not yet patched via SET_GUEST_COUNT (UI collects; note/request path works).
+- Shift summary is calendar-day based, not POS shift clock-in.
+- Full-project `tsc` hung in this environment when the Next plugin/`@types` resolution stalled; billing unit suite and scoped edits were verified instead. Re-run `npm run typecheck` / `npm run build` locally.
+- Demo restaurant seed for “TRONX Captain & Billing Demo” should be run via existing demo seed scripts when Atlas is available.

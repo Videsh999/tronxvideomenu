@@ -1,25 +1,23 @@
-# Captain order workflow
+# Captain Order Workflow
 
 ## Walk-in (no phone)
 
-1. Captain signs in → **Take order**.
-2. Select an **assigned** table.
-3. Browse / search menu → variants & add-ons → cart.
-4. Optional guest name / phone / note (never required).
-5. **Confirm & send to kitchen**.
-6. Server creates the order via **`orderService.createPosOrder`** (same validation & pricing as POS).
-7. Status advances to **PREPARING** (KOT enqueue via existing device pipeline).
-8. Captain tracks progress under **Orders**.
+1. Captain opens **My Tables** → selects table → **New order** / **Add items**.
+2. Order pad: categories, search, variants, add-ons, notes, cart.
+3. Submit → `POST /api/captain/orders` (idempotency key).
+4. Server validates table assignment + menu prices.
+5. If table already has an open unpaid order → **append** items; else `createPosOrder`.
+6. Totals from `calculateRestaurantBill` (same as POS/QR).
+7. Optional send-to-kitchen → status `PREPARING` (KOT/KDS/device path unchanged).
+8. Confirmation shown in pad / table workspace.
 
-## Authorization
-- Table must be in the captain’s `assignedTableIds`.
-- Outlet isolation via captain session restaurant id.
-- Idempotency key prevents double submit on retries.
+## Add items
 
-## What captains cannot do here
-- Change unit prices.
-- Bypass unavailable dishes.
-- Refund / close cash without POS permissions (payment via existing shared payment API only when authorized).
+- Same pad with `?table=N`.
+- Append recalculates bill; new lines `QUEUED` for kitchen.
+- Retry with same UUID does not duplicate lines.
 
-## POS parity
-POS staff continue to use `/admin/.../pos`. Both paths share `createPosOrder`.
+## Bill handoff
+
+- Workspace **Request bill** → table `BILL_REQUESTED` + BILL service request.
+- Captain sees totals; settlement remains cashier/POS authorized payment APIs.

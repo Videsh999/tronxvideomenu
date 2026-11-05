@@ -1,24 +1,20 @@
-# Captain table assignment guide
+# Captain Table Assignment Guide
 
-## Goal
-Distribute outlet tables among captains without hard-coded limits (e.g. 5 / 10 / 8 is manager choice only).
+## Manager setup (Admin → Captains)
 
-## Manager steps
-1. Open **Admin → Captains**.
-2. Create captains (name, email, password).
-3. Under each captain, tick tables → **Save table assignment**.
-4. Unassigned tables are listed at the top of the Captains page.
+1. Create captain accounts (email + password).
+2. Assign table document IDs to each captain (checkbox / bulk).
+3. Assignments are **exclusive** — assigning a table to Captain B removes it from Captain A.
+4. History is stored in `captainTableAssignmentEvents`.
+5. Occupied tables are **not** auto-transferred; reassign only via manager action.
 
-## Rules
-- One table → one active captain (default exclusive mode).
-- Saving assignment A with table T removes T from other captains in the same outlet.
-- Occupied table reassignment does **not** cancel or rewrite existing orders.
-- Every change is written to `captainTableAssignmentEvents` (who / when / added / removed).
-- Captains with **zero** assigned tables cannot place walk-in orders until assigned.
+## Captain runtime
 
-## Captain view
-- **My tables** shows only assigned tables.
-- **Take order** only lists assigned, non-CLOSED tables.
+- Empty `assignedTableIds` → no floor tables / cannot place dine-in orders.
+- `assertCaptainMayServeTable` guards order place + table workspace + requests.
+- Dashboard / Active orders / Kitchen / Requests are scoped to assigned tables.
 
-## API
-- `PUT /api/admin/captains/:id/tables` `{ tableIds: string[], note?: string }`
+## Conflict prevention
+
+- Repository `pullTableFromOthers` on save.
+- UI in `CaptainManagement` shows unassigned tables and conflict warnings.

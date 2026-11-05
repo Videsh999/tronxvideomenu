@@ -315,28 +315,48 @@ export class OrderRepository implements IOrderRepository {
   async replaceItemsAndTotals(
     restaurantId: string,
     id: string,
-    items: RestaurantOrder["items"],
-    totals: {
+    patch: {
+      items: RestaurantOrder["items"];
       subtotal: number;
-      billDiscountAmount: number;
+      taxRatePercent?: number;
       taxAmount: number;
+      packagingCharge?: number;
+      serviceCharge?: number;
+      cgstAmount?: number;
+      sgstAmount?: number;
+      igstAmount?: number;
+      billSnapshot?: RestaurantOrder["billSnapshot"];
       total: number;
+      orderNote?: string;
+      event: OrderEvent;
+      reopenForKitchen?: boolean;
+      billDiscountAmount?: number;
     },
-    event: OrderEvent,
   ) {
     await connectToDatabase();
+    const set: Record<string, unknown> = {
+      items: patch.items,
+      subtotal: patch.subtotal,
+      taxAmount: patch.taxAmount,
+      total: patch.total,
+      updatedAt: new Date().toISOString(),
+    };
+    if (patch.taxRatePercent !== undefined) set.taxRatePercent = patch.taxRatePercent;
+    if (patch.packagingCharge !== undefined) set.packagingCharge = patch.packagingCharge;
+    if (patch.serviceCharge !== undefined) set.serviceCharge = patch.serviceCharge;
+    if (patch.cgstAmount !== undefined) set.cgstAmount = patch.cgstAmount;
+    if (patch.sgstAmount !== undefined) set.sgstAmount = patch.sgstAmount;
+    if (patch.igstAmount !== undefined) set.igstAmount = patch.igstAmount;
+    if (patch.billSnapshot !== undefined) set.billSnapshot = patch.billSnapshot;
+    if (patch.orderNote !== undefined) set.orderNote = patch.orderNote;
+    if (patch.billDiscountAmount !== undefined) set.billDiscountAmount = patch.billDiscountAmount;
+    if (patch.reopenForKitchen) set.status = "PREPARING";
+
     const order = await OrderModel.findOneAndUpdate(
-      { restaurantId, id, status: { $nin: ["CANCELLED", "REJECTED", "REFUNDED"] } },
+      { restaurantId, id, status: { $nin: ["CANCELLED", "REJECTED", "REFUNDED", "COMPLETED"] } },
       {
-        $set: {
-          items,
-          subtotal: totals.subtotal,
-          billDiscountAmount: totals.billDiscountAmount,
-          taxAmount: totals.taxAmount,
-          total: totals.total,
-          updatedAt: new Date().toISOString(),
-        },
-        $push: { events: event },
+        $set: set,
+        $push: { events: patch.event },
       },
       { new: true, runValidators: true },
     ).lean();

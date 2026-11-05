@@ -77,37 +77,64 @@ export async function POST(request: Request) {
       name: captain.name,
     };
 
-    const order = await orderService.createPosOrder(
+    const active = await orderService.findActiveForTable(
       captain.restaurantId,
-      restaurant.slug,
-      {
-        channel: "POS_DINE_IN",
-        tableNumber: parsed.data.tableNumber,
-        guestCount: parsed.data.guestCount,
-        orderNote: noteParts.length ? noteParts.join(" · ") : undefined,
-        customerPhone: parsed.data.customerPhone,
-        idempotencyKey: parsed.data.idempotencyKey,
-        items: parsed.data.items,
-      },
-      actor,
+      parsed.data.tableNumber,
     );
 
+    let order;
+    let appended = false;
+    if (active && !["SERVED"].includes(active.status)) {
+      order = await orderService.appendItemsToOrder(
+        captain.restaurantId,
+        restaurant.slug,
+        active.id,
+        {
+          items: parsed.data.items,
+          idempotencyKey: parsed.data.idempotencyKey,
+          orderNote: noteParts.length ? noteParts.join(" · ") : undefined,
+        },
+        actor,
+      );
+      appended = true;
+    } else {
+      order = await orderService.createPosOrder(
+        captain.restaurantId,
+        restaurant.slug,
+        {
+          channel: "POS_DINE_IN",
+          tableNumber: parsed.data.tableNumber,
+          guestCount: parsed.data.guestCount,
+          orderNote: noteParts.length ? noteParts.join(" · ") : undefined,
+          customerPhone: parsed.data.customerPhone,
+          idempotencyKey: parsed.data.idempotencyKey,
+          items: parsed.data.items,
+        },
+        actor,
+      );
+    }
+
     let kitchenWarning: string | undefined;
-    if (parsed.data.sendToKitchen !== false && order.status === "PENDING") {
+    let sentToKitchen = false;
+    if (parsed.data.sendToKitchen !== false) {
       try {
-        const advanced = await orderService.updateStatus(
-          captain.restaurantId,
-          order.id,
-          "PREPARING",
-          actor,
-        );
-        if (advanced) {
-          return NextResponse.json(
-            { success: true, data: advanced, meta: { sentToKitchen: true } },
-            { status: 201 },
+        if (order.status === "PENDING") {
+          const advanced = await orderService.updateStatus(
+            captain.restaurantId,
+            order.id,
+            "PREPARING",
+            actor,
           );
+          if (advanced) {
+            order = advanced;
+            sentToKitchen = true;
+          } else {
+            kitchenWarning =
+              "Order saved but kitchen handoff could not be confirmed — accept from Orders.";
+          }
+        } else if (appended && ["ACCEPTED", "PREPARING", "READY"].includes(order.status)) {
+          sentToKitchen = true;
         }
-        kitchenWarning = "Order saved but kitchen handoff could not be confirmed — accept from Orders.";
       } catch (kitchenError) {
         kitchenWarning =
           kitchenError instanceof Error
@@ -120,7 +147,7 @@ export async function POST(request: Request) {
       {
         success: true,
         data: order,
-        meta: { sentToKitchen: false, warning: kitchenWarning },
+        meta: { sentToKitchen, appended, warning: kitchenWarning },
       },
       { status: 201 },
     );

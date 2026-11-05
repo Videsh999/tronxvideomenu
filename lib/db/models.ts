@@ -95,6 +95,25 @@ const restaurantSchema = new Schema<Restaurant>(
     billing: {
       taxRatePercent: { type: Number, min: 0, max: 100 },
       taxLabel: { type: String, maxlength: 40 },
+      currency: String,
+      priceMode: { type: String, enum: ["EXCLUSIVE", "INCLUSIVE"] },
+      gstEnabled: Boolean,
+      gstRatePercent: { type: Number, min: 0, max: 100 },
+      supplyType: { type: String, enum: ["INTRA_STATE", "INTER_STATE"] },
+      packagingEnabled: Boolean,
+      packagingMethod: {
+        type: String,
+        enum: ["PER_ORDER", "PER_ITEM", "PER_QUANTITY", "PERCENT_OF_SUBTOTAL"],
+      },
+      packagingAmount: { type: Number, min: 0 },
+      packagingPercent: { type: Number, min: 0, max: 100 },
+      serviceChargeEnabled: Boolean,
+      serviceChargeType: { type: String, enum: ["FIXED", "PERCENT"] },
+      serviceChargeAmount: { type: Number, min: 0 },
+      serviceChargePercent: { type: Number, min: 0, max: 100 },
+      effectiveFrom: String,
+      updatedAt: String,
+      updatedByEmail: String,
     },
     organizationId: { type: String, index: true },
     inventorySettings: {
@@ -131,6 +150,7 @@ const categorySchema = new Schema<Category>(
       type: String,
       enum: ["MAIN", "BAR", "BAKERY", "DESSERT", "OTHER"],
     },
+    taxRatePercent: { type: Number, min: 0, max: 100 },
     createdAt: String,
     updatedAt: String,
   },
@@ -191,6 +211,7 @@ const dishSchema = new Schema<Dish>(
       type: String,
       enum: ["MAIN", "BAR", "BAKERY", "DESSERT", "OTHER"],
     },
+    taxRatePercent: { type: Number, min: 0, max: 100, default: undefined },
     createdAt: String,
     updatedAt: String,
   },
@@ -264,7 +285,7 @@ const tableSchema = new Schema<RestaurantTable>(
     status: {
       type: String,
       required: true,
-      enum: ["OPEN", "OCCUPIED", "CLOSED"],
+      enum: ["OPEN", "OCCUPIED", "BILL_REQUESTED", "PAYMENT_PENDING", "CLEANING", "CLOSED"],
       default: "OPEN",
     },
     createdAt: { type: String, required: true },
@@ -444,6 +465,12 @@ const orderSchema = new Schema<RestaurantOrder>(
     customerId: String,
     taxRatePercent: { type: Number, min: 0, max: 100 },
     taxAmount: { type: Number, min: 0, default: 0 },
+    packagingCharge: { type: Number, min: 0, default: 0 },
+    serviceCharge: { type: Number, min: 0, default: 0 },
+    cgstAmount: { type: Number, min: 0, default: 0 },
+    sgstAmount: { type: Number, min: 0, default: 0 },
+    igstAmount: { type: Number, min: 0, default: 0 },
+    billSnapshot: { type: Schema.Types.Mixed },
     total: { type: Number, required: true, min: 0 },
     payment: {
       type: paymentSummarySchema,
@@ -675,6 +702,68 @@ receiptReprintLogSchema.index({ restaurantId: 1, orderId: 1, reprintedAt: -1 });
 export const ReceiptReprintLogModel =
   mongoose.models.ReceiptReprintLog ??
   mongoose.model("ReceiptReprintLog", receiptReprintLogSchema);
+
+const serviceRequestSchema = new Schema(
+  {
+    id: { type: String, required: true, unique: true, index: true },
+    restaurantId: { type: String, required: true, index: true },
+    tableId: { type: String, required: true, index: true },
+    tableNumber: { type: Number, required: true },
+    captainId: String,
+    type: {
+      type: String,
+      enum: [
+        "WATER",
+        "EXTRA_PLATES",
+        "CUTLERY",
+        "NAPKINS",
+        "ASSISTANCE",
+        "CLEANING",
+        "BILL",
+        "OTHER",
+      ],
+      required: true,
+    },
+    note: { type: String, maxlength: 500 },
+    status: {
+      type: String,
+      enum: ["OPEN", "ACKNOWLEDGED", "IN_PROGRESS", "DONE", "CANCELLED"],
+      required: true,
+      default: "OPEN",
+    },
+    createdAt: { type: String, required: true },
+    updatedAt: { type: String, required: true },
+    completedAt: String,
+  },
+  { ...baseOptions, collection: "serviceRequests" },
+);
+serviceRequestSchema.index({ restaurantId: 1, status: 1, createdAt: -1 });
+serviceRequestSchema.index({ restaurantId: 1, tableId: 1, status: 1 });
+
+export const ServiceRequestModel =
+  mongoose.models.ServiceRequest ?? mongoose.model("ServiceRequest", serviceRequestSchema);
+
+const billingAuditSchema = new Schema(
+  {
+    id: { type: String, required: true, unique: true, index: true },
+    restaurantId: { type: String, required: true, index: true },
+    action: { type: String, enum: ["SETTINGS_SAVE", "BULK_TAX_APPLY"], required: true },
+    previous: Schema.Types.Mixed,
+    next: Schema.Types.Mixed,
+    meta: Schema.Types.Mixed,
+    actor: {
+      id: { type: String, required: true },
+      email: String,
+      role: { type: String, required: true },
+    },
+    createdAt: { type: String, required: true },
+  },
+  { ...baseOptions, collection: "billingAudits" },
+);
+billingAuditSchema.index({ restaurantId: 1, createdAt: -1 });
+
+export const BillingAuditModel =
+  mongoose.models.BillingAudit ?? mongoose.model("BillingAudit", billingAuditSchema);
 
 const inventoryUnitEnum = ["g", "kg", "ml", "l", "pcs", "dozen"] as const;
 

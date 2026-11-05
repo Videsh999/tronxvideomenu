@@ -43,6 +43,12 @@ const staffOrderView = (order: RestaurantOrder) => ({
   billDiscountAmount: order.billDiscountAmount ?? 0,
   taxRatePercent: order.taxRatePercent ?? 0,
   taxAmount: order.taxAmount ?? 0,
+  packagingCharge: order.packagingCharge ?? 0,
+  serviceCharge: order.serviceCharge ?? 0,
+  cgstAmount: order.cgstAmount ?? 0,
+  sgstAmount: order.sgstAmount ?? 0,
+  igstAmount: order.igstAmount ?? 0,
+  billSnapshot: order.billSnapshot,
   total: order.total,
   payment: order.payment ?? { status: "NOT_RECORDED" as const, auditTrail: [], ledger: [], amountPaid: 0 },
   events: order.events ?? [],
@@ -201,10 +207,25 @@ export class OrderService {
       };
     });
 
-    const taxRatePercent = menu.restaurant.billing?.taxRatePercent ?? 0;
-    const totals = computeBillTotals({
-      lineTotals: items.map((item) => item.itemTotal),
-      taxRatePercent,
+    const { calculateRestaurantBill } = await import("@/lib/billing/calculate-bill");
+    const { resolveLineTaxRate } = await import("@/lib/billing/resolve-tax-rate");
+    const categoryById = new Map(menu.categories.map((category) => [category.id, category]));
+    const bill = calculateRestaurantBill({
+      lines: items.map((item) => {
+        const dish = menu.dishes.find((entry) => entry.id === item.dishId);
+        const category = dish ? categoryById.get(dish.categoryId) : undefined;
+        const resolved = resolveLineTaxRate({
+          dish,
+          category,
+          billing: menu.restaurant.billing,
+        });
+        return {
+          lineTotal: item.itemTotal,
+          quantity: item.quantity,
+          gstRatePercent: resolved.rate,
+        };
+      }),
+      billing: menu.restaurant.billing,
     });
 
     const currentTable = await tableRepository.findByRestaurantAndId(menu.restaurant.id, table.id);
@@ -212,7 +233,9 @@ export class OrderService {
       throw new OrderServiceError("This table became unavailable. Please ask restaurant staff for help.");
     }
     const customerToken = randomBytes(32).toString("base64url");
-    const createdEvent = makeEvent("CREATED", "Order placed via QR menu");
+    const createdEvent = makeEvent("CREATED", "Order placed via QR menu", undefined, {
+      billSnapshot: bill,
+    });
     const created = await orderRepository.create({
       id: `order-${randomUUID()}`,
       restaurantId: menu.restaurant.id,
@@ -224,11 +247,17 @@ export class OrderService {
       channel: "QR",
       source: "QR",
       items,
-      subtotal: totals.itemsSubtotal,
+      subtotal: bill.itemsSubtotal,
       billDiscountAmount: 0,
-      taxRatePercent,
-      taxAmount: totals.taxAmount,
-      total: totals.total,
+      taxRatePercent: bill.gstRatePercent,
+      taxAmount: bill.taxAmount,
+      packagingCharge: bill.packagingCharge,
+      serviceCharge: bill.serviceCharge,
+      cgstAmount: bill.cgstAmount,
+      sgstAmount: bill.sgstAmount,
+      igstAmount: bill.igstAmount,
+      billSnapshot: bill,
+      total: bill.total,
       payment: {
         status: "UNPAID",
         amountPaid: 0,
@@ -267,7 +296,7 @@ export class OrderService {
     let tableNumber = 0;
     if (input.channel === "POS_DINE_IN") {
       const table = await tableRepository.findByRestaurantAndNumber(restaurantId, input.tableNumber!);
-      if (!table || !table.isActive || table.status === "CLOSED") {
+      if (!table || !table.isActive || table.status === "CLOSED" || table.status === "CLEANING") {
         throw new OrderServiceError("Selected table is unavailable.");
       }
       tableId = table.id;
@@ -360,7 +389,6 @@ export class OrderService {
       };
     });
 
-    const taxRatePercent = menu.restaurant.billing?.taxRatePercent ?? 0;
     let billDiscountAmount = input.billDiscountAmount ?? 0;
     let couponCodeSnapshot: string | undefined;
     let couponDiscountAmount = 0;
@@ -400,11 +428,36 @@ export class OrderService {
       }
     }
 
-    const totals = computeBillTotals({
-      lineTotals: items.map((item) => item.itemTotal),
+    const { calculateRestaurantBill } = await import("@/lib/billing/calculate-bill");
+    const { resolveLineTaxRate } = await import("@/lib/billing/resolve-tax-rate");
+    const categoryById = new Map(menu.categories.map((category) => [category.id, category]));
+    const bill = calculateRestaurantBill({
+      lines: items.map((item) => {
+        const dish = menu.dishes.find((entry) => entry.id === item.dishId);
+        const category = dish ? categoryById.get(dish.categoryId) : undefined;
+        const resolved = resolveLineTaxRate({
+          dish,
+          category,
+          billing: menu.restaurant.billing,
+        });
+        return {
+          lineTotal: item.itemTotal,
+          quantity: item.quantity,
+          gstRatePercent: resolved.rate,
+        };
+      }),
       billDiscountAmount,
-      taxRatePercent,
+      billing: menu.restaurant.billing,
     });
+    const taxRatePercent = bill.gstRatePercent;
+    const totals = {
+      itemsSubtotal: bill.itemsSubtotal,
+      itemDiscounts: 0,
+      billDiscount: bill.billDiscount,
+      taxableAmount: bill.taxableAmount,
+      taxAmount: bill.taxAmount,
+      total: bill.total,
+    };
 
     const orderId = `order-${randomUUID()}`;
     const createdEvent = makeEvent(
@@ -416,6 +469,7 @@ export class OrderService {
         couponCodeSnapshot,
         couponDiscountAmount,
         loyaltyPointsRedeemed,
+        billSnapshot: bill,
       },
     );
 
@@ -477,6 +531,12 @@ export class OrderService {
         customerId,
         taxRatePercent,
         taxAmount: totals.taxAmount,
+        packagingCharge: bill.packagingCharge,
+        serviceCharge: bill.serviceCharge,
+        cgstAmount: bill.cgstAmount,
+        sgstAmount: bill.sgstAmount,
+        igstAmount: bill.igstAmount,
+        billSnapshot: bill,
         total: totals.total,
         payment: {
           status: "UNPAID",
@@ -516,6 +576,192 @@ export class OrderService {
       }
       throw error;
     }
+  }
+
+  /**
+   * Append items to an open table order (captain / POS add-on). Recalculates bill;
+   * new lines start QUEUED for KOT. Idempotent via idempotencyKey on a synthetic marker event.
+   */
+  async appendItemsToOrder(
+    restaurantId: string,
+    restaurantSlug: string,
+    orderId: string,
+    input: {
+      items: PlacePosOrderInput["items"];
+      idempotencyKey: string;
+      orderNote?: string;
+    },
+    actor: PaymentAuditActor,
+  ) {
+    const current = await orderRepository.findByRestaurantAndId(restaurantId, orderId);
+    if (!current) throw new OrderServiceError("Order not found.", 404);
+    const alreadyAppended = (current.events ?? []).some(
+      (event) => event.meta?.appendIdempotencyKey === input.idempotencyKey,
+    );
+    if (alreadyAppended) return staffOrderView(current);
+    if (["COMPLETED", "CANCELLED", "REJECTED", "REFUNDED"].includes(current.status)) {
+      throw new OrderServiceError("Cannot add items to a closed order.", 409);
+    }
+    if (current.payment?.status === "PAID") {
+      throw new OrderServiceError("Cannot add items after full payment.", 409);
+    }
+
+    const menu = await restaurantService.getFullMenu(restaurantSlug);
+    if (!menu || menu.restaurant.id !== restaurantId) {
+      throw new OrderServiceError("Restaurant not found.", 404);
+    }
+
+    const categoryStation = new Map(
+      menu.categories.map((category) => [category.id, category.kitchenStation] as const),
+    );
+
+    const newItems: OrderItemSnapshot[] = input.items.map((requested) => {
+      const dish = menu.dishes.find((entry) => entry.id === requested.dishId);
+      if (!dish || dish.restaurantId !== restaurantId) {
+        throw new OrderServiceError("A selected dish is no longer available.");
+      }
+      if (!dish.isAvailable) throw new OrderServiceError(`${dish.name} is currently unavailable.`);
+
+      let unitPriceSnapshot = dish.price;
+      let variantNameSnapshot: string | undefined;
+      let variantId: string | undefined;
+      if (requested.variantId) {
+        const variant = (dish.variants ?? []).find((entry) => entry.id === requested.variantId);
+        if (!variant || variant.isAvailable === false) {
+          throw new OrderServiceError(`A variant for ${dish.name} is unavailable.`);
+        }
+        unitPriceSnapshot = variant.price;
+        variantNameSnapshot = variant.name;
+        variantId = variant.id;
+      } else if ((dish.variants ?? []).length > 0) {
+        throw new OrderServiceError(`Select a variant for ${dish.name}.`);
+      }
+
+      const selections = new Map(requested.selections.map((selection) => [selection.groupId, selection]));
+      const dishGroups = dish.addonGroups ?? [];
+      for (const groupId of selections.keys()) {
+        if (!dishGroups.some((group) => group.id === groupId && group.isActive !== false)) {
+          throw new OrderServiceError(`A customization for ${dish.name} is invalid.`);
+        }
+      }
+
+      const addons = dishGroups.flatMap((group) => {
+        if (group.isActive === false) return [];
+        const selected = selections.get(group.id);
+        const ids = selected?.addons.map((addon) => addon.addonId) ?? [];
+        if (new Set(ids).size !== ids.length) {
+          throw new OrderServiceError(`Duplicate option selected for ${group.name}.`);
+        }
+        if (
+          ids.length < (group.isRequired ? Math.max(1, group.minSelect) : group.minSelect) ||
+          ids.length > group.maxSelect
+        ) {
+          throw new OrderServiceError(`Choose the required options for ${group.name}.`);
+        }
+        return ids.map((id) => {
+          const addon = group.addons.find((entry) => entry.id === id);
+          if (!addon || addon.isActive === false || addon.isAvailable === false) {
+            throw new OrderServiceError(`An option for ${dish.name} is no longer available.`);
+          }
+          return {
+            addonId: addon.id,
+            nameSnapshot: addon.name,
+            quantity: 1,
+            unitPriceSnapshot: addon.price,
+            total: addon.price,
+          };
+        });
+      });
+
+      const itemTotal = lineItemTotal({
+        unitPrice: unitPriceSnapshot,
+        quantity: requested.quantity,
+        addonTotals: addons.map((addon) => addon.total),
+        itemDiscountAmount: requested.itemDiscountAmount,
+      });
+
+      return {
+        lineId: `line-${randomUUID()}`,
+        dishId: dish.id,
+        dishNameSnapshot: dish.name,
+        variantId,
+        variantNameSnapshot,
+        quantity: requested.quantity,
+        unitPriceSnapshot,
+        addons,
+        itemDiscountAmount: requested.itemDiscountAmount,
+        note: requested.note,
+        kitchenStation: resolveStation(dish.kitchenStation, categoryStation.get(dish.categoryId)),
+        preparationStatus: "QUEUED" as const,
+        itemTotal,
+      };
+    });
+
+    const merged = [...current.items, ...newItems];
+    const { calculateRestaurantBill } = await import("@/lib/billing/calculate-bill");
+    const { resolveLineTaxRate } = await import("@/lib/billing/resolve-tax-rate");
+    const categoryById = new Map(menu.categories.map((category) => [category.id, category]));
+    const bill = calculateRestaurantBill({
+      lines: merged.map((item) => {
+        const dish = menu.dishes.find((entry) => entry.id === item.dishId);
+        const category = dish ? categoryById.get(dish.categoryId) : undefined;
+        const resolved = resolveLineTaxRate({
+          dish,
+          category,
+          billing: menu.restaurant.billing,
+        });
+        return {
+          lineTotal: item.itemTotal,
+          quantity: item.quantity,
+          gstRatePercent: resolved.rate,
+        };
+      }),
+      billDiscountAmount: current.billDiscountAmount ?? 0,
+      billing: menu.restaurant.billing,
+    });
+
+    const event = makeEvent(
+      "NOTE",
+      `Added ${newItems.length} item(s) to order`,
+      actor,
+      {
+        appendIdempotencyKey: input.idempotencyKey,
+        newLineIds: newItems.map((item) => item.lineId),
+        billSnapshot: bill,
+      },
+    );
+
+    const updated = await orderRepository.replaceItemsAndTotals(restaurantId, orderId, {
+      items: merged,
+      subtotal: bill.itemsSubtotal,
+      taxRatePercent: bill.gstRatePercent,
+      taxAmount: bill.taxAmount,
+      packagingCharge: bill.packagingCharge,
+      serviceCharge: bill.serviceCharge,
+      cgstAmount: bill.cgstAmount,
+      sgstAmount: bill.sgstAmount,
+      igstAmount: bill.igstAmount,
+      billSnapshot: bill,
+      total: bill.total,
+      orderNote: input.orderNote
+        ? [current.orderNote, input.orderNote].filter(Boolean).join(" · ")
+        : current.orderNote,
+      event,
+      reopenForKitchen: ["READY", "SERVED"].includes(current.status),
+    });
+
+    if (!updated) throw new OrderServiceError("Unable to update order.", 500);
+    return staffOrderView(updated);
+  }
+
+  async findActiveForTable(restaurantId: string, tableNumber: number) {
+    const orders = await orderRepository.findByRestaurantId(restaurantId);
+    const match = orders.find(
+      (order) =>
+        order.tableNumber === tableNumber &&
+        !["COMPLETED", "CANCELLED", "REJECTED", "SERVED"].includes(order.status),
+    );
+    return match ? staffOrderView(match) : null;
   }
 
   async recordPayment(
@@ -1113,18 +1359,14 @@ export class OrderService {
       { lines: input.lines, reason, idempotencyKey: input.idempotencyKey },
     );
 
-    const updated = await orderRepository.replaceItemsAndTotals(
-      restaurantId,
-      orderId,
-      nextItems,
-      {
-        subtotal: totals.itemsSubtotal,
-        billDiscountAmount: totals.billDiscount,
-        taxAmount: totals.taxAmount,
-        total: totals.total,
-      },
+    const updated = await orderRepository.replaceItemsAndTotals(restaurantId, orderId, {
+      items: nextItems,
+      subtotal: totals.itemsSubtotal,
+      billDiscountAmount: totals.billDiscount,
+      taxAmount: totals.taxAmount,
+      total: totals.total,
       event,
-    );
+    });
     if (!updated) throw new OrderServiceError("Order could not be updated for cancellation.", 409);
 
     // If all lines fully cancelled, move order to CANCELLED.

@@ -130,6 +130,7 @@ export default function AdminSidebar({
       title: "Restaurant",
       items: [
         { label: "Profile", href: buildRoute("/profile"), icon: Store },
+        { label: "Billing & tax", href: buildRoute("/settings/billing"), icon: BarChart3 },
         { label: "Availability", href: buildRoute("/availability"), icon: Clock },
         ...(features.MEDIA_LIBRARY ? [{ label: "Media library", href: buildRoute("/media"), icon: ImageIcon }] : []),
       ],

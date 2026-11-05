@@ -175,9 +175,48 @@ export type FeatureKey =
 
 export type KitchenStation = "MAIN" | "BAR" | "BAKERY" | "DESSERT" | "OTHER";
 
+export type GstSupplyType = "INTRA_STATE" | "INTER_STATE";
+export type TaxPriceMode = "EXCLUSIVE" | "INCLUSIVE";
+
+export type PackagingChargeMethod = "PER_ORDER" | "PER_ITEM" | "PER_QUANTITY" | "PERCENT_OF_SUBTOTAL";
+
 export type RestaurantBillingSettings = {
+  /** Legacy single rate — still honored when advanced GST is disabled. */
   taxRatePercent?: number;
   taxLabel?: string;
+  currency?: string;
+  priceMode?: TaxPriceMode;
+  gstEnabled?: boolean;
+  gstRatePercent?: number;
+  supplyType?: GstSupplyType;
+  packagingEnabled?: boolean;
+  packagingMethod?: PackagingChargeMethod;
+  packagingAmount?: number;
+  packagingPercent?: number;
+  serviceChargeEnabled?: boolean;
+  serviceChargeType?: "FIXED" | "PERCENT";
+  serviceChargeAmount?: number;
+  serviceChargePercent?: number;
+  effectiveFrom?: string;
+  updatedAt?: string;
+  updatedByEmail?: string;
+};
+
+export type BillBreakdown = {
+  itemsSubtotal: number;
+  billDiscount: number;
+  packagingCharge: number;
+  serviceCharge: number;
+  taxableAmount: number;
+  taxAmount: number;
+  cgstAmount: number;
+  sgstAmount: number;
+  igstAmount: number;
+  taxLabel: string;
+  gstRatePercent: number;
+  supplyType?: GstSupplyType;
+  priceMode: TaxPriceMode;
+  total: number;
 };
 
 // Restaurant Profile
@@ -247,6 +286,8 @@ export type Category = {
   isActive: boolean;
   /** Default kitchen station for dishes in this category (KDS routing). */
   kitchenStation?: KitchenStation;
+  /** Category-level GST override (%). Dish override wins when set. */
+  taxRatePercent?: number;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -328,6 +369,8 @@ export type Dish = {
   sku?: string;
   /** Future multi-outlet: base menu item may override price per outlet later. */
   kitchenStation?: KitchenStation;
+  /** Dish-level GST override (%). Wins over category and outlet defaults. */
+  taxRatePercent?: number | null;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -372,7 +415,14 @@ export type RestaurantTable = {
   updatedAt: string;
 };
 
-export type TableStatus = "OPEN" | "OCCUPIED" | "CLOSED";
+/** Floor lifecycle. OPEN = available for seating (legacy name kept for compatibility). */
+export type TableStatus =
+  | "OPEN"
+  | "OCCUPIED"
+  | "BILL_REQUESTED"
+  | "PAYMENT_PENDING"
+  | "CLEANING"
+  | "CLOSED";
 
 export type ReservationStatus =
   | "PENDING"
@@ -535,6 +585,13 @@ export type RestaurantOrder = {
   customerId?: string;
   taxRatePercent?: number;
   taxAmount?: number;
+  packagingCharge?: number;
+  serviceCharge?: number;
+  cgstAmount?: number;
+  sgstAmount?: number;
+  igstAmount?: number;
+  /** Immutable financial breakdown captured at create/append time. */
+  billSnapshot?: BillBreakdown;
   total: number;
   payment: PaymentSummary;
   events?: OrderEvent[];
@@ -553,11 +610,18 @@ export type OrderSummary = Pick<
   | "status"
   | "channel"
   | "source"
+  | "guestCount"
   | "items"
   | "subtotal"
   | "billDiscountAmount"
   | "taxRatePercent"
   | "taxAmount"
+  | "packagingCharge"
+  | "serviceCharge"
+  | "cgstAmount"
+  | "sgstAmount"
+  | "igstAmount"
+  | "billSnapshot"
   | "total"
   | "payment"
   | "orderNote"

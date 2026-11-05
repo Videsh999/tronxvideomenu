@@ -70,6 +70,30 @@ export const restaurantSchema = z.object({
     .optional(),
 });
 
+export const restaurantBillingSettingsSchema = z
+  .object({
+    taxRatePercent: z.number().min(0).max(100).optional(),
+    taxLabel: z.string().trim().max(40).optional(),
+    currency: z.string().trim().max(10).optional(),
+    priceMode: z.enum(["EXCLUSIVE", "INCLUSIVE"]).optional(),
+    gstEnabled: z.boolean().optional(),
+    gstRatePercent: z.number().min(0).max(100).optional(),
+    supplyType: z.enum(["INTRA_STATE", "INTER_STATE"]).optional(),
+    packagingEnabled: z.boolean().optional(),
+    packagingMethod: z
+      .enum(["PER_ORDER", "PER_ITEM", "PER_QUANTITY", "PERCENT_OF_SUBTOTAL"])
+      .optional(),
+    packagingAmount: z.number().min(0).max(1_000_000).optional(),
+    packagingPercent: z.number().min(0).max(100).optional(),
+    serviceChargeEnabled: z.boolean().optional(),
+    serviceChargeType: z.enum(["FIXED", "PERCENT"]).optional(),
+    serviceChargeAmount: z.number().min(0).max(1_000_000).optional(),
+    serviceChargePercent: z.number().min(0).max(100).optional(),
+    effectiveFrom: z.string().trim().max(40).optional(),
+  })
+  .strict();
+export type RestaurantBillingSettingsInput = z.infer<typeof restaurantBillingSettingsSchema>;
+
 export const updateRestaurantSchema = restaurantSchema.partial();
 export const restaurantAdminProfileSchema = updateRestaurantSchema
   .omit({
@@ -82,12 +106,16 @@ export const restaurantAdminProfileSchema = updateRestaurantSchema
     theme: true,
   })
   .extend({
-    billing: z
-      .object({
-        taxRatePercent: z.number().min(0).max(100).optional(),
-        taxLabel: z.string().trim().max(40).optional(),
-      })
-      .optional(),
+    billing: restaurantBillingSettingsSchema.optional(),
+  })
+  .strict();
+
+export const billingPreviewSchema = z
+  .object({
+    itemPrice: z.number().min(0).max(1_000_000),
+    quantity: z.number().int().min(1).max(100).default(1),
+    billDiscountAmount: z.number().min(0).max(1_000_000).optional(),
+    billing: restaurantBillingSettingsSchema.optional(),
   })
   .strict();
 export type CreateRestaurantInput = z.infer<typeof restaurantSchema>;
