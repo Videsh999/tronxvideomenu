@@ -8,6 +8,14 @@ test("captain sessions cannot satisfy admin or super-admin API classes", () => {
   assert.equal(apiSessionAllowed("restaurant_admin", captain), false);
   assert.equal(apiSessionAllowed("super_admin", captain), false);
   assert.equal(apiSessionAllowed("staff", captain), false);
+  assert.equal(apiSessionAllowed("floor", captain), true);
+});
+
+test("floor class covers POS create and order payment for captains", () => {
+  assert.equal(classifyApiRequest("POST", "/api/pos/orders"), "floor");
+  assert.equal(classifyApiRequest("POST", "/api/orders/abc/payment"), "floor");
+  assert.equal(classifyApiRequest("POST", "/api/orders/abc/cancel-lines"), "floor");
+  assert.equal(classifyApiRequest("GET", "/api/pos/orders"), "staff");
 });
 
 test("restaurant admin cannot satisfy super-admin API class", () => {

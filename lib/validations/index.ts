@@ -347,8 +347,23 @@ export const createCaptainSchema = z.object({
   name: z.string().trim().min(2).max(100),
   email: z.string().trim().email().max(254),
   password: z.string().min(8).max(256),
+  employeeCode: z.string().trim().max(40).optional(),
 });
-export const updateCaptainSchema = z.object({ isActive: z.boolean() });
+export const updateCaptainSchema = z
+  .object({
+    isActive: z.boolean().optional(),
+    name: z.string().trim().min(2).max(100).optional(),
+    employeeCode: z.string().trim().max(40).nullable().optional(),
+  })
+  .refine((value) => value.isActive !== undefined || value.name !== undefined || value.employeeCode !== undefined, {
+    message: "Provide at least one field to update.",
+  });
+export const assignCaptainTablesSchema = z
+  .object({
+    tableIds: z.array(z.string().min(1)).max(500),
+    note: z.string().trim().max(300).optional(),
+  })
+  .strict();
 export const resetCaptainPasswordSchema = z.object({ password: z.string().min(8).max(256) });
 export const captainOrderStatusSchema = z.object({
   status: z.enum([
@@ -396,6 +411,23 @@ export const refundPaymentSchema = z
   .strict();
 export type RefundPaymentInput = z.infer<typeof refundPaymentSchema>;
 
+export const posOrderItemSchema = z.object({
+  dishId: z.string().min(1),
+  variantId: z.string().min(1).optional(),
+  quantity: z.number().int().min(1).max(99),
+  itemDiscountAmount: z.number().min(0).max(1_000_000).optional(),
+  note: z.string().trim().max(500).optional(),
+  selections: z
+    .array(
+      z.object({
+        groupId: z.string().min(1),
+        addons: z.array(z.object({ addonId: z.string().min(1) })).max(20),
+      }),
+    )
+    .max(30)
+    .default([]),
+});
+
 export const placePosOrderSchema = z
   .object({
     channel: z.enum(["POS_DINE_IN", "POS_TAKEAWAY", "POS_DELIVERY"]),
@@ -409,29 +441,7 @@ export const placePosOrderSchema = z
     redeemLoyaltyPoints: z.number().int().min(0).max(1_000_000).optional(),
     idempotencyKey: z.string().uuid(),
     shiftId: z.string().min(1).optional(),
-    items: z
-      .array(
-        z.object({
-          dishId: z.string().min(1),
-          variantId: z.string().min(1).optional(),
-          quantity: z.number().int().min(1).max(99),
-          itemDiscountAmount: z.number().min(0).max(1_000_000).optional(),
-          note: z.string().trim().max(500).optional(),
-          selections: z
-            .array(
-              z.object({
-                groupId: z.string().min(1),
-                addons: z
-                  .array(z.object({ addonId: z.string().min(1) }))
-                  .max(20),
-              }),
-            )
-            .max(30)
-            .default([]),
-        }),
-      )
-      .min(1)
-      .max(80),
+    items: z.array(posOrderItemSchema).min(1).max(80),
   })
   .strict()
   .superRefine((value, context) => {
@@ -444,6 +454,21 @@ export const placePosOrderSchema = z
     }
   });
 export type PlacePosOrderInput = z.infer<typeof placePosOrderSchema>;
+
+/** Captain floor order — same item shape as POS; dine-in table required; phone optional. */
+export const placeCaptainOrderSchema = z
+  .object({
+    tableNumber: z.number().int().min(1).max(9999),
+    guestCount: z.number().int().min(1).max(100).optional(),
+    guestName: z.string().trim().max(80).optional(),
+    orderNote: z.string().trim().max(1000).optional(),
+    customerPhone: z.string().trim().min(7).max(24).optional(),
+    idempotencyKey: z.string().uuid(),
+    sendToKitchen: z.boolean().optional().default(true),
+    items: z.array(posOrderItemSchema).min(1).max(80),
+  })
+  .strict();
+export type PlaceCaptainOrderInput = z.infer<typeof placeCaptainOrderSchema>;
 
 export const kitchenItemPrepSchema = z
   .object({

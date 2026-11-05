@@ -40,7 +40,24 @@ export class CaptainRepository {
     return toCaptain(captain.toObject());
   }
 
-  async updateForRestaurant(restaurantId: string, id: string, patch: Partial<Pick<Captain, "isActive" | "passwordHash" | "passwordCiphertext" | "passwordIv" | "passwordAuthTag">>) {
+  async updateForRestaurant(
+    restaurantId: string,
+    id: string,
+    patch: Partial<
+      Pick<
+        Captain,
+        | "isActive"
+        | "name"
+        | "employeeCode"
+        | "assignedTableIds"
+        | "lastActiveAt"
+        | "passwordHash"
+        | "passwordCiphertext"
+        | "passwordIv"
+        | "passwordAuthTag"
+      >
+    >,
+  ) {
     await connectToDatabase();
     const captain = await CaptainModel.findOneAndUpdate(
       { restaurantId, id },
@@ -48,6 +65,26 @@ export class CaptainRepository {
       { new: true, runValidators: true },
     ).select("+passwordHash +passwordCiphertext +passwordIv +passwordAuthTag").lean();
     return captain ? toCaptain(captain) : null;
+  }
+
+  async findActiveByAssignedTable(restaurantId: string, tableId: string) {
+    await connectToDatabase();
+    const captains = await CaptainModel.find({
+      restaurantId,
+      isActive: true,
+      assignedTableIds: tableId,
+    })
+      .lean();
+    return captains.map(toCaptain);
+  }
+
+  async pullTableFromOthers(restaurantId: string, tableIds: string[], exceptCaptainId: string) {
+    if (!tableIds.length) return;
+    await connectToDatabase();
+    await CaptainModel.updateMany(
+      { restaurantId, id: { $ne: exceptCaptainId }, assignedTableIds: { $in: tableIds } },
+      { $pull: { assignedTableIds: { $in: tableIds } }, $set: { updatedAt: new Date().toISOString() } },
+    );
   }
 }
 

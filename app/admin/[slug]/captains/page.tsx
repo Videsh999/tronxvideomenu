@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import CaptainManagement from "@/components/admin/CaptainManagement";
 import { getRestaurantAdminContext } from "@/lib/auth-server";
 import { restaurantService } from "@/lib/services/restaurant.service";
+import { tableRepository } from "@/lib/repositories/table.repository";
 import { requireRestaurantFeature } from "@/lib/feature-access";
 
 export const dynamic = "force-dynamic";
@@ -14,5 +15,6 @@ export default async function CaptainsPage({ params }: { params: Promise<{ slug:
   if (!restaurant || restaurant.slug !== slug) redirect("/admin/login");
   const feature = requireRestaurantFeature(restaurant, "CAPTAIN_ACCESS");
   if (!feature.allowed) notFound();
-  return <CaptainManagement restaurantSlug={restaurant.slug} />;
+  const tables = await tableRepository.findByRestaurantId(restaurant.id);
+  return <CaptainManagement restaurantSlug={restaurant.slug} tables={tables} />;
 }

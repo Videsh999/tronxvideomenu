@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ClipboardList, LayoutDashboard, LogOut, QrCode } from "lucide-react";
+import { ClipboardList, LayoutDashboard, LogOut, QrCode, UtensilsCrossed } from "lucide-react";
 import BrandMark from "@/components/shared/BrandMark";
 
 export default function CaptainNavigation({ slug, restaurantName }: { slug: string; restaurantName?: string }) {
@@ -10,6 +10,7 @@ export default function CaptainNavigation({ slug, restaurantName }: { slug: stri
   const root = `/captain/${slug}`;
   const links = [
     { href: root, label: "Dashboard", icon: LayoutDashboard, exact: true },
+    { href: `${root}/take-order`, label: "Take order", icon: UtensilsCrossed, exact: false },
     { href: `${root}/orders`, label: "Orders", icon: ClipboardList, exact: false },
     { href: `${root}/tables`, label: "Tables", icon: QrCode, exact: false },
   ];
@@ -44,7 +45,7 @@ export default function CaptainNavigation({ slug, restaurantName }: { slug: stri
 
     {/* Mobile bottom tab bar */}
     <nav aria-label="Captain navigation" className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-neutral-200 bg-white/95 px-2 pt-2 backdrop-blur-xl lg:hidden">
-      <ul className="mx-auto grid max-w-md grid-cols-3 gap-1">
+      <ul className="mx-auto grid max-w-lg grid-cols-4 gap-1">
         {links.map(({ href, label, icon: Icon, exact }) => {
           const active = isActive(href, exact);
           return <li key={href}><Link href={href} aria-current={active ? "page" : undefined} className={`flex flex-col items-center gap-1 rounded-xl py-1.5 text-[11px] font-semibold transition ${active ? "text-neutral-900" : "text-neutral-500 hover:text-neutral-900"}`}>

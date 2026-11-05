@@ -7,11 +7,17 @@ const statusStyle: Record<RestaurantTable["status"], { badge: string; dot: strin
   CLOSED: { badge: "border-neutral-300 bg-neutral-50 text-neutral-500", dot: "bg-neutral-300", label: "Closed" },
 };
 
-export default function CaptainTables({ initialTables }: { initialTables: RestaurantTable[] }) {
+export default function CaptainTables({
+  initialTables,
+  assignedOnly = false,
+}: {
+  initialTables: RestaurantTable[];
+  assignedOnly?: boolean;
+}) {
   const counts = initialTables.reduce<Record<RestaurantTable["status"], number>>((acc, table) => ({ ...acc, [table.status]: acc[table.status] + 1 }), { OPEN: 0, OCCUPIED: 0, CLOSED: 0 });
   return <div className="space-y-6">
     <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-      <div><h1 className="text-3xl font-bold tracking-tight">Tables</h1><p className="mt-1 text-sm text-neutral-500">Table availability and status are read-only.</p></div>
+      <div><h1 className="text-3xl font-bold tracking-tight">{assignedOnly ? "My tables" : "Tables"}</h1><p className="mt-1 text-sm text-neutral-500">{assignedOnly ? "Tables assigned to you for floor service." : "Table availability and status are read-only."}</p></div>
       <div className="flex flex-wrap gap-2">{(Object.keys(statusStyle) as RestaurantTable["status"][]).map((status) => <span key={status} className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${statusStyle[status].badge}`}><span className={`h-1.5 w-1.5 rounded-full ${statusStyle[status].dot}`} />{statusStyle[status].label} · {counts[status]}</span>)}</div>
     </header>
     {initialTables.length ? <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">{initialTables.map((table) => <article key={table.id} className={`relative overflow-hidden rounded-2xl border bg-white p-4 sm:p-5 ${table.isActive ? "border-neutral-200" : "border-dashed border-neutral-300 opacity-60"}`}>

@@ -8,7 +8,8 @@ export type ApiAuthClass =
   | "captain"
   | "restaurant_admin"
   | "super_admin"
-  | "staff"; // restaurant admin or super admin (never captain)
+  | "staff" // restaurant admin or super admin (never captain)
+  | "floor"; // restaurant admin, super admin, or captain — shared floor ops
 
 export function classifyApiRequest(method: string, pathname: string): ApiAuthClass {
   if (
@@ -51,6 +52,15 @@ export function classifyApiRequest(method: string, pathname: string): ApiAuthCla
   if (pathname.startsWith("/api/super-admin/")) return "super_admin";
   if (pathname.startsWith("/api/admin/")) return "restaurant_admin";
 
+  // Shared floor ops: handlers still enforce tenant + role (captain vs admin).
+  if (
+    (method === "POST" && pathname === "/api/pos/orders") ||
+    (method === "POST" && /^\/api\/orders\/[^/]+\/payment$/.test(pathname)) ||
+    (method === "POST" && /^\/api\/orders\/[^/]+\/cancel-lines$/.test(pathname))
+  ) {
+    return "floor";
+  }
+
   return "staff";
 }
 
@@ -69,6 +79,8 @@ export function apiSessionAllowed(
       return sessions.restaurantAdmin;
     case "staff":
       return sessions.restaurantAdmin || sessions.superAdmin;
+    case "floor":
+      return sessions.restaurantAdmin || sessions.superAdmin || sessions.captain;
     default:
       return false;
   }

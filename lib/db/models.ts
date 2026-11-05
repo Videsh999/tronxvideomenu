@@ -506,12 +506,36 @@ const captainSchema = new Schema<Captain>(
     passwordIv: { type: String, select: false },
     passwordAuthTag: { type: String, select: false },
     isActive: { type: Boolean, required: true, default: true },
+    employeeCode: { type: String, trim: true, maxlength: 40 },
+    assignedTableIds: { type: [String], default: [] },
+    lastActiveAt: String,
     createdAt: { type: String, required: true },
     updatedAt: { type: String, required: true },
   },
   { ...baseOptions, collection: "captains" },
 );
 captainSchema.index({ restaurantId: 1, email: 1 }, { unique: true });
+captainSchema.index({ restaurantId: 1, assignedTableIds: 1 });
+
+const captainTableAssignmentEventSchema = new Schema(
+  {
+    id: { type: String, required: true, unique: true, index: true },
+    restaurantId: { type: String, required: true, index: true },
+    captainId: { type: String, required: true, index: true },
+    tableIdsAdded: { type: [String], default: [] },
+    tableIdsRemoved: { type: [String], default: [] },
+    resultingTableIds: { type: [String], default: [] },
+    changedBy: {
+      role: { type: String, enum: ["RESTAURANT_ADMIN", "SUPER_ADMIN"], required: true },
+      id: { type: String, required: true },
+      email: String,
+    },
+    note: { type: String, maxlength: 300 },
+    createdAt: { type: String, required: true },
+  },
+  { ...baseOptions, collection: "captainTableAssignmentEvents" },
+);
+captainTableAssignmentEventSchema.index({ restaurantId: 1, createdAt: -1 });
 const restaurantAdminAccountSchema = new Schema<RestaurantAdminAccount>(
   {
     id: { type: String, required: true, unique: true, index: true },
@@ -617,6 +641,9 @@ export const OrderCounterModel =
 export const CaptainModel =
   mongoose.models.Captain ??
   mongoose.model<Captain>("Captain", captainSchema);
+export const CaptainTableAssignmentEventModel =
+  mongoose.models.CaptainTableAssignmentEvent ??
+  mongoose.model("CaptainTableAssignmentEvent", captainTableAssignmentEventSchema);
 export const RestaurantAdminAccountModel =
   mongoose.models.RestaurantAdminAccount ??
   mongoose.model<RestaurantAdminAccount>("RestaurantAdminAccount", restaurantAdminAccountSchema);

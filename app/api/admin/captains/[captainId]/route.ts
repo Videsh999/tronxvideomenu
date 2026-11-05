@@ -15,9 +15,24 @@ export async function PATCH(request: Request, context: { params: Promise<{ capta
   try {
     const input = updateCaptainSchema.parse(await request.json());
     const { captainId } = await context.params;
-    const captain = await captainService.setActive(admin.restaurantId, captainId, input.isActive);
-    return captain ? NextResponse.json({ success: true, data: captain }) : NextResponse.json({ success: false, error: "Captain not found" }, { status: 404 });
-  } catch {
-    return NextResponse.json({ success: false, error: "Invalid Captain update" }, { status: 400 });
+
+    let captain = null;
+    if (input.name !== undefined || input.employeeCode !== undefined) {
+      captain = await captainService.updateProfile(admin.restaurantId, captainId, {
+        name: input.name,
+        employeeCode: input.employeeCode,
+      });
+    }
+    if (input.isActive !== undefined) {
+      captain = await captainService.setActive(admin.restaurantId, captainId, input.isActive);
+    }
+    return captain
+      ? NextResponse.json({ success: true, data: captain })
+      : NextResponse.json({ success: false, error: "Captain not found" }, { status: 404 });
+  } catch (cause) {
+    return NextResponse.json(
+      { success: false, error: cause instanceof Error ? cause.message : "Invalid Captain update" },
+      { status: 400 },
+    );
   }
 }

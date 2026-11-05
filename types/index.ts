@@ -22,12 +22,29 @@ export type Captain = {
   passwordIv?: string;
   passwordAuthTag?: string;
   isActive: boolean;
+  /** Optional staff / employee code shown in admin (not required). */
+  employeeCode?: string;
+  /** Table document ids assigned to this captain. Configurable; never hard-capped. */
+  assignedTableIds?: string[];
+  lastActiveAt?: string;
   createdAt: string;
   updatedAt: string;
 };
 
 export type CaptainView = Omit<Captain, "passwordHash" | "passwordCiphertext" | "passwordIv" | "passwordAuthTag"> & {
   passwordConfigured: boolean;
+};
+
+export type CaptainTableAssignmentEvent = {
+  id: string;
+  restaurantId: string;
+  captainId: string;
+  tableIdsAdded: string[];
+  tableIdsRemoved: string[];
+  resultingTableIds: string[];
+  changedBy: { role: "RESTAURANT_ADMIN" | "SUPER_ADMIN"; id: string; email?: string };
+  note?: string;
+  createdAt: string;
 };
 
 /** Organization / outlet RBAC (Phase 4.1). Additive — legacy admins without orgRole keep single-outlet access. */

@@ -23,7 +23,7 @@ export default async function PosPage({ params }: { params: Promise<{ slug: stri
       taxLabel={menu.restaurant.billing?.taxLabel ?? "Tax"}
       categories={menu.categories.filter((category) => category.isActive)}
       dishes={menu.dishes}
-      tables={tables.filter((table) => table.isActive)}
+      tables={tables.filter((table) => table.isActive && table.status !== "CLOSED")}
       initialShift={shift}
     />
   );

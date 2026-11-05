@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ExternalLink, Eye, EyeOff } from "lucide-react";
-import type { CaptainView } from "@/types";
+import type { CaptainView, RestaurantTable } from "@/types";
 import { PasswordInput } from "@/components/shared/AuthLayout";
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -16,7 +16,13 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   return result.data as T;
 }
 
-export default function CaptainManagement({ restaurantSlug }: { restaurantSlug: string }) {
+export default function CaptainManagement({
+  restaurantSlug,
+  tables = [],
+}: {
+  restaurantSlug: string;
+  tables?: RestaurantTable[];
+}) {
   const [captains, setCaptains] = useState<CaptainView[]>([]);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -29,14 +35,26 @@ export default function CaptainManagement({ restaurantSlug }: { restaurantSlug: 
   const [resetTarget, setResetTarget] = useState<CaptainView | null>(null);
   const [resetPassword, setResetPassword] = useState("");
   const [resetVisible, setResetVisible] = useState(false);
+  const [assignDraft, setAssignDraft] = useState<Record<string, string[]>>({});
+  const activeTables = tables.filter((table) => table.isActive);
 
-  const refresh = async () => setCaptains(await request<CaptainView[]>("/api/admin/captains"));
+  const refresh = async () => {
+    const data = await request<CaptainView[]>("/api/admin/captains");
+    setCaptains(data);
+    setAssignDraft(
+      Object.fromEntries(data.map((captain) => [captain.id, [...(captain.assignedTableIds ?? [])]])),
+    );
+  };
 
   useEffect(() => {
     let mounted = true;
     request<CaptainView[]>("/api/admin/captains")
       .then((data) => {
-        if (mounted) setCaptains(data);
+        if (!mounted) return;
+        setCaptains(data);
+        setAssignDraft(
+          Object.fromEntries(data.map((captain) => [captain.id, [...(captain.assignedTableIds ?? [])]])),
+        );
       })
       .catch((error: unknown) => {
         if (mounted) setMessage(error instanceof Error ? error.message : "Unable to load Captains");
@@ -45,6 +63,38 @@ export default function CaptainManagement({ restaurantSlug }: { restaurantSlug: 
       mounted = false;
     };
   }, []);
+
+  const saveTableAssignment = async (captain: CaptainView) => {
+    setPendingId(captain.id);
+    setMessage("");
+    try {
+      await request(`/api/admin/captains/${encodeURIComponent(captain.id)}/tables`, {
+        method: "PUT",
+        body: JSON.stringify({ tableIds: assignDraft[captain.id] ?? [] }),
+      });
+      await refresh();
+      setMessage(`Tables updated for ${captain.name}. Conflicts moved off other captains.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to assign tables");
+    } finally {
+      setPendingId(null);
+    }
+  };
+
+  const toggleTableDraft = (captainId: string, tableId: string) => {
+    setAssignDraft((current) => {
+      const selected = new Set(current[captainId] ?? []);
+      if (selected.has(tableId)) selected.delete(tableId);
+      else selected.add(tableId);
+      return { ...current, [captainId]: [...selected] };
+    });
+  };
+
+  const assignedElsewhere = (tableId: string, exceptCaptainId: string) =>
+    captains.find(
+      (captain) =>
+        captain.id !== exceptCaptainId && (captain.assignedTableIds ?? []).includes(tableId),
+    );
 
   const copy = async (value: string, successMessage: string) => {
     try {
@@ -206,10 +256,27 @@ export default function CaptainManagement({ restaurantSlug }: { restaurantSlug: 
         <p className="font-semibold text-neutral-900">Captain sign-in portal</p>
         <p className="mt-1 font-mono text-xs break-all text-neutral-700">{absoluteLogin}</p>
         <p className="mt-2 text-xs text-neutral-500">
-          Captains use this page to accept orders, print KOTs, and take payment — separate from the restaurant
-          admin console.
+          Captains take walk-in orders on assigned tables, send KOTs, and hand off bills — separate from the
+          restaurant admin console.
         </p>
       </section>
+
+      {activeTables.length ? (
+        <section className="rounded-2xl border border-sky-100 bg-sky-50 p-4 text-sm text-sky-950">
+          <p className="font-semibold">Table assignment</p>
+          <p className="mt-1 text-sky-900/80">
+            Select tables under each captain and save. A table can only be actively assigned to one captain
+            (reassignment removes it from others). No hard table limit.
+          </p>
+          <p className="mt-2 text-xs text-sky-800/80">
+            Unassigned tables:{" "}
+            {activeTables
+              .filter((table) => !captains.some((captain) => (captain.assignedTableIds ?? []).includes(table.id)))
+              .map((table) => table.tableNumber)
+              .join(", ") || "none"}
+          </p>
+        </section>
+      ) : null}
 
       {message ? (
         <p role="status" className="rounded-xl border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-700">
@@ -266,6 +333,9 @@ export default function CaptainManagement({ restaurantSlug }: { restaurantSlug: 
                   <h2 className="font-semibold text-neutral-900">{captain.name}</h2>
                   <p className="text-sm text-neutral-500">
                     {captain.email} · {captain.isActive ? "Enabled" : "Disabled"}
+                    {captain.employeeCode ? ` · #${captain.employeeCode}` : ""}
+                    {" · "}
+                    {(captain.assignedTableIds ?? []).length} tables
                   </p>
                 </div>
                 <button
@@ -277,6 +347,48 @@ export default function CaptainManagement({ restaurantSlug }: { restaurantSlug: 
                   {pendingId === captain.id ? "Working…" : captain.isActive ? "Disable" : "Enable"}
                 </button>
               </div>
+              {activeTables.length ? (
+                <div className="mt-3 rounded-xl border border-neutral-100 bg-neutral-50 p-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
+                    Assigned tables
+                  </p>
+                  <div className="mt-2 flex max-h-40 flex-wrap gap-2 overflow-y-auto">
+                    {activeTables.map((table) => {
+                      const checked = (assignDraft[captain.id] ?? []).includes(table.id);
+                      const conflict = assignedElsewhere(table.id, captain.id);
+                      return (
+                        <label
+                          key={table.id}
+                          className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs ${
+                            checked
+                              ? "border-neutral-900 bg-neutral-900 text-white"
+                              : "border-neutral-200 bg-white text-neutral-700"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            className="sr-only"
+                            checked={checked}
+                            onChange={() => toggleTableDraft(captain.id, table.id)}
+                          />
+                          T{table.tableNumber}
+                          {conflict && !checked ? (
+                            <span className="text-[10px] opacity-70">({conflict.name})</span>
+                          ) : null}
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <button
+                    type="button"
+                    disabled={pendingId === captain.id}
+                    onClick={() => void saveTableAssignment(captain)}
+                    className="mt-3 rounded-lg bg-neutral-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                  >
+                    Save table assignment
+                  </button>
+                </div>
+              ) : null}
               <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
                 <span className="min-w-44 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 font-mono text-neutral-700">
                   {isPasswordVisible

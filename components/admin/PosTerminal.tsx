@@ -75,6 +75,7 @@ export default function PosTerminal({
   const [payMethod, setPayMethod] = useState<PaymentMethod>("CASH");
   const [payAmount, setPayAmount] = useState<number | "">("");
   const [pending, startTransition] = useTransition();
+  const [placeIdempotencyKey, setPlaceIdempotencyKey] = useState(() => crypto.randomUUID());
   const [customizing, setCustomizing] = useState<Dish | null>(null);
   const [selectedVariantId, setSelectedVariantId] = useState<string>("");
   const [selectedAddons, setSelectedAddons] = useState<
@@ -264,7 +265,6 @@ export default function PosTerminal({
 
   async function submitPosOrder(): Promise<{ id: string; orderNumber: number | string; total: number }> {
     if (!shift) throw new Error("Open a POS shift before taking orders.");
-    const idempotencyKey = crypto.randomUUID();
     const payload: Record<string, unknown> = {
       channel,
       orderNote: orderNote.trim() || undefined,
@@ -272,7 +272,7 @@ export default function PosTerminal({
       customerPhone: customerPhone.trim() || undefined,
       couponCode: couponCode.trim() || undefined,
       redeemLoyaltyPoints: redeemLoyaltyPoints || undefined,
-      idempotencyKey,
+      idempotencyKey: placeIdempotencyKey,
       shiftId: shift.id,
       items: cart.map((line) => ({
         dishId: line.dishId,
@@ -308,8 +308,11 @@ export default function PosTerminal({
           : null;
       throw new Error(detail || json.error || "Checkout failed");
     }
+    setPlaceIdempotencyKey(crypto.randomUUID());
     return json.data;
   }
+
+  const placeBlocked = canPlaceOrder();
 
   function placeOrder() {
     const block = canPlaceOrder();
@@ -331,7 +334,9 @@ export default function PosTerminal({
           `Order #${order.orderNumber} placed · ${money(order.total, currency)}. Now tap Record to take payment.`,
         );
       } catch (error) {
-        setMessage(error instanceof Error ? error.message : "Checkout failed");
+        const text = error instanceof Error ? error.message : "Checkout failed";
+        setMessage(text);
+        if (/shift is not open/i.test(text)) setShift(null);
       }
     });
   }
@@ -371,7 +376,9 @@ export default function PosTerminal({
         );
         if (json.data.payment.status === "PAID") setLastOrderId(null);
       } catch (error) {
-        setMessage(error instanceof Error ? error.message : "Checkout failed");
+        const text = error instanceof Error ? error.message : "Checkout failed";
+        setMessage(text);
+        if (/shift is not open/i.test(text)) setShift(null);
       }
     });
   }
@@ -793,9 +800,14 @@ export default function PosTerminal({
           </div>
 
           <div className="grid gap-2">
+            {placeBlocked ? (
+              <p className="rounded-lg bg-amber-500/20 px-3 py-2 text-xs font-medium text-amber-100">
+                {placeBlocked}
+              </p>
+            ) : null}
             <button
               type="button"
-              disabled={pending || !shift || cart.length === 0}
+              disabled={pending || Boolean(placeBlocked)}
               onClick={placeAndPay}
               className="min-h-12 rounded-xl bg-[#e7c27d] text-base font-semibold text-[#2f241c] disabled:opacity-50"
             >
@@ -803,7 +815,7 @@ export default function PosTerminal({
             </button>
             <button
               type="button"
-              disabled={pending || !shift || cart.length === 0}
+              disabled={pending || Boolean(placeBlocked)}
               onClick={placeOrder}
               className="min-h-11 rounded-xl border border-white/25 bg-white/10 text-sm font-semibold disabled:opacity-50"
             >
