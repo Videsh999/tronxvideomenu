@@ -328,15 +328,68 @@ export default function CaptainTableWorkspace({
                 </div>
               </div>
 
-              {isPendingCaptainApproval(order) ? (
-                <p className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
-                  Customer QR order — approve to print KOT and release to kitchen.
-                </p>
-              ) : order.status === "PENDING" ? (
-                <p className="rounded-2xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-950">
-                  New order waiting — accept to send KOT to kitchen.
-                </p>
-              ) : null}
+              {/* Next step first — sticky so you never hunt below the item list */}
+              <div className="sticky top-14 z-10 space-y-2 rounded-2xl border border-neutral-200 bg-white/95 p-3 shadow-sm backdrop-blur-md lg:top-4">
+                {isPendingCaptainApproval(order) ? (
+                  <p className="text-sm text-amber-950">
+                    Customer QR order — approve to print KOT and release to kitchen.
+                  </p>
+                ) : order.status === "PENDING" ? (
+                  <p className="text-sm text-sky-950">New order waiting — accept to send KOT to kitchen.</p>
+                ) : (
+                  <p className="text-sm text-neutral-600">
+                    Next floor step for #{order.orderNumber}
+                  </p>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  {order.status === "PENDING" || isPendingCaptainApproval(order) ? (
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={sendToKitchen}
+                      className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-neutral-900 px-4 text-sm font-bold text-white disabled:opacity-50 sm:flex-none"
+                    >
+                      {isPendingCaptainApproval(order)
+                        ? "Approve & send to kitchen"
+                        : "Accept & send to kitchen"}
+                    </button>
+                  ) : null}
+                  {(() => {
+                    const action = primaryFloorAction(order.status);
+                    if (!action || order.status === "PENDING") return null;
+                    return (
+                      <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() => advanceOrderStatus(action.status, action.label)}
+                        className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-[#e7c27d] px-4 text-sm font-bold text-neutral-900 disabled:opacity-50 sm:flex-none"
+                      >
+                        {action.label}
+                      </button>
+                    );
+                  })()}
+                  <Link
+                    href={`/captain/${slug}/take-order?table=${table.tableNumber}`}
+                    className="inline-flex min-h-11 items-center gap-2 rounded-full border border-neutral-300 px-4 text-sm font-semibold"
+                  >
+                    <Plus className="h-4 w-4" /> Add items
+                  </Link>
+                  <Link
+                    href={`/captain/${slug}/kitchen`}
+                    className="inline-flex min-h-11 items-center gap-2 rounded-full border border-neutral-300 px-4 text-sm font-semibold"
+                  >
+                    <ClipboardList className="h-4 w-4" /> KOT / kitchen
+                  </Link>
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => runAction("REQUEST_BILL")}
+                    className="inline-flex min-h-11 items-center gap-2 rounded-full bg-violet-600 px-4 text-sm font-bold text-white"
+                  >
+                    <Wallet className="h-4 w-4" /> Request bill
+                  </button>
+                </div>
+              </div>
 
               <ul className="divide-y divide-neutral-100 rounded-2xl border border-neutral-100">
                 {order.items.map((item, index) => {
@@ -385,55 +438,6 @@ export default function CaptainTableWorkspace({
                   );
                 })}
               </ul>
-
-              <div className="flex flex-wrap gap-2">
-                {order.status === "PENDING" || isPendingCaptainApproval(order) ? (
-                  <button
-                    type="button"
-                    disabled={pending}
-                    onClick={sendToKitchen}
-                    className="inline-flex min-h-11 items-center gap-2 rounded-full bg-neutral-900 px-4 text-sm font-bold text-white disabled:opacity-50"
-                  >
-                    {isPendingCaptainApproval(order)
-                      ? "Approve & send to kitchen"
-                      : "Accept & send to kitchen"}
-                  </button>
-                ) : null}
-                {(() => {
-                  const action = primaryFloorAction(order.status);
-                  if (!action || order.status === "PENDING") return null;
-                  return (
-                    <button
-                      type="button"
-                      disabled={pending}
-                      onClick={() => advanceOrderStatus(action.status, action.label)}
-                      className="inline-flex min-h-11 items-center gap-2 rounded-full bg-[#e7c27d] px-4 text-sm font-bold text-neutral-900 disabled:opacity-50"
-                    >
-                      {action.label}
-                    </button>
-                  );
-                })()}
-                <Link
-                  href={`/captain/${slug}/take-order?table=${table.tableNumber}`}
-                  className="inline-flex min-h-10 items-center gap-2 rounded-full border border-neutral-300 px-4 text-sm font-semibold"
-                >
-                  <Plus className="h-4 w-4" /> Add items
-                </Link>
-                <Link
-                  href={`/captain/${slug}/kitchen`}
-                  className="inline-flex min-h-10 items-center gap-2 rounded-full border border-neutral-300 px-4 text-sm font-semibold"
-                >
-                  <ClipboardList className="h-4 w-4" /> KOT / kitchen
-                </Link>
-                <button
-                  type="button"
-                  disabled={pending}
-                  onClick={() => runAction("REQUEST_BILL")}
-                  className="inline-flex min-h-10 items-center gap-2 rounded-full bg-violet-600 px-4 text-sm font-bold text-white"
-                >
-                  <Wallet className="h-4 w-4" /> Request bill
-                </button>
-              </div>
             </>
           )}
         </section>

@@ -9,13 +9,13 @@ export const ORDER_BOARD_STAGES: {
   hint: string;
   statuses: OrderStatus[];
 }[] = [
-  { id: "new", title: "New", hint: "Waiting for the captain to accept", statuses: ["PENDING"] },
-  { id: "kitchen", title: "Kitchen", hint: "Cooking — ticket already printed", statuses: ["ACCEPTED", "PREPARING"] },
-  { id: "ready", title: "Ready", hint: "Pass is ready — take to the table", statuses: ["READY"] },
+  { id: "new", title: "New", hint: "Step 1 — Accept to print KOT and send to kitchen", statuses: ["PENDING"] },
+  { id: "kitchen", title: "Kitchen", hint: "Step 2 — Cooking — mark ready when the pass is done", statuses: ["ACCEPTED", "PREPARING"] },
+  { id: "ready", title: "Ready", hint: "Step 3 — Take food to the table, then mark served", statuses: ["READY"] },
   {
     id: "done",
     title: "Done",
-    hint: "Served, completed, cancelled, or refunded",
+    hint: "Finished — served, completed, cancelled, or refunded",
     statuses: ["SERVED", "COMPLETED", "CANCELLED", "REJECTED", "REFUNDED"],
   },
 ];

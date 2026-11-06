@@ -11,7 +11,9 @@ import {
   formatOrderClock,
   ordersInStage,
   primaryFloorAction,
+  stageForStatus,
   statusLabel,
+  type OrderBoardStage,
 } from "@/lib/order-board";
 import { printKitchenOrderTicket } from "@/lib/kot-print";
 
@@ -54,6 +56,12 @@ export default function OrdersManager({
   restaurantName?: string;
 }) {
   const [orders, setOrders] = useState(initialOrders);
+  const [activeStage, setActiveStage] = useState<OrderBoardStage>(() => {
+    if (ordersInStage(initialOrders, "new").length) return "new";
+    if (ordersInStage(initialOrders, "kitchen").length) return "kitchen";
+    if (ordersInStage(initialOrders, "ready").length) return "ready";
+    return "done";
+  });
   const [message, setMessage] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -79,6 +87,7 @@ export default function OrdersManager({
       const freshPending = nextOrders.filter((order) => order.status === "PENDING" && !knownOrderIdsRef.has(order.id));
       if (freshPending.length > 0) {
         if (soundEnabled) playNotificationChime();
+        setActiveStage("new");
         setNewOrderNotice(
           `${freshPending.length} new order${freshPending.length > 1 ? "s" : ""} · Table ${freshPending.map((order) => order.tableNumber).join(", ")}`,
         );
@@ -103,6 +112,10 @@ export default function OrdersManager({
       const updated = await api.updateOrderStatus(order.id, status);
       setOrders((current) => current.map((entry) => (entry.id === updated.id ? updated : entry)));
       if (options?.printKot) printKitchenOrderTicket(updated, restaurantName);
+      setActiveStage(stageForStatus(updated.status));
+      window.requestAnimationFrame(() => {
+        document.getElementById(`order-${updated.id}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      });
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to update order.");
     } finally {
@@ -151,6 +164,9 @@ export default function OrdersManager({
   const newCount = ordersInStage(orders, "new").length;
   const kitchenCount = ordersInStage(orders, "kitchen").length;
   const readyCount = ordersInStage(orders, "ready").length;
+  const doneCount = ordersInStage(orders, "done").length;
+  const stageList = ordersInStage(orders, activeStage);
+  const stageMeta = ORDER_BOARD_STAGES.find((stage) => stage.id === activeStage)!;
 
   return (
     <div className="space-y-6">
@@ -158,7 +174,7 @@ export default function OrdersManager({
         <div>
           <h1 className="text-2xl font-bold text-neutral-900 sm:text-3xl">Orders</h1>
           <p className="mt-1 text-sm text-neutral-500">
-            Clear path: New → Kitchen (KOT prints) → Ready → Served. Refreshes every 10 seconds.
+            One step at a time — next action sits on top of each ticket. Refreshes every 10 seconds.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -184,198 +200,207 @@ export default function OrdersManager({
         </div>
       </header>
 
-      <div className="grid grid-cols-3 gap-2 sm:gap-3">
-        {[
-          { label: "New", value: newCount },
-          { label: "Kitchen", value: kitchenCount },
-          { label: "Ready", value: readyCount },
-        ].map((stat) => (
-          <div key={stat.label} className="rounded-2xl border border-neutral-200 bg-white px-3 py-3 text-center sm:px-4">
-            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-400">{stat.label}</p>
-            <p className="mt-1 text-2xl font-bold tabular-nums text-neutral-900">{stat.value}</p>
-          </div>
-        ))}
-      </div>
+      <nav aria-label="Order workflow stages" className="sticky top-0 z-20 -mx-1 overflow-x-auto bg-[#f7f7f5]/95 px-1 py-2 backdrop-blur-md">
+        <div className="flex min-w-max gap-2 rounded-2xl border border-neutral-200 bg-white p-1.5 shadow-sm">
+          {(
+            [
+              { id: "new" as const, count: newCount },
+              { id: "kitchen" as const, count: kitchenCount },
+              { id: "ready" as const, count: readyCount },
+              { id: "done" as const, count: doneCount },
+            ] as const
+          ).map((tab) => {
+            if (tab.id === "done" && tab.count === 0) return null;
+            const active = activeStage === tab.id;
+            const title = ORDER_BOARD_STAGES.find((stage) => stage.id === tab.id)!.title;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveStage(tab.id)}
+                className={`inline-flex min-h-11 items-center gap-2 rounded-xl px-3.5 text-sm font-semibold transition ${
+                  active ? "bg-neutral-900 text-white" : "text-neutral-600 hover:bg-neutral-100"
+                }`}
+              >
+                {title}
+                <span
+                  className={`rounded-full px-1.5 py-0.5 text-[11px] tabular-nums ${
+                    active ? "bg-white/20 text-white" : "bg-neutral-100 text-neutral-700"
+                  }`}
+                >
+                  {tab.count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </nav>
 
       {newOrderNotice ? (
         <aside role="status" className="flex items-center justify-between gap-3 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm font-semibold text-neutral-900">
           <span>{newOrderNotice}</span>
-          <button type="button" onClick={() => setNewOrderNotice(null)} className="rounded-lg border border-neutral-300 px-2.5 py-1 text-xs">
-            Dismiss
+          <button
+            type="button"
+            onClick={() => {
+              setNewOrderNotice(null);
+              setActiveStage("new");
+            }}
+            className="rounded-lg border border-neutral-300 px-2.5 py-1 text-xs"
+          >
+            Open New
           </button>
         </aside>
       ) : null}
 
       {message ? <p role="alert" className="text-sm text-rose-600">{message}</p> : null}
 
-      {ORDER_BOARD_STAGES.map((stage) => {
-        const list = ordersInStage(orders, stage.id);
-        if (!list.length && stage.id === "done") return null;
-        return (
-          <section key={stage.id} className="space-y-3">
-            <div>
-              <h2 className="text-sm font-bold uppercase tracking-[0.16em] text-neutral-500">
-                {stage.title} · {list.length}
-              </h2>
-              <p className="text-xs text-neutral-400">{stage.hint}</p>
-            </div>
-            {!list.length ? (
-              <p className="rounded-2xl border border-dashed border-neutral-200 px-4 py-8 text-center text-sm text-neutral-400">
-                Nothing here right now.
-              </p>
-            ) : (
-              list.map((order) => {
-                const action = primaryFloorAction(order.status);
-                const isPaid = order.payment?.status === "PAID";
-                const acceptToKitchen = order.status === "PENDING";
-                return (
-                  <article id={`order-${order.id}`} key={order.id} className="scroll-mt-6 rounded-2xl border border-neutral-200 bg-white p-4 sm:p-5">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <h3 className="text-lg font-bold text-neutral-900">
-                          #{order.orderNumber}
-                          <span className="ml-2 text-sm font-semibold text-neutral-500">Table {order.tableNumber}</span>
-                        </h3>
-                        <p className="mt-1 text-xs text-neutral-400">{formatOrderClock(order.createdAt)}</p>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        {isPaid ? (
-                          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-                            Paid · {order.payment?.method}
-                          </span>
-                        ) : order.status !== "CANCELLED" ? (
-                          <span className="rounded-full border border-neutral-200 bg-neutral-50 px-3 py-1 text-xs text-neutral-500">
-                            Unpaid
-                          </span>
-                        ) : null}
-                        <span className="rounded-full bg-neutral-900 px-3 py-1 text-xs font-semibold text-white">
-                          {statusLabel(order.status)}
-                        </span>
-                      </div>
-                    </div>
-
-                    <ul className="mt-4 space-y-3">
-                      {order.items.map((item, index) => (
-                        <li key={`${item.dishId}-${index}`} className="flex items-start justify-between gap-3 border-t border-neutral-100 pt-3 text-sm">
-                          <div>
-                            <p className="font-semibold text-neutral-900">
-                              <span className="mr-2 inline-flex h-6 min-w-6 items-center justify-center rounded-md bg-neutral-100 px-1.5 text-xs font-bold">
-                                {item.quantity}
-                              </span>
-                              {item.dishNameSnapshot}
-                            </p>
-                            {item.addons.map((addon) => (
-                              <p key={addon.addonId} className="mt-0.5 pl-8 text-xs text-neutral-500">
-                                + {addon.nameSnapshot}
-                                {addon.quantity > 1 ? ` × ${addon.quantity}` : ""}
-                              </p>
-                            ))}
-                          </div>
-                          <span className="shrink-0 text-neutral-600">₹{item.itemTotal}</span>
-                        </li>
-                      ))}
-                    </ul>
-
-                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-neutral-100 pt-4">
-                      <div>
-                        <p className="font-mono text-lg font-bold text-neutral-900">Total ₹{order.total}</p>
-                        {order.payment?.recordedAt ? (
-                          <p className="text-[11px] text-neutral-500">
-                            Paid {formatOrderClock(order.payment.recordedAt)}
-                            {order.payment.recordedBy?.name ? ` by ${order.payment.recordedBy.name}` : ""}
-                          </p>
-                        ) : null}
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        {canReprintKot(order.status) ? (
-                          <button
-                            type="button"
-                            onClick={() => printKitchenOrderTicket(order, restaurantName)}
-                            className="inline-flex h-11 items-center gap-1.5 rounded-xl border border-neutral-300 px-3.5 text-sm font-semibold text-neutral-700"
-                          >
-                            <Printer className="h-4 w-4" /> Print KOT
-                          </button>
-                        ) : null}
-                        {order.status !== "CANCELLED" && !isPaid ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setPaymentModalOrder(order);
-                              setSelectedMethod("CASH");
-                              setPaymentError("");
-                            }}
-                            className="h-11 rounded-xl border border-neutral-300 px-3.5 text-sm font-semibold text-neutral-700"
-                          >
-                            Record payment
-                          </button>
-                        ) : null}
-                        {order.status !== "CANCELLED" && isPaid ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setCorrectionModalOrder(order);
-                              setCorrectionAction("CORRECTION");
-                              setCorrectionMethod(order.payment?.method === "CASH" ? "UPI" : "CASH");
-                              setCorrectionReason("");
-                              setPaymentError("");
-                            }}
-                            className="h-11 rounded-xl border border-neutral-300 px-3 text-sm text-neutral-600"
-                          >
-                            Edit payment
-                          </button>
-                        ) : null}
-                        {canCancelOrder(order.status) ||
-                        ["ACCEPTED", "PREPARING"].includes(order.status) ? (
-                          <button
-                            type="button"
-                            disabled={busyId === order.id}
-                            onClick={() => {
-                              setLineCancelOrder(order);
-                              setLineCancelQty({});
-                              setLineCancelReason("");
-                              setLineCancelConfirm(false);
-                              setPaymentError("");
-                            }}
-                            className="h-11 rounded-xl border border-amber-200 px-3.5 text-sm font-semibold text-amber-800 disabled:opacity-50"
-                          >
-                            Cancel lines
-                          </button>
-                        ) : null}
-                        {canCancelOrder(order.status) ? (
-                          <button
-                            type="button"
-                            disabled={busyId === order.id}
-                            onClick={() => void setStatus(order, "CANCELLED")}
-                            className="h-11 rounded-xl border border-rose-200 px-4 text-sm font-semibold text-rose-600 disabled:opacity-50"
-                          >
-                            Cancel
-                          </button>
-                        ) : null}
-                        {action ? (
-                          <button
-                            type="button"
-                            disabled={busyId === order.id}
-                            onClick={() => void setStatus(order, action.status, { printKot: acceptToKitchen })}
-                            className="h-11 rounded-xl bg-neutral-900 px-4 text-sm font-bold text-white disabled:opacity-50"
-                          >
-                            {busyId === order.id ? "Updating…" : action.label}
-                          </button>
-                        ) : null}
-                      </div>
-                    </div>
-                  </article>
-                );
-              })
-            )}
-          </section>
-        );
-      })}
+      <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-3">
+        <p className="text-sm font-semibold text-neutral-900">{stageMeta.title}</p>
+        <p className="text-xs text-neutral-500">{stageMeta.hint}</p>
+      </div>
 
       {!orders.length ? (
         <p className="rounded-2xl border border-dashed border-neutral-300 p-10 text-center text-sm text-neutral-500">
           No orders yet.
         </p>
-      ) : null}
+      ) : !stageList.length ? (
+        <p className="rounded-2xl border border-dashed border-neutral-200 px-4 py-12 text-center text-sm text-neutral-400">
+          Nothing in {stageMeta.title.toLowerCase()} right now. Switch tabs for other steps.
+        </p>
+      ) : (
+        <div className="space-y-3">
+          {stageList.map((order) => {
+            const action = primaryFloorAction(order.status);
+            const isPaid = order.payment?.status === "PAID";
+            const acceptToKitchen = order.status === "PENDING";
+            return (
+              <article
+                id={`order-${order.id}`}
+                key={order.id}
+                className="scroll-mt-24 overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3 border-b border-neutral-100 bg-neutral-50/80 px-4 py-3.5 sm:px-5">
+                  <div className="min-w-0">
+                    <h3 className="text-lg font-bold text-neutral-900">
+                      #{order.orderNumber}
+                      <span className="ml-2 text-sm font-semibold text-neutral-500">Table {order.tableNumber}</span>
+                    </h3>
+                    <p className="mt-0.5 text-xs text-neutral-400">
+                      {formatOrderClock(order.createdAt)} · {statusLabel(order.status)}
+                      {isPaid ? ` · Paid ${order.payment?.method}` : " · Unpaid"}
+                    </p>
+                    <p className="mt-1 font-mono text-base font-bold tabular-nums text-neutral-900">₹{order.total}</p>
+                  </div>
+                  {action ? (
+                    <button
+                      type="button"
+                      disabled={busyId === order.id}
+                      onClick={() => void setStatus(order, action.status, { printKot: acceptToKitchen })}
+                      className="min-h-12 min-w-[10.5rem] rounded-2xl bg-neutral-900 px-4 text-sm font-bold text-white disabled:opacity-50"
+                    >
+                      {busyId === order.id ? "Updating…" : action.label}
+                    </button>
+                  ) : (
+                    <span className="rounded-full bg-neutral-200 px-3 py-1 text-xs font-semibold text-neutral-600">
+                      {statusLabel(order.status)}
+                    </span>
+                  )}
+                </div>
+
+                <div className="px-4 py-3 sm:px-5">
+                  <ul className="space-y-2">
+                    {order.items.map((item, index) => (
+                      <li key={`${item.dishId}-${index}`} className="flex items-start justify-between gap-3 text-sm">
+                        <div>
+                          <p className="font-semibold text-neutral-900">
+                            <span className="mr-2 inline-flex h-6 min-w-6 items-center justify-center rounded-md bg-neutral-100 px-1.5 text-xs font-bold">
+                              {item.quantity}
+                            </span>
+                            {item.dishNameSnapshot}
+                          </p>
+                          {item.addons.map((addon) => (
+                            <p key={addon.addonId} className="mt-0.5 pl-8 text-xs text-neutral-500">
+                              + {addon.nameSnapshot}
+                              {addon.quantity > 1 ? ` × ${addon.quantity}` : ""}
+                            </p>
+                          ))}
+                        </div>
+                        <span className="shrink-0 text-neutral-600">₹{item.itemTotal}</span>
+                      </li>
+                    ))}
+                  </ul>
+
+                  <div className="mt-3 flex flex-wrap gap-2 border-t border-neutral-100 pt-3">
+                    {canReprintKot(order.status) ? (
+                      <button
+                        type="button"
+                        onClick={() => printKitchenOrderTicket(order, restaurantName)}
+                        className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-neutral-300 px-3 text-xs font-semibold text-neutral-700"
+                      >
+                        <Printer className="h-3.5 w-3.5" /> Print KOT
+                      </button>
+                    ) : null}
+                    {order.status !== "CANCELLED" && !isPaid ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPaymentModalOrder(order);
+                          setSelectedMethod("CASH");
+                          setPaymentError("");
+                        }}
+                        className="h-10 rounded-xl border border-neutral-300 px-3 text-xs font-semibold text-neutral-700"
+                      >
+                        Record payment
+                      </button>
+                    ) : null}
+                    {order.status !== "CANCELLED" && isPaid ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCorrectionModalOrder(order);
+                          setCorrectionAction("CORRECTION");
+                          setCorrectionMethod(order.payment?.method === "CASH" ? "UPI" : "CASH");
+                          setCorrectionReason("");
+                          setPaymentError("");
+                        }}
+                        className="h-10 rounded-xl border border-neutral-300 px-3 text-xs text-neutral-600"
+                      >
+                        Edit payment
+                      </button>
+                    ) : null}
+                    {canCancelOrder(order.status) || ["ACCEPTED", "PREPARING"].includes(order.status) ? (
+                      <button
+                        type="button"
+                        disabled={busyId === order.id}
+                        onClick={() => {
+                          setLineCancelOrder(order);
+                          setLineCancelQty({});
+                          setLineCancelReason("");
+                          setLineCancelConfirm(false);
+                          setPaymentError("");
+                        }}
+                        className="h-10 rounded-xl border border-amber-200 px-3 text-xs font-semibold text-amber-800 disabled:opacity-50"
+                      >
+                        Cancel lines
+                      </button>
+                    ) : null}
+                    {canCancelOrder(order.status) ? (
+                      <button
+                        type="button"
+                        disabled={busyId === order.id}
+                        onClick={() => void setStatus(order, "CANCELLED")}
+                        className="h-10 rounded-xl border border-rose-200 px-3 text-xs font-semibold text-rose-600 disabled:opacity-50"
+                      >
+                        Cancel
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
 
       {paymentModalOrder ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-900/40 p-4 backdrop-blur-xs">
