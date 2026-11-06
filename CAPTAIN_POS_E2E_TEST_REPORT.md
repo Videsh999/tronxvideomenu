@@ -20,4 +20,5 @@
 
 ## Screenshots
 
-Captured from running deployment / local after deploy — see assets attached in chat / `docs/screenshots/` if published with this release.
+- Live Captain POS (prod, Triparna Kitchen, table 2 + cart): `docs/screenshots/captain-pos-live.png`
+- Deploy: `28a7dcd` on `menu.tronx.co.in` (Ready)
