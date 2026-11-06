@@ -43,7 +43,10 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     if (!restaurant) {
       return NextResponse.json({ success: false, error: "Restaurant not found." }, { status: 404 });
     }
-    const feature = requireRestaurantFeature(restaurant, "KITCHEN_DISPLAY");
+    // Captains operate via ORDER_MANAGEMENT; admin KDS via KITCHEN_DISPLAY.
+    const feature = captainResult?.captain
+      ? requireRestaurantFeature(restaurant, "ORDER_MANAGEMENT")
+      : requireRestaurantFeature(restaurant, "KITCHEN_DISPLAY");
     if (!feature.allowed) {
       return NextResponse.json({ success: false, error: feature.reason }, { status: 403 });
     }
@@ -55,6 +58,31 @@ export async function PATCH(request: Request, { params }: RouteContext) {
         { success: false, error: "Validation failed", details: parsed.error.issues },
         { status: 400 },
       );
+    }
+
+    if (captainResult?.captain) {
+      const order = await orderService.getForRestaurant(restaurantId, orderId);
+      if (!order) {
+        return NextResponse.json({ success: false, error: "Order not found." }, { status: 404 });
+      }
+      if (order.tableId) {
+        const { captainService } = await import("@/lib/services/captain.service");
+        try {
+          await captainService.assertCaptainMayServeTable(
+            captainResult.captain.id,
+            restaurantId,
+            order.tableId,
+          );
+        } catch (authError) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: authError instanceof Error ? authError.message : "Not authorized for this table.",
+            },
+            { status: 403 },
+          );
+        }
+      }
     }
 
     const updated = await orderService.updateItemPreparation(

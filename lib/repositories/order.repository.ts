@@ -39,7 +39,8 @@ export class OrderRepository implements IOrderRepository {
 
   async findKitchenActive(restaurantId: string, station?: KitchenStation) {
     await connectToDatabase();
-    const statuses = ["PENDING", "ACCEPTED", "PREPARING", "READY"];
+    // PENDING stays on captain/admin New board until Accept — KDS only after kitchen entry.
+    const statuses = ["ACCEPTED", "PREPARING", "READY"];
     const orders = await OrderModel.find({
       restaurantId,
       status: { $in: statuses },

@@ -16,7 +16,16 @@ export async function GET() {
   const { captain, error } = await requireCaptain("ORDER_MANAGEMENT");
   if (error) return error;
   try {
-    return NextResponse.json({ success: true, data: await orderService.listForRestaurant(captain.restaurantId) });
+    const assigned = new Set(captain.assignedTableIds ?? []);
+    const [orders, tables] = await Promise.all([
+      orderService.listForRestaurant(captain.restaurantId),
+      tableRepository.findByRestaurantId(captain.restaurantId),
+    ]);
+    const assignedNumbers = new Set(
+      tables.filter((table) => assigned.has(table.id)).map((table) => table.tableNumber),
+    );
+    const scoped = orders.filter((order) => assignedNumbers.has(order.tableNumber));
+    return NextResponse.json({ success: true, data: scoped });
   } catch {
     return NextResponse.json({ success: false, error: "Unable to load orders" }, { status: 500 });
   }

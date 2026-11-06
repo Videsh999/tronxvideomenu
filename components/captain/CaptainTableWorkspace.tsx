@@ -14,6 +14,9 @@ import {
 import type { OrderSummary, RestaurantTable } from "@/types";
 import type { ServiceRequest, ServiceRequestType } from "@/types/service-request";
 import { TABLE_STATUS_LABEL, TABLE_STATUS_STYLE } from "@/lib/captain-floor";
+import { isPendingCaptainApproval } from "@/lib/order-authorization";
+import { primaryFloorAction } from "@/lib/order-board";
+import { printKitchenOrderTicket } from "@/lib/kot-print";
 
 function money(value: number, currency = "INR") {
   return new Intl.NumberFormat(undefined, {
@@ -130,6 +133,99 @@ export default function CaptainTableWorkspace({
     });
   }
 
+  function refreshTable() {
+    return fetch(`/api/captain/tables/${table.id}`)
+      .then((response) => response.json())
+      .then((refreshed) => {
+        if (refreshed.success) {
+          setTable(refreshed.data.table);
+          setOrder(refreshed.data.activeOrder);
+          setRequests(refreshed.data.requests);
+        }
+      });
+  }
+
+  /** QR approve → kitchen, or Accept & send for captain/POS new orders. */
+  function sendToKitchen() {
+    if (!order) return;
+    startTransition(async () => {
+      setMessage(null);
+      try {
+        if (isPendingCaptainApproval(order)) {
+          const response = await fetch(`/api/captain/orders/${order.id}/authorize`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              decision: "APPROVE",
+              idempotencyKey: crypto.randomUUID(),
+              sendToKitchen: true,
+            }),
+          });
+          const json = await response.json();
+          if (!json.success) throw new Error(json.error || "Unable to approve order");
+          setOrder(json.data);
+          setMessage(`Order #${order.orderNumber} approved · sent to kitchen`);
+          printKitchenOrderTicket(json.data);
+        } else {
+          const response = await fetch(`/api/captain/orders/${order.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: "PREPARING" }),
+          });
+          const json = await response.json();
+          if (!json.success) throw new Error(json.error || "Unable to send to kitchen");
+          setOrder(json.data);
+          setMessage(`Order #${order.orderNumber} sent to kitchen`);
+          printKitchenOrderTicket(json.data);
+        }
+        await refreshTable();
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : "Unable to send to kitchen");
+      }
+    });
+  }
+
+  function advanceOrderStatus(status: OrderSummary["status"], label: string) {
+    if (!order) return;
+    startTransition(async () => {
+      setMessage(null);
+      try {
+        const response = await fetch(`/api/captain/orders/${order.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status }),
+        });
+        const json = await response.json();
+        if (!json.success) throw new Error(json.error || `Unable to ${label.toLowerCase()}`);
+        setOrder(json.data);
+        setMessage(`${label} · #${order.orderNumber}`);
+        await refreshTable();
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : "Unable to update order");
+      }
+    });
+  }
+
+  function setItemPrep(lineId: string, preparationStatus: "PREPARING" | "READY") {
+    if (!order) return;
+    startTransition(async () => {
+      setMessage(null);
+      try {
+        const response = await fetch(`/api/kitchen/orders/${order.id}/items`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ lineId, preparationStatus }),
+        });
+        const json = await response.json();
+        if (!json.success) throw new Error(json.error || "Unable to update item");
+        setOrder(json.data);
+        await refreshTable();
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : "Unable to update item");
+      }
+    });
+  }
+
   return (
     <div className="space-y-6">
       <header className="flex flex-col gap-4 rounded-[2rem] border border-neutral-200 bg-white p-5 shadow-sm sm:flex-row sm:items-end sm:justify-between sm:p-6">
@@ -232,26 +328,91 @@ export default function CaptainTableWorkspace({
                 </div>
               </div>
 
+              {isPendingCaptainApproval(order) ? (
+                <p className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+                  Customer QR order — approve to print KOT and release to kitchen.
+                </p>
+              ) : order.status === "PENDING" ? (
+                <p className="rounded-2xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-950">
+                  New order waiting — accept to send KOT to kitchen.
+                </p>
+              ) : null}
+
               <ul className="divide-y divide-neutral-100 rounded-2xl border border-neutral-100">
-                {order.items.map((item) => (
-                  <li key={item.lineId ?? `${item.dishId}-${item.variantId}`} className="flex items-start justify-between gap-3 px-3 py-2.5 text-sm">
-                    <div>
-                      <p className="font-semibold">
-                        {item.quantity}× {item.dishNameSnapshot}
-                        {item.variantNameSnapshot ? ` · ${item.variantNameSnapshot}` : ""}
-                      </p>
-                      {item.note ? <p className="text-xs text-neutral-500">{item.note}</p> : null}
-                      <p className="text-[11px] uppercase tracking-wide text-neutral-400">
-                        {(item.kitchenStation ?? "MAIN").toLowerCase()} ·{" "}
-                        {(item.preparationStatus ?? "QUEUED").toLowerCase()}
-                      </p>
-                    </div>
-                    <p className="tabular-nums font-medium">{money(item.itemTotal, currency)}</p>
-                  </li>
-                ))}
+                {order.items.map((item, index) => {
+                  const lineId = item.lineId ?? `legacy-${index}`;
+                  const inKitchen = ["ACCEPTED", "PREPARING", "READY"].includes(order.status);
+                  return (
+                    <li
+                      key={lineId}
+                      className="flex flex-col gap-2 px-3 py-2.5 text-sm sm:flex-row sm:items-start sm:justify-between"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-semibold">
+                          {item.quantity}× {item.dishNameSnapshot}
+                          {item.variantNameSnapshot ? ` · ${item.variantNameSnapshot}` : ""}
+                        </p>
+                        {item.note ? <p className="text-xs text-neutral-500">{item.note}</p> : null}
+                        <p className="text-[11px] uppercase tracking-wide text-neutral-400">
+                          {(item.kitchenStation ?? "MAIN").toLowerCase()} ·{" "}
+                          {(item.preparationStatus ?? "QUEUED").toLowerCase()}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 flex-wrap items-center gap-2">
+                        <p className="tabular-nums font-medium">{money(item.itemTotal, currency)}</p>
+                        {inKitchen ? (
+                          <>
+                            <button
+                              type="button"
+                              disabled={pending || item.preparationStatus === "PREPARING"}
+                              onClick={() => setItemPrep(lineId, "PREPARING")}
+                              className="rounded-lg border border-neutral-300 px-2 py-1 text-[11px] font-semibold disabled:opacity-40"
+                            >
+                              Start
+                            </button>
+                            <button
+                              type="button"
+                              disabled={pending || item.preparationStatus === "READY"}
+                              onClick={() => setItemPrep(lineId, "READY")}
+                              className="rounded-lg bg-emerald-700 px-2 py-1 text-[11px] font-bold text-white disabled:opacity-40"
+                            >
+                              Item ready
+                            </button>
+                          </>
+                        ) : null}
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
 
               <div className="flex flex-wrap gap-2">
+                {order.status === "PENDING" || isPendingCaptainApproval(order) ? (
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={sendToKitchen}
+                    className="inline-flex min-h-11 items-center gap-2 rounded-full bg-neutral-900 px-4 text-sm font-bold text-white disabled:opacity-50"
+                  >
+                    {isPendingCaptainApproval(order)
+                      ? "Approve & send to kitchen"
+                      : "Accept & send to kitchen"}
+                  </button>
+                ) : null}
+                {(() => {
+                  const action = primaryFloorAction(order.status);
+                  if (!action || order.status === "PENDING") return null;
+                  return (
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={() => advanceOrderStatus(action.status, action.label)}
+                      className="inline-flex min-h-11 items-center gap-2 rounded-full bg-[#e7c27d] px-4 text-sm font-bold text-neutral-900 disabled:opacity-50"
+                    >
+                      {action.label}
+                    </button>
+                  );
+                })()}
                 <Link
                   href={`/captain/${slug}/take-order?table=${table.tableNumber}`}
                   className="inline-flex min-h-10 items-center gap-2 rounded-full border border-neutral-300 px-4 text-sm font-semibold"

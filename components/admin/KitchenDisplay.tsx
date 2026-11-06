@@ -241,22 +241,28 @@ export default function KitchenDisplay({ restaurantName, initialOrders }: Kitche
                           </p>
                         </div>
                       </div>
-                      <div className="mt-2 flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => void setItemStatus(order.id, lineId, "PREPARING")}
-                          className="min-h-10 flex-1 rounded-lg bg-[#e7c27d]/20 text-sm"
-                        >
-                          Start
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void setItemStatus(order.id, lineId, "READY")}
-                          className="min-h-10 flex-1 rounded-lg bg-[#3d6b4f] text-sm"
-                        >
-                          Item ready
-                        </button>
-                      </div>
+                      {["ACCEPTED", "PREPARING", "READY"].includes(order.status) ? (
+                        <div className="mt-2 flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void setItemStatus(order.id, lineId, "PREPARING")}
+                            className="min-h-10 flex-1 rounded-lg bg-[#e7c27d]/20 text-sm"
+                          >
+                            Start
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void setItemStatus(order.id, lineId, "READY")}
+                            className="min-h-10 flex-1 rounded-lg bg-[#3d6b4f] text-sm"
+                          >
+                            Item ready
+                          </button>
+                        </div>
+                      ) : (
+                        <p className="mt-2 text-xs text-[#e7c27d]">
+                          Waiting for captain Accept — not in kitchen yet.
+                        </p>
+                      )}
                     </li>
                   );
                 })}
