@@ -92,7 +92,7 @@ export class RestaurantService {
 
   async update(
     id: string,
-    input: UpdateRestaurantInput,
+    input: UpdateRestaurantInput & Partial<Pick<Restaurant, "billing">>,
   ): Promise<Restaurant | null> {
     if (input.slug) {
       const existing = await restaurantRepository.findBySlug(input.slug);

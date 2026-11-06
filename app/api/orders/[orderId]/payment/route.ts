@@ -13,6 +13,11 @@ import {
   correctPaymentSchema,
 } from "@/lib/validations";
 import type { PaymentAuditActor } from "@/types";
+import {
+  captainMayRecordPayment,
+  resolveCaptainPermissions,
+} from "@/lib/captain-permissions";
+import { captainService } from "@/lib/services/captain.service";
 
 type RouteContext = { params: Promise<{ orderId: string }> };
 
@@ -105,6 +110,37 @@ export async function POST(request: Request, { params }: RouteContext) {
         },
         { status: 400 },
       );
+    }
+
+    if (captainResult?.captain) {
+      const permissions = resolveCaptainPermissions(captainResult.captain);
+      if (!captainMayRecordPayment(permissions, parsed.data.method)) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Captain is not permitted to record ${parsed.data.method} payments.`,
+          },
+          { status: 403 },
+        );
+      }
+      const order = await orderService.getForRestaurant(restaurantId, orderId);
+      if (order?.tableId) {
+        try {
+          await captainService.assertCaptainMayServeTable(
+            captainResult.captain.id,
+            restaurantId,
+            order.tableId,
+          );
+        } catch (authError) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: authError instanceof Error ? authError.message : "Not authorized for this table.",
+            },
+            { status: 403 },
+          );
+        }
+      }
     }
 
     const updated = await orderService.recordPayment(

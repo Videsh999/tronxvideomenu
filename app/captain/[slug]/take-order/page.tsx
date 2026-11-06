@@ -35,12 +35,17 @@ export default async function CaptainTakeOrderPage({
     <CaptainOrderPad
       slug={slug}
       currency={menu.restaurant.currency ?? "INR"}
-      taxRatePercent={menu.restaurant.billing?.taxRatePercent ?? 0}
+      taxRatePercent={
+        menu.restaurant.billing?.gstRatePercent ??
+        menu.restaurant.billing?.taxRatePercent ??
+        0
+      }
       taxLabel={menu.restaurant.billing?.taxLabel ?? "Tax"}
       categories={menu.categories.filter((category) => category.isActive)}
       dishes={menu.dishes}
       tables={tables}
       initialTableNumber={initialTableNumber}
+      permissions={captain.permissions}
     />
   );
 }

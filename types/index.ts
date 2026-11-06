@@ -12,6 +12,22 @@ export type User = {
   updatedAt: string;
 };
 
+/** Server-enforced captain capabilities. Missing fields resolve to safe defaults. */
+export type CaptainPermissions = {
+  viewBill?: boolean;
+  requestBill?: boolean;
+  recordCashPayment?: boolean;
+  recordUpiPayment?: boolean;
+  recordCardPayment?: boolean;
+  applyCoupon?: boolean;
+  applyDiscount?: boolean;
+  printReceipt?: boolean;
+  /** Max bill discount as % of items subtotal. */
+  maxDiscountPercent?: number;
+  /** Absolute max bill discount amount in restaurant currency. */
+  maxDiscountAmount?: number;
+};
+
 export type Captain = {
   id: string;
   restaurantId: string;
@@ -26,6 +42,7 @@ export type Captain = {
   employeeCode?: string;
   /** Table document ids assigned to this captain. Configurable; never hard-capped. */
   assignedTableIds?: string[];
+  permissions?: CaptainPermissions;
   lastActiveAt?: string;
   createdAt: string;
   updatedAt: string;

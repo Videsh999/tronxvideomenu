@@ -792,7 +792,14 @@ export class OrderService {
     });
 
     if (!updated) throw new OrderServiceError("Unable to update order.", 500);
+    // Additional-item KOT — does not re-print the whole ticket; enqueue uses current order snapshot.
+    void this.enqueueKotPrintSafe(updated, { actorId: actor.id });
     return staffOrderView(updated);
+  }
+
+  /** Explicit additional KOT enqueue for captain append flows (idempotent print layer handles dupes). */
+  async enqueueAdditionalKot(order: RestaurantOrder, actorId?: string) {
+    return this.enqueueKotPrintSafe(order, { actorId });
   }
 
   /**

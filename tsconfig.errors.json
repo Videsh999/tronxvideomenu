@@ -1,0 +1,34 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "plugins": [],
+    "incremental": false,
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "include": [
+    "app/captain/**/*.tsx",
+    "app/api/captain/**/*.ts",
+    "app/api/admin/billing/**/*.ts",
+    "app/admin/[slug]/settings/billing/**/*.tsx",
+    "components/captain/**/*.tsx",
+    "components/admin/CaptainManagement.tsx",
+    "components/admin/PosTerminal.tsx",
+    "components/admin/BillingSettingsForm.tsx",
+    "lib/order-authorization.ts",
+    "lib/captain-permissions.ts",
+    "lib/billing/**/*.ts",
+    "lib/captain-floor.ts",
+    "lib/services/captain.service.ts",
+    "lib/services/restaurant.service.ts",
+    "lib/services/order.service.ts",
+    "app/api/orders/[orderId]/payment/route.ts",
+    "lib/services/service-request.service.ts",
+    "lib/repositories/order.repository.ts",
+    "lib/repositories/service-request.repository.ts",
+    "lib/repositories/billing-audit.repository.ts",
+    "lib/validations/captain-authorize.ts",
+    "types/**/*.ts"
+  ],
+  "exclude": ["node_modules", "device-connector", ".next"]
+}

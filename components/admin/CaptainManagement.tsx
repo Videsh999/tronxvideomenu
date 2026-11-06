@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { ExternalLink, Eye, EyeOff } from "lucide-react";
-import type { CaptainView, RestaurantTable } from "@/types";
+import type { CaptainPermissions, CaptainView, RestaurantTable } from "@/types";
 import { PasswordInput } from "@/components/shared/AuthLayout";
+import { resolveCaptainPermissions } from "@/lib/captain-permissions";
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -76,6 +77,23 @@ export default function CaptainManagement({
       setMessage(`Tables updated for ${captain.name}. Conflicts moved off other captains.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to assign tables");
+    } finally {
+      setPendingId(null);
+    }
+  };
+
+  const savePermissions = async (captain: CaptainView, permissions: CaptainPermissions) => {
+    setPendingId(captain.id);
+    setMessage("");
+    try {
+      await request(`/api/admin/captains/${encodeURIComponent(captain.id)}`, {
+        method: "PATCH",
+        body: JSON.stringify({ permissions }),
+      });
+      await refresh();
+      setMessage(`Permissions updated for ${captain.name}.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to save permissions");
     } finally {
       setPendingId(null);
     }
@@ -428,6 +446,11 @@ export default function CaptainManagement({
                   </p>
                 )}
               </div>
+              <CaptainPermissionsEditor
+                captain={captain}
+                busy={pendingId === captain.id}
+                onSave={(permissions) => void savePermissions(captain, permissions)}
+              />
               <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
                 <span className="min-w-44 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 font-mono text-neutral-700">
                   {isPasswordVisible
@@ -572,6 +595,107 @@ export default function CaptainManagement({
           </form>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function CaptainPermissionsEditor({
+  captain,
+  busy,
+  onSave,
+}: {
+  captain: CaptainView;
+  busy: boolean;
+  onSave: (permissions: CaptainPermissions) => void;
+}) {
+  const resolved = resolveCaptainPermissions(captain);
+  const [draft, setDraft] = useState<CaptainPermissions>(resolved);
+
+  useEffect(() => {
+    setDraft(resolveCaptainPermissions(captain));
+  }, [captain]);
+
+  const flags: { key: keyof CaptainPermissions; label: string }[] = [
+    { key: "viewBill", label: "View bill" },
+    { key: "requestBill", label: "Request bill" },
+    { key: "recordCashPayment", label: "Cash pay" },
+    { key: "recordUpiPayment", label: "UPI pay" },
+    { key: "recordCardPayment", label: "Card pay" },
+    { key: "applyCoupon", label: "Coupons" },
+    { key: "applyDiscount", label: "Discounts" },
+    { key: "printReceipt", label: "Receipts" },
+  ];
+
+  return (
+    <div className="mt-4 rounded-2xl border border-neutral-200 bg-white p-4">
+      <p className="text-sm font-bold text-neutral-900">Captain POS permissions</p>
+      <p className="mt-1 text-xs text-neutral-500">
+        Server-enforced. Refunds and cash-close stay admin-only.
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {flags.map((flag) => {
+          const checked = Boolean(draft[flag.key] ?? false);
+          return (
+            <label
+              key={flag.key}
+              className={`inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold ${
+                checked ? "border-neutral-900 bg-neutral-900 text-white" : "border-neutral-200 bg-neutral-50"
+              }`}
+            >
+              <input
+                type="checkbox"
+                className="sr-only"
+                checked={checked}
+                onChange={() =>
+                  setDraft((current) => ({ ...current, [flag.key]: !checked }))
+                }
+              />
+              {flag.label}
+            </label>
+          );
+        })}
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <label className="text-xs font-medium text-neutral-600">
+          Max discount %
+          <input
+            type="number"
+            min={0}
+            max={100}
+            value={draft.maxDiscountPercent ?? 25}
+            onChange={(event) =>
+              setDraft((current) => ({
+                ...current,
+                maxDiscountPercent: Number(event.target.value) || 0,
+              }))
+            }
+            className="mt-1 min-h-10 w-full rounded-xl border border-neutral-200 px-3 text-sm"
+          />
+        </label>
+        <label className="text-xs font-medium text-neutral-600">
+          Max discount amount
+          <input
+            type="number"
+            min={0}
+            value={draft.maxDiscountAmount ?? 500}
+            onChange={(event) =>
+              setDraft((current) => ({
+                ...current,
+                maxDiscountAmount: Number(event.target.value) || 0,
+              }))
+            }
+            className="mt-1 min-h-10 w-full rounded-xl border border-neutral-200 px-3 text-sm"
+          />
+        </label>
+      </div>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => onSave(draft)}
+        className="mt-3 inline-flex min-h-10 items-center rounded-xl border border-neutral-300 px-4 text-sm font-semibold disabled:opacity-50"
+      >
+        {busy ? "Saving…" : "Save permissions"}
+      </button>
     </div>
   );
 }

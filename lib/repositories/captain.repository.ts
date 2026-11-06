@@ -50,6 +50,7 @@ export class CaptainRepository {
         | "name"
         | "employeeCode"
         | "assignedTableIds"
+        | "permissions"
         | "lastActiveAt"
         | "passwordHash"
         | "passwordCiphertext"

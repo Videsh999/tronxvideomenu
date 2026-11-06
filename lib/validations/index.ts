@@ -377,15 +377,38 @@ export const createCaptainSchema = z.object({
   password: z.string().min(8).max(256),
   employeeCode: z.string().trim().max(40).optional(),
 });
+export const captainPermissionsSchema = z
+  .object({
+    viewBill: z.boolean().optional(),
+    requestBill: z.boolean().optional(),
+    recordCashPayment: z.boolean().optional(),
+    recordUpiPayment: z.boolean().optional(),
+    recordCardPayment: z.boolean().optional(),
+    applyCoupon: z.boolean().optional(),
+    applyDiscount: z.boolean().optional(),
+    printReceipt: z.boolean().optional(),
+    maxDiscountPercent: z.number().min(0).max(100).optional(),
+    maxDiscountAmount: z.number().min(0).max(1_000_000).optional(),
+  })
+  .strict();
+export type CaptainPermissionsInput = z.infer<typeof captainPermissionsSchema>;
 export const updateCaptainSchema = z
   .object({
     isActive: z.boolean().optional(),
     name: z.string().trim().min(2).max(100).optional(),
     employeeCode: z.string().trim().max(40).nullable().optional(),
+    permissions: captainPermissionsSchema.optional(),
   })
-  .refine((value) => value.isActive !== undefined || value.name !== undefined || value.employeeCode !== undefined, {
-    message: "Provide at least one field to update.",
-  });
+  .refine(
+    (value) =>
+      value.isActive !== undefined ||
+      value.name !== undefined ||
+      value.employeeCode !== undefined ||
+      value.permissions !== undefined,
+    {
+      message: "Provide at least one field to update.",
+    },
+  );
 export const assignCaptainTablesSchema = z
   .object({
     tableIds: z.array(z.string().min(1)).max(500),
@@ -491,6 +514,9 @@ export const placeCaptainOrderSchema = z
     guestName: z.string().trim().max(80).optional(),
     orderNote: z.string().trim().max(1000).optional(),
     customerPhone: z.string().trim().min(7).max(24).optional(),
+    billDiscountAmount: z.number().min(0).max(1_000_000).optional(),
+    couponCode: z.string().trim().min(3).max(40).optional(),
+    redeemLoyaltyPoints: z.number().int().min(0).max(1_000_000).optional(),
     idempotencyKey: z.string().uuid(),
     sendToKitchen: z.boolean().optional().default(true),
     items: z.array(posOrderItemSchema).min(1).max(80),

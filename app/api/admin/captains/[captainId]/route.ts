@@ -17,10 +17,15 @@ export async function PATCH(request: Request, context: { params: Promise<{ capta
     const { captainId } = await context.params;
 
     let captain = null;
-    if (input.name !== undefined || input.employeeCode !== undefined) {
+    if (
+      input.name !== undefined ||
+      input.employeeCode !== undefined ||
+      input.permissions !== undefined
+    ) {
       captain = await captainService.updateProfile(admin.restaurantId, captainId, {
         name: input.name,
         employeeCode: input.employeeCode,
+        permissions: input.permissions,
       });
     }
     if (input.isActive !== undefined) {

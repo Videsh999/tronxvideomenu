@@ -5,7 +5,7 @@ import { hashCaptainPassword, verifyCaptainPassword } from "@/lib/security/capta
 import { decryptCredentialPassword, encryptCredentialPassword } from "@/lib/security/credential-crypto-core";
 import { toCaptainView } from "@/lib/security/captain-view";
 import { canManageCaptainCredentials, type CredentialActorRole } from "@/lib/security/credential-access";
-import type { CaptainTableAssignmentEvent } from "@/types";
+import type { Captain, CaptainTableAssignmentEvent } from "@/types";
 
 export class CaptainService {
   constructor(private readonly repository: typeof captainRepository = captainRepository) {}
@@ -54,12 +54,21 @@ export class CaptainService {
   async updateProfile(
     restaurantId: string,
     id: string,
-    patch: { name?: string; employeeCode?: string | null },
+    patch: {
+      name?: string;
+      employeeCode?: string | null;
+      permissions?: Captain["permissions"];
+    },
   ) {
-    const update: { name?: string; employeeCode?: string } = {};
+    const update: {
+      name?: string;
+      employeeCode?: string;
+      permissions?: Captain["permissions"];
+    } = {};
     if (typeof patch.name === "string" && patch.name.trim()) update.name = patch.name.trim();
     if (patch.employeeCode === null) update.employeeCode = "";
     else if (typeof patch.employeeCode === "string") update.employeeCode = patch.employeeCode.trim();
+    if (patch.permissions) update.permissions = patch.permissions;
     const captain = await this.repository.updateForRestaurant(restaurantId, id, update);
     return captain ? toCaptainView(captain) : null;
   }

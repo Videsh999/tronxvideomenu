@@ -6,6 +6,11 @@ import { restaurantService } from "@/lib/services/restaurant.service";
 import { tableRepository } from "@/lib/repositories/table.repository";
 import { requireRestaurantFeature } from "@/lib/feature-access";
 import { placeCaptainOrderSchema } from "@/lib/validations";
+import {
+  assertCaptainDiscountAllowed,
+  resolveCaptainPermissions,
+} from "@/lib/captain-permissions";
+import { lineItemTotal } from "@/lib/order-pricing";
 
 export async function GET() {
   const { captain, error } = await requireCaptain("ORDER_MANAGEMENT");
@@ -18,8 +23,8 @@ export async function GET() {
 }
 
 /**
- * Captain walk-in order — same pricing/validation as POS via createPosOrder.
- * No phone required. Table must be assigned to this captain.
+ * Captain walk-in / floor POS order — same pricing path as admin POS via createPosOrder.
+ * Captain confirmation is authorization (CAPTAIN_DIRECT → CAPTAIN_APPROVED). No second approval.
  */
 export async function POST(request: Request) {
   const { captain, error } = await requireCaptain("ORDER_MANAGEMENT");
@@ -45,6 +50,60 @@ export async function POST(request: Request) {
           details: parsed.error.issues,
         },
         { status: 400 },
+      );
+    }
+
+    const permissions = resolveCaptainPermissions(captain);
+    if (parsed.data.couponCode && !permissions.applyCoupon) {
+      return NextResponse.json(
+        { success: false, error: "This captain is not permitted to apply coupons." },
+        { status: 403 },
+      );
+    }
+
+    const menu = await restaurantService.getFullMenu(restaurant.slug);
+    if (!menu || menu.restaurant.id !== captain.restaurantId) {
+      return NextResponse.json({ success: false, error: "Menu unavailable." }, { status: 404 });
+    }
+
+    let estimatedSubtotal = 0;
+    for (const requested of parsed.data.items) {
+      const dish = menu.dishes.find((entry) => entry.id === requested.dishId);
+      if (!dish) continue;
+      let unit = dish.price;
+      if (requested.variantId) {
+        const variant = (dish.variants ?? []).find((entry) => entry.id === requested.variantId);
+        if (variant) unit = variant.price;
+      }
+      const addonTotals: number[] = [];
+      for (const selection of requested.selections ?? []) {
+        const group = (dish.addonGroups ?? []).find((entry) => entry.id === selection.groupId);
+        for (const addonRef of selection.addons ?? []) {
+          const addon = group?.addons.find((entry) => entry.id === addonRef.addonId);
+          if (addon) addonTotals.push(addon.price);
+        }
+      }
+      estimatedSubtotal += lineItemTotal({
+        unitPrice: unit,
+        quantity: requested.quantity,
+        addonTotals,
+        itemDiscountAmount: requested.itemDiscountAmount ?? 0,
+      });
+    }
+
+    try {
+      assertCaptainDiscountAllowed(
+        permissions,
+        parsed.data.billDiscountAmount ?? 0,
+        estimatedSubtotal,
+      );
+    } catch (permissionError) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: permissionError instanceof Error ? permissionError.message : "Discount not allowed.",
+        },
+        { status: 403 },
       );
     }
 
@@ -107,6 +166,9 @@ export async function POST(request: Request) {
           guestCount: parsed.data.guestCount,
           orderNote: noteParts.length ? noteParts.join(" · ") : undefined,
           customerPhone: parsed.data.customerPhone,
+          billDiscountAmount: parsed.data.billDiscountAmount,
+          couponCode: parsed.data.couponCode,
+          redeemLoyaltyPoints: parsed.data.redeemLoyaltyPoints,
           idempotencyKey: parsed.data.idempotencyKey,
           items: parsed.data.items,
         },
@@ -133,6 +195,7 @@ export async function POST(request: Request) {
               "Order saved but kitchen handoff could not be confirmed — accept from Orders.";
           }
         } else if (appended && ["ACCEPTED", "PREPARING", "READY"].includes(order.status)) {
+          // appendItemsToOrder already enqueues KOT; mark kitchen notified.
           sentToKitchen = true;
         }
       } catch (kitchenError) {
@@ -147,7 +210,7 @@ export async function POST(request: Request) {
       {
         success: true,
         data: order,
-        meta: { sentToKitchen, appended, warning: kitchenWarning },
+        meta: { sentToKitchen, appended, warning: kitchenWarning, source: "CAPTAIN_DIRECT" },
       },
       { status: 201 },
     );

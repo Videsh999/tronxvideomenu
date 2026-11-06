@@ -449,7 +449,7 @@ export default function PosTerminal({
   }
 
   return (
-    <div className="flex min-h-[calc(100vh-4rem)] w-full min-w-0 max-w-full flex-col gap-3 overflow-x-hidden bg-[linear-gradient(160deg,#f7f4ef_0%,#ebe4d8_45%,#f3eee6_100%)] p-2 sm:gap-4 sm:p-3 md:p-4">
+    <div className="flex h-[calc(100dvh-4rem)] min-h-[32rem] w-full min-w-0 max-w-full flex-col gap-3 overflow-x-hidden overflow-y-auto bg-[linear-gradient(160deg,#f7f4ef_0%,#ebe4d8_45%,#f3eee6_100%)] p-2 sm:gap-4 sm:p-3 md:p-4 lg:overflow-hidden">
       <header className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#d9cfc0] bg-[#fffaf3]/90 px-3 py-3 sm:px-4">
         <div className="flex items-center gap-3">
           <MonitorSmartphone className="h-6 w-6 text-[#5c4634]" />
@@ -529,9 +529,9 @@ export default function PosTerminal({
         </section>
       )}
 
-      <div className="grid min-w-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(17.5rem,22rem)] lg:gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)]">
-        <section className="flex min-h-[22rem] min-w-0 flex-col gap-3 rounded-2xl border border-[#d9cfc0] bg-white/85 p-3 lg:min-h-[28rem]">
-          <div className="flex min-w-0 flex-wrap gap-2">
+      <div className="grid min-h-0 min-w-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)] lg:gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(20rem,26rem)]">
+        <section className="flex min-h-[22rem] min-w-0 flex-col gap-3 overflow-hidden rounded-2xl border border-[#d9cfc0] bg-white/85 p-3 lg:min-h-0">
+          <div className="flex min-w-0 shrink-0 flex-wrap gap-2">
             {channel === "POS_DINE_IN" ? (
               <select
                 value={tableNumber}
@@ -564,7 +564,7 @@ export default function PosTerminal({
               />
             </div>
           </div>
-          <div className="flex gap-2 overflow-x-auto pb-1">
+          <div className="flex shrink-0 gap-2 overflow-x-auto pb-1">
             <button
               type="button"
               onClick={() => setCategoryId("ALL")}
@@ -587,7 +587,7 @@ export default function PosTerminal({
               </button>
             ))}
           </div>
-          <div className="grid max-h-[min(55vh,36rem)] auto-rows-min content-start grid-cols-2 gap-2 overflow-y-auto sm:grid-cols-3 lg:max-h-none lg:flex-1 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+          <div className="grid min-h-0 flex-1 auto-rows-min content-start grid-cols-2 gap-2 overflow-y-auto overscroll-contain sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
             {availableDishes.map((dish) => (
               <button
                 key={dish.id}
@@ -609,7 +609,7 @@ export default function PosTerminal({
           </div>
         </section>
 
-        <aside className="grid min-h-[22rem] min-w-0 grid-rows-[auto_minmax(14rem,1fr)_auto] rounded-2xl border border-[#d9cfc0] bg-[#2f241c] text-[#f7f1e8] lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)]">
+        <aside className="flex min-h-[26rem] min-w-0 flex-col overflow-hidden rounded-2xl border border-[#d9cfc0] bg-[#2f241c] text-[#f7f1e8] lg:min-h-0 lg:h-full lg:max-h-full">
           <div className="shrink-0 space-y-2 border-b border-white/10 p-3 sm:p-4">
             <div className="flex items-center justify-between gap-2">
               <h2 className="text-lg font-semibold">
@@ -645,9 +645,9 @@ export default function PosTerminal({
             ) : null}
           </div>
 
-          <ul className="min-h-[14rem] space-y-2 overflow-y-auto overscroll-contain px-3 py-3 sm:px-4">
+          <ul className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain px-3 py-3 sm:px-4">
             {cart.length === 0 ? (
-              <li className="flex min-h-[12rem] items-center justify-center rounded-xl border border-dashed border-white/20 px-4 text-center text-sm text-[#d9cfc0]">
+              <li className="flex min-h-[8rem] items-center justify-center rounded-xl border border-dashed border-white/20 px-4 text-center text-sm text-[#d9cfc0]">
                 Tap a dish to add it. Each line will show − / + and Remove here.
               </li>
             ) : (
@@ -733,13 +733,14 @@ export default function PosTerminal({
             )}
           </ul>
 
-          <div className="shrink-0 space-y-2 border-t border-white/10 p-3 sm:max-h-[48%] sm:overflow-y-auto sm:p-4">
+          <div className="shrink-0 space-y-2 border-t border-white/10 bg-[#2f241c] p-3 sm:max-h-[min(46vh,24rem)] sm:overflow-y-auto sm:p-4">
           <label className="block text-sm text-[#d9cfc0]">
             Order note
             <textarea
               value={orderNote}
               onChange={(event) => setOrderNote(event.target.value)}
-              className="mt-1 min-h-12 w-full rounded-xl border border-white/20 bg-transparent px-3 py-2 text-[#f7f1e8]"
+              className="mt-1 min-h-10 w-full rounded-xl border border-white/20 bg-transparent px-3 py-2 text-[#f7f1e8]"
+              rows={2}
             />
           </label>
           <label className="block text-sm text-[#d9cfc0]">
