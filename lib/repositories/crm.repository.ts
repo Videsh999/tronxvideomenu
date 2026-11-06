@@ -44,6 +44,81 @@ export class CrmRepository {
     return row ? toDomain<CustomerProfile>(row) : null;
   }
 
+  async findByEmail(restaurantId: string, email: string): Promise<CustomerProfile | null> {
+    await connectToDatabase();
+    const row = await CustomerProfileModel.findOne({
+      restaurantId,
+      email: email.trim().toLowerCase(),
+    }).lean();
+    return row ? toDomain<CustomerProfile>(row) : null;
+  }
+
+  async findAuthByPhone(restaurantId: string, phone: string): Promise<CustomerProfile | null> {
+    await connectToDatabase();
+    const row = await CustomerProfileModel.findOne({ restaurantId, phone })
+      .select("+passwordHash")
+      .lean();
+    return row ? toDomain<CustomerProfile>(row) : null;
+  }
+
+  async findAuthByEmail(restaurantId: string, email: string): Promise<CustomerProfile | null> {
+    await connectToDatabase();
+    const row = await CustomerProfileModel.findOne({
+      restaurantId,
+      email: email.trim().toLowerCase(),
+    })
+      .select("+passwordHash")
+      .lean();
+    return row ? toDomain<CustomerProfile>(row) : null;
+  }
+
+  async findByResetTokenHash(
+    restaurantId: string,
+    tokenHash: string,
+  ): Promise<CustomerProfile | null> {
+    await connectToDatabase();
+    const row = await CustomerProfileModel.findOne({
+      restaurantId,
+      passwordResetTokenHash: tokenHash,
+    })
+      .select("+passwordHash +passwordResetTokenHash")
+      .lean();
+    return row ? toDomain<CustomerProfile>(row) : null;
+  }
+
+  async setCustomerCredentials(
+    restaurantId: string,
+    id: string,
+    patch: {
+      passwordHash?: string;
+      email?: string;
+      name?: string;
+      passwordResetTokenHash?: string | null;
+      passwordResetExpiresAt?: string | null;
+    },
+  ): Promise<CustomerProfile | null> {
+    await connectToDatabase();
+    const $set: Record<string, unknown> = { updatedAt: new Date().toISOString() };
+    const $unset: Record<string, string> = {};
+    if (patch.passwordHash !== undefined) $set.passwordHash = patch.passwordHash;
+    if (patch.email !== undefined) $set.email = patch.email.trim().toLowerCase();
+    if (patch.name !== undefined) $set.name = patch.name.trim();
+    if (patch.passwordResetTokenHash === null) $unset.passwordResetTokenHash = "";
+    else if (patch.passwordResetTokenHash !== undefined) {
+      $set.passwordResetTokenHash = patch.passwordResetTokenHash;
+    }
+    if (patch.passwordResetExpiresAt === null) $unset.passwordResetExpiresAt = "";
+    else if (patch.passwordResetExpiresAt !== undefined) {
+      $set.passwordResetExpiresAt = patch.passwordResetExpiresAt;
+    }
+    const update: Record<string, unknown> = { $set };
+    if (Object.keys($unset).length) update.$unset = $unset;
+    const row = await CustomerProfileModel.findOneAndUpdate({ restaurantId, id }, update, {
+      new: true,
+    }).lean();
+    return row ? toDomain<CustomerProfile>(row) : null;
+  }
+
   async upsertCustomer(
     data: Omit<CustomerProfile, "createdAt" | "updatedAt"> &
       Partial<Pick<CustomerProfile, "createdAt" | "updatedAt">>,
@@ -81,6 +156,7 @@ export class CrmRepository {
     kind: LoyaltyTransaction["kind"];
     points: number;
     orderId?: string;
+    orderTotal?: number;
     couponId?: string;
     idempotencyKey: string;
     note?: string;
@@ -107,12 +183,19 @@ export class CrmRepository {
       filter.loyaltyPoints = { $gte: absPoints };
     }
 
+    const $inc: Record<string, number> = { loyaltyPoints: delta };
+    const $set: Record<string, unknown> = { updatedAt: now };
+    if (params.kind === "EARN" && params.orderId) {
+      $inc.totalOrders = 1;
+      if (typeof params.orderTotal === "number" && params.orderTotal > 0) {
+        $inc.totalSpend = params.orderTotal;
+      }
+      $set.lastOrderAt = now;
+    }
+
     const updatedCustomer = await CustomerProfileModel.findOneAndUpdate(
       filter,
-      {
-        $inc: { loyaltyPoints: delta },
-        $set: { updatedAt: now },
-      },
+      { $inc, $set },
       { new: true },
     ).lean();
 

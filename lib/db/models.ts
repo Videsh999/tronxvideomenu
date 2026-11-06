@@ -1028,8 +1028,11 @@ const customerProfileSchema = new Schema(
     restaurantId: { type: String, required: true, index: true },
     organizationId: String,
     phone: { type: String, required: true },
-    email: String,
+    email: { type: String, lowercase: true, trim: true },
     name: String,
+    passwordHash: { type: String, select: false },
+    passwordResetTokenHash: { type: String, select: false },
+    passwordResetExpiresAt: String,
     segment: { type: String, enum: ["NEW", "REGULAR", "VIP", "LAPSED"] },
     loyaltyPoints: { type: Number, required: true, default: 0 },
     totalOrders: { type: Number, required: true, default: 0 },
@@ -1045,6 +1048,10 @@ const customerProfileSchema = new Schema(
   { ...baseOptions, collection: "customerProfiles" },
 );
 customerProfileSchema.index({ restaurantId: 1, phone: 1 }, { unique: true });
+customerProfileSchema.index(
+  { restaurantId: 1, email: 1 },
+  { unique: true, partialFilterExpression: { email: { $type: "string" } } },
+);
 
 const loyaltyTransactionSchema = new Schema(
   {

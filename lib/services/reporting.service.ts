@@ -5,6 +5,7 @@ import { crmRepository } from "@/lib/repositories/crm.repository";
 import { organizationRepository } from "@/lib/repositories/organization.repository";
 import { inventoryService } from "@/lib/services/inventory.service";
 import { roundMoney } from "@/lib/order-pricing";
+import { computeTablePerformance } from "@/lib/analytics/tables";
 
 function inRange(iso: string, from?: string, to?: string) {
   const t = new Date(iso).getTime();
@@ -101,14 +102,26 @@ export class ReportingService {
     return { organizationId, outlets: rows, from: from ?? null, to: to ?? null };
   }
 
+  async tablePerformance(restaurantId: string, from?: string, to?: string) {
+    const orders = await orderRepository.findByRestaurantId(restaurantId);
+    const tables = computeTablePerformance(orders, from, to);
+    return {
+      tables,
+      busiestTableNumber: tables[0]?.tableNumber ?? null,
+      from: from ?? null,
+      to: to ?? null,
+    };
+  }
+
   async dashboard(restaurantId: string, from?: string, to?: string) {
-    const [sales, inventory, purchases, customers] = await Promise.all([
+    const [sales, inventory, purchases, customers, tables] = await Promise.all([
       this.salesSummary(restaurantId, from, to),
       this.inventorySummary(restaurantId),
       this.purchaseSummary(restaurantId),
       this.customerRetention(restaurantId),
+      this.tablePerformance(restaurantId, from, to),
     ]);
-    return { sales, inventory, purchases, customers };
+    return { sales, inventory, purchases, customers, tables };
   }
 }
 

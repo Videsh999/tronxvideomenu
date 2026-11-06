@@ -8,6 +8,7 @@ import {
   TABLE_STATUS_STYLE,
   enrichCaptainTables,
 } from "@/lib/captain-floor";
+import CaptainTableStats from "@/components/captain/CaptainTableStats";
 
 function money(value: number, currency = "INR") {
   return new Intl.NumberFormat(undefined, {
@@ -151,6 +152,8 @@ export default function CaptainTables({
           </Link>
         ))}
       </div>
+
+      <CaptainTableStats />
     </div>
   );
 }

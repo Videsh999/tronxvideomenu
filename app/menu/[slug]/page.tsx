@@ -36,6 +36,9 @@ export default async function RestaurantMenuPage({
     (await restaurantService.hasWifiConfiguredForGuests(menu.restaurant.slug));
   const videoMenuEnabled = hasRestaurantFeature(menu.restaurant, "VIDEO_MENU");
   const tableOrderingEnabled = hasRestaurantFeature(menu.restaurant, "TABLE_ORDERING");
+  const loyaltyEnabled =
+    hasRestaurantFeature(menu.restaurant, "CRM_LOYALTY") &&
+    menu.restaurant.loyaltySettings?.enabled !== false;
   const view = Array.isArray(rawView) ? rawView[0] : rawView;
 
   return (
@@ -53,6 +56,7 @@ export default async function RestaurantMenuPage({
         wifiEnabled={wifiEnabled}
         videoMenuEnabled={videoMenuEnabled}
         tableOrderingEnabled={tableOrderingEnabled}
+        loyaltyEnabled={loyaltyEnabled}
       />
       </I18nProvider>
     </ThemeProvider>

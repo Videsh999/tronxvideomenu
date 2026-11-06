@@ -21,6 +21,7 @@ import type { DishSort } from "@/components/customer/MenuSection";
 import type { OrderSummary } from "@/types";
 import ReservationPanel from "@/components/customer/ReservationPanel";
 import WifiAccessPanel from "@/components/customer/WifiAccessPanel";
+import CustomerLoyaltyPanel from "@/components/customer/CustomerLoyaltyPanel";
 
 type CartSelection = { groupId: string; addonIds: string[] };
 type CartLine = { key: string; dishId: string; quantity: number; selections: CartSelection[] };
@@ -111,6 +112,7 @@ type CustomerMenuProps = {
   wifiEnabled?: boolean;
   videoMenuEnabled?: boolean;
   tableOrderingEnabled?: boolean;
+  loyaltyEnabled?: boolean;
 };
 
 export default function CustomerMenu({
@@ -125,6 +127,7 @@ export default function CustomerMenu({
   wifiEnabled = false,
   videoMenuEnabled = true,
   tableOrderingEnabled = true,
+  loyaltyEnabled = false,
 }: CustomerMenuProps) {
   const [reservationOpen, setReservationOpen] = useState(initialReservationView);
   const [wifiOpen, setWifiOpen] = useState(false);
@@ -588,6 +591,12 @@ export default function CustomerMenu({
 
           <div className="flex shrink-0 items-center gap-1.5">
             <LanguageMenu />
+            {loyaltyEnabled ? (
+              <CustomerLoyaltyPanel
+                restaurantSlug={menu.restaurant.slug}
+                restaurantName={menu.restaurant.name}
+              />
+            ) : null}
             {wifiEnabled && <button type="button" onClick={() => setWifiOpen(true)} aria-label={t("wifiTitle")} className="hidden h-11 items-center gap-2 rounded-full border border-[var(--customer-border)] px-4 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50 sm:inline-flex"><Wifi className="h-4 w-4" /><span className="hidden md:inline">{t("wifi")}</span></button>}
             {reservationsEnabled && <button type="button" onClick={() => setReservationOpen(true)} aria-label={t("reserveTitle")} className="inline-flex h-11 items-center gap-2 rounded-full bg-[var(--restaurant-text)] px-3 text-sm font-semibold text-white transition hover:bg-[var(--restaurant-primary)] sm:px-4"><CalendarDays className="h-4 w-4" /><span className="hidden md:inline">{t("reserve")}</span></button>}
           </div>

@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { placeOrderSchema } from "@/lib/validations";
 import { orderService, OrderServiceError } from "@/lib/services/order.service";
 import { restaurantService } from "@/lib/services/restaurant.service";
 import { requireRestaurantFeature } from "@/lib/feature-access";
+import { CUSTOMER_SESSION_COOKIE, readCustomerSession } from "@/lib/customer-auth";
 
 export async function POST(request: Request) {
   try {
@@ -27,7 +29,22 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = await orderService.createPublic(input);
+    // If guest optionally signed into loyalty for this restaurant, link the order.
+    let loyaltyCustomerId: string | undefined;
+    const cookieStore = await cookies();
+    const session = await readCustomerSession(
+      cookieStore.get(CUSTOMER_SESSION_COOKIE)?.value,
+      process.env.AUTH_SECRET,
+    );
+    if (
+      session &&
+      session.restaurantId === menu.restaurant.id &&
+      session.restaurantSlug === menu.restaurant.slug
+    ) {
+      loyaltyCustomerId = session.customerId;
+    }
+
+    const result = await orderService.createPublic(input, { loyaltyCustomerId });
     return NextResponse.json(
       { success: true, data: result },
       { status: 201, headers: { "Cache-Control": "no-store" } },

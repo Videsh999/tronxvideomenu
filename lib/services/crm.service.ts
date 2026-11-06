@@ -200,6 +200,7 @@ export class CrmService {
       kind: "EARN",
       points,
       orderId,
+      orderTotal,
       idempotencyKey: loyaltyEarnKey(orderId),
       note: `Earned from order ${orderId}`,
     });

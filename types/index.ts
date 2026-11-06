@@ -950,6 +950,10 @@ export type CustomerProfile = {
   phone: string;
   email?: string;
   name?: string;
+  /** Optional loyalty login — never required for QR ordering. */
+  passwordHash?: string;
+  passwordResetTokenHash?: string;
+  passwordResetExpiresAt?: string;
   segment?: "NEW" | "REGULAR" | "VIP" | "LAPSED";
   loyaltyPoints: number;
   totalOrders: number;
@@ -961,6 +965,17 @@ export type CustomerProfile = {
   notes?: string;
   createdAt: string;
   updatedAt: string;
+};
+
+/** Safe public loyalty view (no secrets). */
+export type CustomerLoyaltyView = {
+  id: string;
+  name?: string;
+  phone: string;
+  email?: string;
+  loyaltyPoints: number;
+  totalOrders: number;
+  segment?: CustomerProfile["segment"];
 };
 
 export type LoyaltyTransactionKind = "EARN" | "REDEEM" | "ADJUST" | "EXPIRE";

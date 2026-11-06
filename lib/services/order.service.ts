@@ -142,7 +142,10 @@ export class OrderService {
     return order ? staffOrderView(order) : null;
   }
 
-  async createPublic(input: PlaceOrderInput) {
+  async createPublic(
+    input: PlaceOrderInput,
+    options?: { loyaltyCustomerId?: string },
+  ) {
     const menu = await restaurantService.getFullMenu(input.slug);
     if (!menu) throw new OrderServiceError("Restaurant not found.", 404);
     const table = await tableRepository.findByRestaurantAndNumber(menu.restaurant.id, input.tableNumber);
@@ -151,6 +154,17 @@ export class OrderService {
     }
     if (await orderRepository.hasIdempotencyKey(menu.restaurant.id, input.idempotencyKey)) {
       throw new OrderServiceError("This order was already submitted. Refresh the page to see your order status.");
+    }
+
+    // Optional loyalty link only — never required for QR ordering / privacy.
+    let loyaltyCustomerId: string | undefined;
+    if (
+      options?.loyaltyCustomerId &&
+      hasRestaurantFeature(menu.restaurant, "CRM_LOYALTY") &&
+      menu.restaurant.loyaltySettings?.enabled !== false
+    ) {
+      const linked = await crmRepository.getCustomer(menu.restaurant.id, options.loyaltyCustomerId);
+      if (linked) loyaltyCustomerId = linked.id;
     }
 
     const categoryStation = new Map(
@@ -272,6 +286,7 @@ export class OrderService {
       channel: "QR",
       source: "QR",
       captainAuthorization,
+      customerId: loyaltyCustomerId,
       items,
       subtotal: bill.itemsSubtotal,
       billDiscountAmount: 0,
@@ -992,6 +1007,23 @@ export class OrderService {
         isReprint: false,
         actorId: actor.id,
       });
+
+      // Optional loyalty earn — only when guest opted in (customerId present). Never blocks payment.
+      if (updated.customerId) {
+        void restaurantService
+          .getById(restaurantId)
+          .then(async (restaurant) => {
+            if (!restaurant) return;
+            if (!hasRestaurantFeature(restaurant, "CRM_LOYALTY")) return;
+            await crmService.earnForOrder(
+              restaurant,
+              updated.customerId!,
+              updated.id,
+              updated.total,
+            );
+          })
+          .catch(() => null);
+      }
     }
 
     return staffOrderView(updated);
