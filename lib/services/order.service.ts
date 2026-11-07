@@ -113,8 +113,9 @@ export class OrderServiceError extends Error {
 }
 
 export class OrderService {
+  /** Live floor orders (open + last 36h). Use repository.findByRestaurantId for full history reports. */
   async listForRestaurant(restaurantId: string) {
-    return (await orderRepository.findByRestaurantId(restaurantId)).map(staffOrderView);
+    return (await orderRepository.findOperational(restaurantId)).map(staffOrderView);
   }
 
   async listKitchen(restaurantId: string, station?: KitchenStation) {
@@ -124,16 +125,9 @@ export class OrderService {
   }
 
   async listPendingCaptainApprovals(restaurantId: string, tableNumbers?: number[]) {
-    const orders = await orderRepository.findByRestaurantId(restaurantId);
+    const orders = await orderRepository.findPending(restaurantId, tableNumbers);
     return orders
-      .filter((order) => {
-        if (order.status !== "PENDING") return false;
-        if (resolveAuthorization(order).status !== "PENDING_CAPTAIN_APPROVAL") return false;
-        if (tableNumbers && tableNumbers.length > 0 && !tableNumbers.includes(order.tableNumber)) {
-          return false;
-        }
-        return true;
-      })
+      .filter((order) => resolveAuthorization(order).status === "PENDING_CAPTAIN_APPROVAL")
       .map(staffOrderView);
   }
 
@@ -909,12 +903,7 @@ export class OrderService {
   }
 
   async findActiveForTable(restaurantId: string, tableNumber: number) {
-    const orders = await orderRepository.findByRestaurantId(restaurantId);
-    const match = orders.find(
-      (order) =>
-        order.tableNumber === tableNumber &&
-        !["COMPLETED", "CANCELLED", "REJECTED", "SERVED"].includes(order.status),
-    );
+    const match = await orderRepository.findActiveForTable(restaurantId, tableNumber);
     return match ? staffOrderView(match) : null;
   }
 

@@ -1,12 +1,15 @@
+import { cache } from "react";
 import { restaurantRepository } from "@/lib/repositories/restaurant.repository";
 import { tableRepository } from "@/lib/repositories/table.repository";
 import type { RestaurantTable } from "@/types";
 
 export class TableServiceError extends Error {}
 
+const listTablesCached = cache((restaurantId: string) => tableRepository.findByRestaurantId(restaurantId));
+
 export class TableService {
   async list(restaurantId: string) {
-    return tableRepository.findByRestaurantId(restaurantId);
+    return listTablesCached(restaurantId);
   }
 
   async listBookable(restaurantId: string, guestCount: number) {

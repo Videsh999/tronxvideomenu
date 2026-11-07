@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { CAPTAIN_SESSION_COOKIE, RESTAURANT_ADMIN_SESSION_COOKIE, SUPER_ADMIN_SESSION_COOKIE, readAdminSession } from "@/lib/auth-core";
@@ -37,7 +38,7 @@ async function getContextFromCookie(cookieName: string, expectedRole: AdminConte
   };
 }
 
-export async function getRestaurantAdminContext() {
+export const getRestaurantAdminContext = cache(async () => {
   const context = await getContextFromCookie(RESTAURANT_ADMIN_SESSION_COOKIE, "RESTAURANT_ADMIN");
   if (!context || !context.restaurantId) return null;
   if (context.restaurantAdminAccountId) {
@@ -54,24 +55,37 @@ export async function getRestaurantAdminContext() {
     if (account && (!account.isActive || account.email !== context.email.trim().toLowerCase())) return null;
   }
   return context;
-}
+});
 
 export const getSuperAdminContext = () => getContextFromCookie(SUPER_ADMIN_SESSION_COOKIE, "SUPER_ADMIN");
 
-export async function requireCaptain(requiredFeature?: FeatureKey) {
+/** One captain + restaurant lookup per request, shared by layout and page. */
+const loadCaptainSession = cache(async () => {
   const cookieStore = await cookies();
   const session = await readAdminSession(cookieStore.get(CAPTAIN_SESSION_COOKIE)?.value, process.env.AUTH_SECRET);
   if (session?.role !== "CAPTAIN" || !session.captainId || !session.captainUpdatedAt || !session.restaurantId || !session.restaurantSlug) {
-    return { captain: null, restaurant: null, error: unauthorizedResponse() } as const;
+    return { status: "unauthorized" as const };
   }
   const captain = await captainService.getById(session.captainId);
   if (!captain || !captain.isActive || captain.restaurantId !== session.restaurantId || captain.updatedAt !== session.captainUpdatedAt) {
-    return { captain: null, restaurant: null, error: forbiddenResponse() } as const;
+    return { status: "forbidden" as const };
   }
   const restaurant = await restaurantService.getById(captain.restaurantId);
   if (!restaurant || restaurant.isActive === false || restaurant.slug !== session.restaurantSlug) {
+    return { status: "forbidden" as const };
+  }
+  return { status: "ok" as const, captain, restaurant };
+});
+
+export async function requireCaptain(requiredFeature?: FeatureKey) {
+  const loaded = await loadCaptainSession();
+  if (loaded.status === "unauthorized") {
+    return { captain: null, restaurant: null, error: unauthorizedResponse() } as const;
+  }
+  if (loaded.status === "forbidden") {
     return { captain: null, restaurant: null, error: forbiddenResponse() } as const;
   }
+  const { captain, restaurant } = loaded;
   const captainFeature = requireRestaurantFeature(restaurant, "CAPTAIN_ACCESS");
   const operationalFeature = requiredFeature ? requireRestaurantFeature(restaurant, requiredFeature) : { allowed: true as const };
   if (!captainFeature.allowed || !operationalFeature.allowed) {

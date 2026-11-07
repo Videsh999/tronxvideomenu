@@ -32,6 +32,9 @@ export class RestaurantRepository implements IRestaurantRepository {
 
   async findBySlug(slug: string): Promise<Restaurant | null> {
     await connectToDatabase();
+    // Exact match uses the slug index; case-insensitive regex is only a fallback.
+    const exact = await RestaurantModel.findOne({ slug }).lean();
+    if (exact) return toDomain<Restaurant>(exact);
     const restaurant = await RestaurantModel.findOne({
       slug: { $regex: `^${escapeRegExp(slug)}$`, $options: "i" },
     }).lean();

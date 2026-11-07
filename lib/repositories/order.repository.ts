@@ -37,6 +37,46 @@ export class OrderRepository implements IOrderRepository {
     return orders.map((order) => this.mapOrder(order));
   }
 
+  /**
+   * Live floor window: every open order plus recently created ones.
+   * Avoids loading full order history on every screen / poll.
+   */
+  async findOperational(restaurantId: string, options?: { sinceHours?: number; limit?: number }) {
+    await connectToDatabase();
+    const since = new Date(Date.now() - (options?.sinceHours ?? 36) * 60 * 60 * 1000).toISOString();
+    const orders = await OrderModel.find({
+      restaurantId,
+      $or: [
+        { status: { $in: ["PENDING", "ACCEPTED", "PREPARING", "READY", "SERVED"] } },
+        { createdAt: { $gte: since } },
+      ],
+    })
+      .sort({ createdAt: -1 })
+      .limit(options?.limit ?? 400)
+      .lean();
+    return orders.map((order) => this.mapOrder(order));
+  }
+
+  async findPending(restaurantId: string, tableNumbers?: number[]) {
+    await connectToDatabase();
+    const filter: Record<string, unknown> = { restaurantId, status: "PENDING" };
+    if (tableNumbers && tableNumbers.length > 0) filter.tableNumber = { $in: tableNumbers };
+    const orders = await OrderModel.find(filter).sort({ createdAt: -1 }).limit(200).lean();
+    return orders.map((order) => this.mapOrder(order));
+  }
+
+  async findActiveForTable(restaurantId: string, tableNumber: number) {
+    await connectToDatabase();
+    const order = await OrderModel.findOne({
+      restaurantId,
+      tableNumber,
+      status: { $in: ["PENDING", "ACCEPTED", "PREPARING", "READY"] },
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+    return order ? this.mapOrder(order) : null;
+  }
+
   async findKitchenActive(restaurantId: string, station?: KitchenStation) {
     await connectToDatabase();
     // PENDING stays off KDS until Accept. SERVED stays briefly for the Served column.

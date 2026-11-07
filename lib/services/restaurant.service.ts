@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { restaurantRepository } from "@/lib/repositories/restaurant.repository";
 import { categoryRepository } from "@/lib/repositories/category.repository";
 import { dishRepository } from "@/lib/repositories/dish.repository";
@@ -36,19 +37,51 @@ function toWifiAdminView(wifi?: RestaurantWifiConfiguration): RestaurantWifiAdmi
   };
 }
 
+// Per-request dedupe: layout + page + nested components share one DB read.
+const getRestaurantByIdCached = cache(async (id: string) => {
+  const restaurant = await restaurantRepository.findById(id);
+  return restaurant ? normalizeRestaurant(restaurant) : null;
+});
+
+const getRestaurantBySlugCached = cache(async (slug: string) => {
+  const restaurant = await restaurantRepository.findBySlug(slug);
+  return restaurant ? normalizeRestaurant(restaurant) : null;
+});
+
+const getFullMenuCached = cache(async (idOrSlug: string): Promise<RestaurantMenu | null> => {
+  let restaurant = await restaurantRepository.findById(idOrSlug);
+  if (!restaurant) {
+    restaurant = await restaurantRepository.findBySlug(idOrSlug);
+  }
+  if (!restaurant) return null;
+  if (restaurant.isActive === false) return null;
+
+  const [categories, rawDishes, addonGroups] = await Promise.all([
+    categoryRepository.findByRestaurantId(restaurant.id),
+    dishRepository.findByRestaurantId(restaurant.id),
+    addonRepository.findGroupsByRestaurantId(restaurant.id),
+  ]);
+
+  const dishes = rawDishes.map((dish) => toCustomerDish(dish, addonGroups));
+
+  return {
+    restaurant: normalizeRestaurant(restaurant),
+    categories: categories.filter((c) => c.isActive),
+    dishes,
+  };
+});
+
 export class RestaurantService {
   async getAll(): Promise<Restaurant[]> {
     return (await restaurantRepository.findAll()).map(normalizeRestaurant);
   }
 
   async getById(id: string): Promise<Restaurant | null> {
-    const restaurant = await restaurantRepository.findById(id);
-    return restaurant ? normalizeRestaurant(restaurant) : null;
+    return getRestaurantByIdCached(id);
   }
 
   async getBySlug(slug: string): Promise<Restaurant | null> {
-    const restaurant = await restaurantRepository.findBySlug(slug);
-    return restaurant ? normalizeRestaurant(restaurant) : null;
+    return getRestaurantBySlugCached(slug);
   }
 
   async getWifiAdminConfiguration(id: string): Promise<RestaurantWifiAdminView | null> {
@@ -137,26 +170,7 @@ export class RestaurantService {
   }
 
   async getFullMenu(idOrSlug: string): Promise<RestaurantMenu | null> {
-    let restaurant = await restaurantRepository.findById(idOrSlug);
-    if (!restaurant) {
-      restaurant = await restaurantRepository.findBySlug(idOrSlug);
-    }
-    if (!restaurant) return null;
-    if (restaurant.isActive === false) return null;
-
-    const [categories, rawDishes, addonGroups] = await Promise.all([
-      categoryRepository.findByRestaurantId(restaurant.id),
-      dishRepository.findByRestaurantId(restaurant.id),
-      addonRepository.findGroupsByRestaurantId(restaurant.id),
-    ]);
-
-    const dishes = rawDishes.map((dish) => toCustomerDish(dish, addonGroups));
-
-    return {
-      restaurant: normalizeRestaurant(restaurant),
-      categories: categories.filter((c) => c.isActive),
-      dishes,
-    };
+    return getFullMenuCached(idOrSlug);
   }
 }
 

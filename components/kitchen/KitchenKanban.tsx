@@ -106,6 +106,11 @@ export default function KitchenKanban({
 
   function moveOrder(order: OrderSummary, status: OrderStatus) {
     setBusyId(order.id);
+    const previous = order;
+    // Optimistic: ticket jumps columns immediately; server confirms in background.
+    setOrders((current) =>
+      current.map((entry) => (entry.id === order.id ? { ...entry, status } : entry)),
+    );
     startTransition(async () => {
       setError(null);
       try {
@@ -126,6 +131,9 @@ export default function KitchenKanban({
           return next;
         });
       } catch (cause) {
+        setOrders((current) =>
+          current.map((entry) => (entry.id === previous.id ? previous : entry)),
+        );
         setError(cause instanceof Error ? cause.message : "Unable to move ticket");
       } finally {
         setBusyId(null);

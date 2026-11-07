@@ -108,6 +108,9 @@ export default function OrdersManager({
   const setStatus = async (order: OrderSummary, status: OrderSummary["status"], options?: { printKot?: boolean }) => {
     setBusyId(order.id);
     setMessage("");
+    const previous = order;
+    setOrders((current) => current.map((entry) => (entry.id === order.id ? { ...entry, status } : entry)));
+    setActiveStage(stageForStatus(status));
     try {
       const updated = await api.updateOrderStatus(order.id, status);
       setOrders((current) => current.map((entry) => (entry.id === updated.id ? updated : entry)));
@@ -117,6 +120,8 @@ export default function OrdersManager({
         document.getElementById(`order-${updated.id}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
       });
     } catch (error) {
+      setOrders((current) => current.map((entry) => (entry.id === previous.id ? previous : entry)));
+      setActiveStage(stageForStatus(previous.status));
       setMessage(error instanceof Error ? error.message : "Unable to update order.");
     } finally {
       setBusyId(null);

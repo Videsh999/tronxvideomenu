@@ -83,6 +83,9 @@ export default function CaptainOrders({
   ) => {
     setBusyId(order.id);
     setMessage("");
+    const previous = order;
+    setOrders((current) => current.map((entry) => (entry.id === order.id ? { ...entry, status } : entry)));
+    setActiveStage(stageForStatus(status));
     try {
       const updated = await captainRequest<OrderSummary>(`/api/captain/orders/${order.id}`, {
         method: "PATCH",
@@ -100,6 +103,8 @@ export default function CaptainOrders({
         });
       });
     } catch (error) {
+      setOrders((current) => current.map((entry) => (entry.id === previous.id ? previous : entry)));
+      setActiveStage(stageForStatus(previous.status));
       setMessage(error instanceof Error ? error.message : "Unable to update order");
     } finally {
       setBusyId(null);
