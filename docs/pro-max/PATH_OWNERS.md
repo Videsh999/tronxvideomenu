@@ -166,8 +166,11 @@ Role: Frontend, with Backend on the import engine.
 - `components/admin/MediaPicker.tsx`
 - `components/admin/AvailabilityManager.tsx`
 - `app/admin/[slug]/menu/**`
+- `app/admin/menu/**`
 - `app/admin/[slug]/media/**`
+- `app/admin/media/**`
 - `app/admin/[slug]/availability/**`
+- `app/admin/availability/**`
 - `app/api/dishes/**`
 - `app/api/categories/**`
 - `app/api/addons/**`
@@ -195,6 +198,18 @@ Role: Frontend, with Backend on the import engine.
 - `tests/customer-dish-data.test.ts`
 
 Dependency requests, including replacing `xlsx`, go to L.
+
+The unscoped `app/admin/menu/**`, `app/admin/media/**`, and `app/admin/availability/**` pages are the same admin UI as the slug routes (today they only redirect to `/admin`). F owns those pages. Dish, category, add-on, and media APIs stay on the paths already listed here. They do not move.
+
+## FROZEN — no owner yet
+
+No architecture stream owns the restaurant profile screen. Do not edit these paths until an owner is assigned.
+
+- `app/admin/profile/**`
+- `app/admin/[slug]/profile/**`
+- `components/admin/RestaurantProfileForm.tsx`
+
+`app/api/restaurants/**`, `lib/services/restaurant.service.ts`, and `lib/restaurant-normalize.ts` stay with D. A profile change that needs those files is a queued patch to D, and it still waits until the profile pages have an owner.
 
 ## G — Customer menu and loyalty UX
 

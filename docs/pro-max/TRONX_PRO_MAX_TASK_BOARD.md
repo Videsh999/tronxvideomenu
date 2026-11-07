@@ -869,14 +869,18 @@ Source: audit PR https://github.com/Videsh999/tronxvideomenu/pull/1 (branch `pro
 
 #### ROS-E12-T010 — Payment retry tests are a Wave 1 gate
 
-- **Source:** CTO re-review 2026-11-07; F-02
+- **Source:** CTO re-review 2026-11-07; payment recording in `lib/services/order.service.ts` (`recordPayment`)
 - **Owner:** TRONX DEVOPS ENGINEER
-- **Objective:** CI requires the payment crash-retry and concurrency tests. B writes them on B's files.
-- **Dependencies:** ROS-E02-T001, ROS-E12-T001
+- **Objective:** CI requires retry and concurrency tests for payment recording. These are not the cancellation tests.
+- **Dependencies:** ROS-E12-T001
 - **Affected files:** `.github/workflows/`
 - **Acceptance criteria:**
-  - [ ] CI fails if the crash-retry and concurrency tests named on ROS-E02-T001 are missing or failing
-  - [ ] The test code is a queued patch to B (`lib/services/order.service.ts`, `lib/repositories/order.repository.ts`, `tests/order-*.ts`). L does not edit those files
+  - [ ] Cancellation crash-retry and concurrency tests stay a separate requirement on ROS-E02-T001. This task does not replace them, and those tests do not satisfy this task
+  - [ ] A repeated payment request with the same idempotency key does not add a second ledger entry and does not increase `amountPaid` a second time
+  - [ ] A payment recovered after a crash, including a crash between the ledger write and the response, does not duplicate a ledger entry or `amountPaid`
+  - [ ] Concurrent payment posts for the same order and key leave exactly one ledger entry and one `amountPaid` increment
+  - [ ] CI fails if those payment tests are missing or failing
+  - [ ] The test code is a queued patch to B (`lib/services/order.service.ts`, `lib/repositories/order.repository.ts`, `tests/order-payment-recording.test.ts`). L does not edit those files
 - **Status:** In Progress
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
@@ -1094,10 +1098,9 @@ Source: audit PR https://github.com/Videsh999/tronxvideomenu/pull/1 (branch `pro
 3. **Seed file conflict** – Decided 2026-11-07, aligned with PATH_OWNERS.md: D owns `lib/demo/seed-demo-kitchen.ts` and the legacy seed route. In Wave 1, D may only remove credential literals. M never edits those paths. M builds `scripts/seed-pro-max-demo.ts` only.
 4. **Typecheck item vs stream ownership** – Decided 2026-11-07 for Wave 1: the single Wave 1 implementer makes the TablesManager typecheck fix serially. The E stream lead reviews that diff in the Wave 1 PR. From Wave 2, PATH_OWNERS.md governs. `ignoreBuildErrors` still comes off only after E and B leave tsc clean (L's final gate).
 5. **Lint fixes cross streams** – Decided 2026-11-07 for Wave 1: the single Wave 1 implementer makes lint fixes in C, E, or F files serially. The owning stream lead reviews those diffs in the Wave 1 PR. From Wave 2, PATH_OWNERS.md governs. `CaptainOrderPad.tsx` still coordinates with ROS-E03-T002.
-6. **Remaining unassigned pages** – legacy unscoped admin pages (`app/admin/menu/`, `app/admin/media/`, `app/admin/profile/`, `app/admin/availability/`). Shifts, refunds, `package.json`, `lib/db/mongo-tx.ts`, `lib/db/mongodb.ts`, the pos-shift service and repository, domain repositories, `app/api/restaurants/**`, and `lib/restaurant-normalize.ts` now have owners in PATH_OWNERS.md. `package.json` is L. Refunds are B (`app/api/pos/orders/**`). The legacy seed route is D.
-7. **Payment gateway** – Decided 2026-11-07: stays parked under D (ROS-E04-T007) as Backlog. Founder decision pending. No provider is chosen here.
-8. **Remediation details not specified by audit** – target proxy class for the demo seed route (F-07), rate-limit thresholds (F-12, F-14), whether to keep fail-open limiter (F-13), whether non-Kolkata timezones are in scope (F-18), new marketing copy (F-19), password recovery remove vs audited reveal (F-06).
-9. **Realtime/SSE** (target architecture #7, "later") and live Vercel config (NOT TESTED) – no task created; confirm scope.
-10. **Stream C reviewer** – audit names Backend as reviewer for the calculator import; board uses TRONX CTO per brief, with Backend as secondary reviewer in notes.
-11. **API test location** – audit does not name a folder for API tests (ROS-E13-T006 assumes `tests/e2e/`).
-12. **Deadlines, budget, client, release dates** – Decided 2026-11-07: stay TBD until the Founder approves them. Do not invent values.
+6. **Payment gateway** – Decided 2026-11-07: stays parked under D (ROS-E04-T007) as Backlog. Founder decision pending. No provider is chosen here.
+7. **Remediation details not specified by audit** – target proxy class for the demo seed route (F-07), rate-limit thresholds (F-12, F-14), whether to keep fail-open limiter (F-13), whether non-Kolkata timezones are in scope (F-18), new marketing copy (F-19), password recovery remove vs audited reveal (F-06).
+8. **Realtime/SSE** (target architecture #7, "later") and live Vercel config (NOT TESTED) – no task created; confirm scope.
+9. **Stream C reviewer** – audit names Backend as reviewer for the calculator import; board uses TRONX CTO per brief, with Backend as secondary reviewer in notes.
+10. **API test location** – audit does not name a folder for API tests (ROS-E13-T006 assumes `tests/e2e/`).
+11. **Deadlines, budget, client, release dates** – Decided 2026-11-07: stay TBD until the Founder approves them. Do not invent values.
