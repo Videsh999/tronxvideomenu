@@ -148,7 +148,26 @@ Proxy classes (`lib/api-authz.ts`):
 
 The edge does not check tenant. Tenant checks are inside handlers, and they are not uniform. Menu list routes compare the query `restaurantId` to the session (`app/api/dishes/route.ts`). Organization and AI routes use `requireOutletPermission` (`app/api/ai/assistant/route.ts`). A route that forgets the handler check is only protected by "some staff cookie exists".
 
-Mismatches that matter are findings F-01 and F-07: loyalty and connector routes are `staff` even though their handlers expect a customer session or a connector secret; the demo seed route is `public`.
+Mismatches that matter are findings F-01 and F-07. Loyalty and connector routes are `staff` even though their handlers do not expect a staff cookie. The demo seed route is `public`. Do not close F-01 by adding one `customer` proxy class over `/api/public/loyalty/*`. Login, register, and reset must remain reachable with no session at all.
+
+### Intended handler contracts
+
+Current proxy class is what the code does today. The contract is what the handler is written to enforce. Stream A changes only `proxy.ts` and `lib/api-authz.ts` so the edge matches this table. It does not invent a session requirement the handler does not have.
+
+| Handler | Current proxy class | Intended contract |
+| --- | --- | --- |
+| `POST /api/public/loyalty/login` | `staff` | No session. Body is restaurant slug, phone or email, and password (`app/api/public/loyalty/login/route.ts`). On success the handler sets the customer cookie. |
+| `POST /api/public/loyalty/register` | `staff` | No session. Body creates the account (`register/route.ts`). On success the handler sets the customer cookie. |
+| `POST /api/public/loyalty/forgot-password` | `staff` | No session. Body is restaurant slug and email. Starts a reset. Must stay anonymous so a locked-out guest can request it. |
+| `POST /api/public/loyalty/reset-password` | `staff` | No session. Body is restaurant slug, reset token, and new password (`reset-password/route.ts`). The token is the credential. A customer cookie is not required and must not be required by the proxy. |
+| `POST /api/public/loyalty/logout` | `staff` | No session required. Clears the customer cookie and returns success (`logout/route.ts`). An already-expired cookie must still be able to call it. |
+| `GET /api/public/loyalty/me` | `staff` | No staff cookie. The handler reads the customer cookie if present and returns `data: null` when it is absent (`me/route.ts:10-12`). The proxy must let the anonymous call through. The handler decides what a missing cookie means. |
+| `POST /api/connector/pair` | `staff` | No staff cookie and no connector secret. Body is a one-time pairing `code` plus optional hostname, name, and version (`app/api/connector/pair/route.ts:6-20`). The code record, created earlier by an authorized admin, binds restaurant and outlet. This route is not `requireConnectorAuth`. |
+| `POST /api/connector/heartbeat` | `staff` | No staff cookie. `x-connector-id` and `x-connector-secret` (`heartbeat/route.ts` calls `requireConnectorAuth`). Not a pairing code. |
+| `GET /api/connector/jobs` | `staff` | Same secret headers as heartbeat (`jobs/route.ts:8`). Returns jobs and devices for that connector's outlet only. |
+| `POST /api/connector/jobs/[jobId]/ack` | `staff` | Same secret headers. Body is a terminal job status. The connector must already be paired. |
+
+`GET /api/orders/[orderId]/status` stays proxy-public and keeps its bearer-token check in the handler. `GET /api/restaurants/[restaurantId]?fullMenu=true` stays the public catalog. `POST /api/dev/seed-demo-kitchen` stays a separate seed contract owned by Stream D, not a loyalty or connector exception.
 
 `GET /api/restaurants` is classified `public` but the handler returns 401 without an admin (`app/api/restaurants/route.ts:13`). `GET /api/restaurants/[restaurantId]` is `public` and, when `fullMenu=true`, returns the menu with no session (`app/api/restaurants/[restaurantId]/route.ts:25-33`). That is how `lib/api.ts` loads a customer menu. `PATCH` and `DELETE` on the same path are `staff`, and delete also calls `requireSuperAdmin`.
 
@@ -191,6 +210,28 @@ One function is documented as authoritative: `calculateRestaurantBill` in `lib/b
 A second function, `computeBillTotals` in `lib/order-pricing.ts`, still runs in three places: POS preview, captain preview, and line cancel. Create, append, and admin preview use the authoritative function. Details: findings F-02 and F-03.
 
 There is no hardcoded 5% or 18% in the calculator. The demo seed writes `taxRatePercent: 5` onto the demo restaurant (`lib/demo/seed-demo-kitchen.ts:64`). Tests use 5% as a fixture. Outlet settings are the runtime source when the authoritative function is the one that runs.
+
+### Money integrity
+
+Stream B owns this policy and the code that has to obey it (`lib/billing/**`, `lib/order-pricing.ts`, `lib/services/order.service.ts`, `lib/repositories/order.repository.ts`). Stream C displays the result. C does not edit the billing modules.
+
+**Historical snapshot.** When a line is created, freeze `unitPriceSnapshot`, add-on unit prices, `itemTotal`, and the GST rate applied to that line. Store the rate on the line (or inside the line's slice of `billSnapshot`) so a later read does not need the live menu. Freeze the outlet billing settings used for that order inside `billSnapshot` (price mode, packaging rule, service-charge rule, supply type, outlet default rate). `appendItemsToOrder` today does the opposite for tax: it re-resolves every merged line, including lines already on the order, from the live dish, category, and outlet (`lib/services/order.service.ts:750-770`). That is a re-price of history. The required behavior is:
+
+- Existing lines keep their frozen unit prices, line totals, and line GST rates.
+- New lines are priced from the current menu and the current line-tax resolution.
+- Order-level packaging, service charge, and supply type come from the frozen `billSnapshot` settings, applied to the new subtotal. A manager can run an explicit audited "reprice open check" later. Append is not that action.
+- Discount amounts already stored on the order stay unless the same request changes them.
+- `total`, `taxAmount`, `cgstAmount`, `sgstAmount`, `igstAmount`, `packagingCharge`, `serviceCharge`, and `billSnapshot` are written in one update. Cancel today updates only some of them (finding F-02).
+
+**Lost updates.** `replaceItemsAndTotals` matches `restaurantId` and `id` and a status exclusion (`lib/repositories/order.repository.ts:399-406`). It has no `updatedAt` or version precondition. The repository must compare-and-swap on a version or on `updatedAt`, and the caller must retry by re-reading. Two appends, or an append and a cancel, that read the same version must not both succeed.
+
+**Crash retry.** `cancelOrderLines` writes the new totals and only then inserts the parent idempotency row (`lib/services/order.service.ts:1543` then `:1610-1626`). The marker has to be in the same transaction as the money write, and the money write must not commit if the marker does not. A retry after a crash must return the already-cancelled order and must not cancel the quantity again.
+
+**Tests Stream B must add before the finding is closed.** These do not exist yet.
+
+- Lost update: two concurrent `replaceItemsAndTotals` or appends on one order; exactly one wins the version; the loser re-reads and applies on top of the winner.
+- Crash retry: fail after the total write and before the parent cancellation marker; the retry is a no-op on quantities and on tax components.
+- Snapshot: change the live dish GST rate after the order exists; append a new line; the old line's tax rate and line total stay at the frozen values.
 
 ## Order pipelines
 
@@ -263,9 +304,9 @@ The domain is already here: outlets, orders with snapshots, a real GST calculato
 Keep a modular monolith on Next.js and MongoDB until the seams below are stable. Split deployables only for the device connector, which is already a separate process.
 
 1. **Tenant root.** Organization is the customer. Outlet is the restaurant document. Every query takes an outlet id that has already been authorized. Add a repository helper that refuses a query without `restaurantId` rather than relying on each service to remember.
-2. **One policy module.** `classifyApiRequest` and the handler guards read the same table: public, customer, connector, captain, outlet staff, org admin, super admin. Add customer and connector as first-class classes. Proxy and handler tests must list all 173 handlers.
-3. **One order writer.** `order.service.ts` stays the aggregate. QR, POS, and captain are adapters. They all call the same price, tax, idempotency, and KOT functions. Cancel uses `calculateRestaurantBill` and writes every money field.
-4. **One bill module.** Delete `computeBillTotals` from UI and from cancel after the UI imports `calculateRestaurantBill`. Keep `lineItemTotal` and `roundMoney`.
+2. **One policy module, per handler.** `classifyApiRequest` and the handler guards read the same table. Do not add a blanket customer-auth class. Loyalty login, register, forgot-password, and reset-password stay anonymous. Logout stays anonymous. `GET /me` is anonymous at the edge and interpreted by the handler. Pairing is a code claim. Heartbeat, job poll, and ack are connector-secret calls. Proxy and handler tests must list all 173 handlers and the ten contracts in "Intended handler contracts".
+3. **One order writer.** `order.service.ts` stays the aggregate. QR, POS, and captain are adapters. They all call the same price, tax, idempotency, and KOT functions. Cancel and append use the frozen snapshot policy and write every money field together with the idempotency marker.
+4. **One bill module, owned by Stream B.** `lib/billing/**` and `lib/order-pricing.ts` are B's contract. C imports that contract and does not edit it. Delete `computeBillTotals` from UI and from cancel once B has published the snapshot-safe function. Keep `lineItemTotal` and `roundMoney`.
 5. **Staff identities.** Replace the unique-per-outlet admin account with many memberships: manager, cashier, kitchen, captain. Captains can remain a floor role with table assignments. Kitchen and cashier get their own sessions and a smaller permission set.
 6. **Money.** Recorded tenders stay for cash. Add a `PaymentAdapter` interface with a mock implementation for tests. Do not call a live gateway from the demo. Refunds and cash close go through the adapter and the shift, and they require the cashier or manager role.
 7. **Realtime later.** Keep polling until an SSE channel exists for kitchen and captain. Do not introduce a second order state in the client.
@@ -274,96 +315,137 @@ Keep a modular monolith on Next.js and MongoDB until the seams below are stable.
 
 ### Workstreams
 
-These streams can run at the same time only if they stay inside the paths listed. Shared files are called out so two people do not edit them.
+Path ownership is `docs/pro-max/PATH_OWNERS.md`. That manifest is the list. This section is the rules. A stream edits only its paths. A change to a path it does not own is a queued patch: the owner reviews it and lands it alone, one patch at a time, on that owner's branch sequence. Two patches to the same shared file are not merged together.
 
-**Wave 0, serial, before the parallel wave.** Owner: Backend, reviewed by CTO.
+**Wave 0 — validation contracts.** Owner: Backend, reviewed by CTO. Merge this before every other stream.
 
-- Split `lib/validations/index.ts` into domain modules and a barrel that only re-exports. After this, each stream adds schemas in its own file.
-- No feature changes.
+- Split `lib/validations/index.ts` into domain modules. The barrel only re-exports and is then stewarded by H.
+- No feature changes. Contracts for orders, loyalty, pairing, and billing inputs land here so later streams do not edit one schema file.
 
 **Stream A — Authz matrix.** Owner: Backend. Reviewer: CTO.
 
 - Files: `proxy.ts`, `lib/api-authz.ts`, `tests/api-proxy-authz.test.ts` only.
-- Acceptance: loyalty routes classify as a new `customer` class (or `public` plus handler-level customer session). Connector routes classify as `connector` and reach `requireConnectorAuth` with no staff cookie. A test enumerates every `app/api/**/route.ts` method so a new route cannot fall through to `staff` by accident. Existing captain-vs-admin tests still pass.
+- Acceptance: the ten handler contracts above. Login, register, forgot-password, and reset-password are reachable with no customer cookie and no staff cookie. Logout and `GET /me` are reachable with no staff cookie. `POST /api/connector/pair` is reachable with a pairing code and without a connector secret or a staff cookie. Heartbeat, job poll, and ack reach `requireConnectorAuth` without a staff cookie. There is no proxy class that requires a customer session for every loyalty path. A test enumerates every `app/api/**/route.ts` method so a new route cannot fall through to `staff` by accident.
 
-**Stream B — Order aggregate.** Owner: Backend.
+**Stream B — Order aggregate and billing contract.** Owner: Backend.
 
-- Files: `lib/services/order.service.ts`, `lib/repositories/order.repository.ts`, `lib/order-authorization.ts`, `lib/order-transitions.ts`, `app/api/orders/**`, `app/api/public/orders/**`, `app/api/pos/orders/**`, `app/api/captain/orders/**`, `tests/order-*.ts`, `tests/captain-authorization.test.ts`, `tests/pos-order-schema.test.ts`, `tests/captain-order-schema.test.ts`, `tests/captain-pos-order-schema.test.ts`.
-- Acceptance: QR accepts variants the same way POS does. Line cancel calls `calculateRestaurantBill` and persists CGST, SGST, IGST, packaging, service charge, and `billSnapshot` together with `total`. Public idempotency returns the existing order instead of a bare 409. No other stream edits these files in this wave.
+- Files include `lib/services/order.service.ts`, `lib/repositories/order.repository.ts`, `lib/billing/**`, `lib/order-pricing.ts`, and the order route tests named in the manifest. B is the only editor of `lib/billing/**` and `lib/order-pricing.ts`.
+- Acceptance: the money-integrity policy in this doc. QR variants. Cancel and append use the frozen snapshot and write every tax component with the total. `replaceItemsAndTotals` compare-and-swaps. The cancellation marker commits with the money write. Lost-update and crash-retry tests exist and pass. Public idempotency returns the existing order. C consumes the exported functions and does not patch these files.
 
-**Stream C — Bill UI.** Owner: Frontend. Reviewer: Backend for the import of the calculator.
+**Stream C — Bill UI.** Owner: Frontend. Starts only after B's billing contract is merged.
 
-- Files: `components/admin/PosTerminal.tsx`, `components/captain/CaptainOrderPad.tsx`, `components/admin/BillingSettingsForm.tsx`, `app/admin/[slug]/settings/billing/**`, `app/api/admin/billing/**`, `tests/billing-calculator.test.ts`.
-- Do not edit `lib/services/order.service.ts` (Stream B) or `lib/order-pricing.ts` until Stream B has removed the cancel dependency. The UI may import `calculateRestaurantBill` as it exists today.
-- Acceptance: the amount on screen equals `calculateRestaurantBill` for packaging, service charge, inclusive mode, and IGST. A unit test feeds the same lines to the screen helper and to the server helper.
+- Files: `components/admin/PosTerminal.tsx`, `app/admin/[slug]/pos/page.tsx`, `components/captain/CaptainOrderPad.tsx`, `components/admin/BillingSettingsForm.tsx`, `app/admin/[slug]/settings/billing/**`, `app/api/admin/billing/**`, plus the captain billing callers E hands off (below).
+- C does not edit `lib/billing/**`, `lib/order-pricing.ts`, or `lib/services/order.service.ts`.
+- Acceptance: the amount on screen equals B's snapshot-safe function for packaging, service charge, inclusive mode, and IGST, including on `app/admin/[slug]/pos/page.tsx`.
 
-**Stream D — Identities.** Owner: Backend. UI by Frontend on the files below only.
+**Stream D — Identities and the legacy demo seed.** Owner: Backend.
 
-- Files: `lib/auth-core.ts`, `lib/auth-server.ts`, `lib/security/**`, `lib/services/captain.service.ts`, `lib/services/restaurant-admin.service.ts`, `lib/repositories/captain.repository.ts`, `lib/repositories/restaurant-admin.repository.ts`, `app/api/auth/**`, `app/api/captain/login/**`, `app/api/captain/logout/**`, `app/api/admin/captains/**`, `app/api/super-admin/**`, `components/super-admin/**`, `components/auth/**`, `components/admin/CaptainManagement.tsx`, `tests/credential-crypto.test.ts`, `tests/captain-credential-access.test.ts`, `tests/restaurant-admin-auth.test.ts`.
-- Schema changes go through Stream H, not by editing `lib/db/models.ts` ad hoc.
-- Acceptance: the failing credential test passes against a repository double that includes `touchLastActiveAt`. New memberships are specified so two managers can exist. Password recovery is either removed or gated behind an explicit audited reveal with a reason. Demo passwords are not literals in git; the seed reads them from the environment.
+- Also owns `app/api/dev/seed-demo-kitchen/route.ts`, `lib/demo/**`, `scripts/seed-tronx-demo-kitchen.ts`, and `scripts/verify-demo-reupload-import.mjs`.
+- Membership schema changes are queued to H. D's membership consumers merge only after H's compatible schema and index change for that collection.
+- Acceptance: the failing credential test passes. Two managers can exist once H's collection is in. Credential rotation and reset follow the policy under Security and operations. The legacy seed reads passwords from the environment and does not keep a password literal. The verify script does not embed a password.
 
-**Stream E — Floor UI (captain, kitchen, tables, reservations).** Owner: Frontend. QA writes the cases.
+**Stream E — Floor UI.** Owner: Frontend.
 
-- Files: `app/captain/**`, `components/captain/**` except the order-pad bill math owned by Stream C (`CaptainOrderPad.tsx` stays with Stream C), `components/kitchen/**`, `components/admin/KitchenDisplay.tsx`, `components/admin/TablesManager.tsx`, `components/admin/ReservationsManager.tsx`, `components/customer/ReservationPanel.tsx`, `app/admin/[slug]/kitchen/**`, `app/admin/[slug]/tables/**`, `app/admin/[slug]/reservations/**`, `app/api/kitchen/**`, `app/api/captain/kitchen/**`, `app/api/captain/tables/**`, `app/api/captain/approvals/**`, `app/api/captain/requests/**`, `app/api/tables/**`, `app/api/reservations/**`, `app/api/public/reservations/**`, `lib/services/table.service.ts`, `lib/services/reservation.service.ts`, `lib/captain-floor.ts`, `lib/kitchen-board.ts`.
-- Acceptance: `tsc` is clean for table statuses `BILL_REQUESTED`, `PAYMENT_PENDING`, and `CLEANING`. Captain approval and KDS still compile. No edits to `order.service.ts`.
+- Owns `components/customer/ReservationPanel.tsx` and no other file under `components/customer/`. G does not edit that panel.
+- Owns `app/captain/**` except the billing callers it hands to C: `app/captain/[slug]/take-order/page.tsx` (passes `taxRatePercent` into `CaptainOrderPad`) and `app/captain/[slug]/bills/page.tsx` (renders payable totals). `app/captain/[slug]/pos/page.tsx` only redirects to take-order and stays with E. The handoff is a queued patch from E to C, landed by C after B's contract, one file at a time.
+- Acceptance: `tsc` is clean for table statuses `BILL_REQUESTED`, `PAYMENT_PENDING`, and `CLEANING`. No edits to `order.service.ts` or to C's billing files.
 
 **Stream F — Menu and catalog.** Owner: Frontend plus Backend for import.
 
-- Files: `components/admin/DishesManager.tsx`, `CategoriesManager.tsx`, `AddonsManager.tsx`, `MenuImportWizard.tsx`, `MediaManager.tsx`, `MediaPicker.tsx`, `app/admin/[slug]/menu/**`, `app/admin/[slug]/media/**`, `app/api/dishes/**`, `app/api/categories/**`, `app/api/addons/**`, `app/api/addon-groups/**`, `app/api/media/**`, `app/api/admin/menu-import/**`, `app/api/admin/menu-export/**`, `lib/menu-import/**`, `lib/menu-export/**`, `lib/services/dish.service.ts`, `lib/services/category.service.ts`, `lib/services/addon.service.ts`, `lib/services/menu-import.service.ts`, `lib/services/media.service.ts`, `tests/menu-import.test.ts`, `tests/menu-export.test.ts`.
-- Acceptance: existing import/export tests pass. Replace or isolate `xlsx` so untrusted workbooks are not parsed by the vulnerable package (F-08). Customer variant UI is Stream G, not this stream, except the dish admin form.
+- Dependency changes, including a replacement for `xlsx`, are a request to L. F does not edit the root `package.json` or lockfile.
+- Acceptance: existing import/export tests pass. Untrusted workbooks are not parsed by the vulnerable `xlsx` package once L has landed the dependency F requested.
 
 **Stream G — Customer menu and loyalty UX.** Owner: Frontend.
 
-- Files: `app/menu/**`, `app/page.tsx`, `components/customer/**`, `app/api/public/loyalty/**`, `app/api/public/restaurants/**`, `lib/customer-auth.ts`, `lib/services/customer-loyalty.service.ts`, `lib/services/translation.service.ts`, `lib/i18n/**`.
-- Depends on Stream A for loyalty actually getting past the proxy. This stream does not edit `proxy.ts`.
-- Acceptance: customer components can submit a variant id. Loyalty pages call the existing handlers. Marketing copy no longer says the kitchen is instant while approval and polling are the implementation.
+- `components/customer/**` except `ReservationPanel.tsx` (E).
+- Loyalty acceptance (guest can register, log in, and reset without already holding a session) merges only after A. G does not edit `proxy.ts`.
 
 **Stream H — Schema steward.** Owner: Backend. CTO reviews every change.
 
-- Files: `lib/db/models.ts`, `types/index.ts`, `lib/db/mongo-mappers.ts`. Nobody else edits these during the wave. Other streams send a patch to this owner.
-- Acceptance: indexes for any new membership collection; no second source of truth for money fields; a short note of each new collection.
+- Owns `lib/db/models.ts`, `types/**`, `lib/db/mongo-mappers.ts`, `lib/repositories/types.ts`, and the barrels `lib/repositories/index.ts`, `lib/services/index.ts`, and `lib/validations/index.ts`.
+- Nobody else edits these. Other streams queue a patch. H lands one patch at a time.
+- Acceptance: versioned backfill, staged indexes, and rollback notes for every schema change (see Schema changes). New membership indexes exist before D's consumers merge.
 
-**Stream I — Inventory, procurement, CRM, reports, multi-outlet.** Owner: Backend. Frontend for the matching screens. These four subfolders do not overlap:
+**Streams I1–I5 — former Stream I, separate owners and queues.** Each has its own Backend owner and its own merge queue. They do not share a branch or a review slot. Paths do not overlap. Customer loyalty UI stays in G.
 
-- Inventory: `lib/inventory/**`, `lib/services/inventory.service.ts`, `components/admin/InventoryManager.tsx`, `components/admin/RecipeEditor.tsx`, `app/admin/[slug]/inventory/**`, `app/api/inventory/**`, `tests/inventory-*.ts`, `tests/recipe-cost.test.ts`.
-- Procurement: `lib/services/procurement.service.ts`, `components/admin/ProcurementManager.tsx`, `app/admin/[slug]/procurement/**`, `app/api/procurement/**`.
-- CRM admin: `lib/crm/**`, `lib/services/crm.service.ts`, `components/admin/CrmManager.tsx`, `app/admin/[slug]/crm/**`, `app/api/crm/**`, `tests/loyalty-coupons.test.ts`. Customer loyalty UI stays in Stream G.
-- Org and reports: `lib/org-rbac.ts`, `lib/services/organization.service.ts`, `lib/services/menu-sync.service.ts`, `lib/services/reporting.service.ts`, `lib/analytics/**` (read models only; AI provider stays in Stream J), `components/admin/OrganizationDashboard.tsx`, `components/admin/ReportsDashboard.tsx`, `app/admin/[slug]/organization/**`, `app/admin/[slug]/reports/**`, `app/api/organization/**`, `app/api/reports/**`, `tests/org-rbac.test.ts`, `tests/multi-outlet-boundaries.test.ts`, `tests/financial-reconciliation.test.ts`, `tests/analytics-sales.test.ts`.
+- **I1 Inventory.** `lib/inventory/**`, `lib/services/inventory.service.ts`, inventory screens and `app/api/inventory/**`, inventory tests.
+- **I2 Procurement.** `lib/services/procurement.service.ts`, procurement screen and `app/api/procurement/**`.
+- **I3 CRM admin.** `lib/crm/**`, `lib/services/crm.service.ts`, CRM screen and `app/api/crm/**`, `tests/loyalty-coupons.test.ts`.
+- **I4 Multi-outlet.** `lib/org-rbac.ts`, organization and menu-sync services, organization screen and `app/api/organization/**`, org boundary tests.
+- **I5 Reports.** `lib/services/reporting.service.ts`, `lib/analytics/**` (read models; AI provider stays in J), reports screen and `app/api/reports/**`, financial and sales tests.
 
-- Acceptance: each subfolder's current unit tests still pass. Stock transfer and coupon redemption keep their idempotency keys. No change to order create.
+**Stream J — AI.** Owner: Backend. Unchanged path set in the manifest. No live provider call in unit tests.
 
-**Stream J — AI.** Owner: Backend.
+**Stream K — Hardware.** Owner: Backend.
 
-- Files: `lib/ai/**`, `lib/services/ai-assistant.service.ts`, `lib/services/ai-alert.service.ts`, `lib/services/ai-evaluation.service.ts`, `lib/services/forecast.service.ts`, `components/admin/ai/**`, `app/admin/[slug]/ai/**`, `app/api/ai/**`, `tests/ai-*.ts`.
-- Acceptance: heuristic mode still refuses unknown tools. No provider call in unit tests. Outlet id still comes from the session, not the model.
-
-**Stream K — Hardware.** Owner: Backend. The connector is a separate package so it does not collide with the Next app except the route files named here.
-
-- Files: `lib/devices/**`, `lib/services/device.service.ts`, `lib/services/device-fleet.service.ts`, `lib/services/device-diagnostics.service.ts`, `lib/services/connector.service.ts`, `lib/connector-auth.ts`, `device-connector/**`, `components/admin/DevicesManager.tsx`, `app/admin/[slug]/devices/**`, `app/api/devices/**`, `app/api/connector/**`, `tests/device-*.ts`, `tests/connector-pairing.test.ts`, `tests/escpos-layout.test.ts`, `tests/barcode-wedge.test.ts`.
-- Proxy class for connector routes is Stream A's file. This stream only changes the handlers and the connector client. Acceptance: connector unit tests pass; handlers still require the connector secret; USB stays labeled unsupported until a driver exists.
+- Owns `device-connector/package.json` and `device-connector/package-lock.json`. Root `package.json` and the root lockfile stay with L. K files a dependency request to L when the Next app needs a new package.
+- Connector route handlers stay here. Proxy classification stays in A. K's acceptance that pair, heartbeat, poll, and ack work without a staff cookie merges only after A. Pair acceptance is the pairing-code contract. Heartbeat, poll, and ack acceptance is the secret contract. USB stays labeled unsupported until a driver exists.
 
 **Stream L — DevOps.** Owner: DevOps.
 
-- Files: `.github/workflows/**` (new), `next.config.ts` (only this stream may edit it), `tsconfig.json`, `eslint.config.mjs`.
-- Acceptance: a pull-request workflow runs lint, typecheck, and unit tests. Integration job uses a Mongo replica-set service container and `RUN_INTEGRATION=1`. `ignoreBuildErrors` is removed only after Stream E and Stream B leave `tsc` clean. Production env template lists required names and does not contain values.
+- Sole owner of the root `package.json`, `package-lock.json`, `.github/**`, `next.config.ts`, `tsconfig.json`, `tsconfig.errors.json`, `eslint.config.mjs`, and `postcss.config.mjs`.
+- F and M submit dependency requests. They do not commit those files. K does not edit them.
+- The workflow file may open early. The commit that turns the checks into required gates and removes `ignoreBuildErrors` merges last, after B and E leave `tsc` clean.
 
-**Stream M — Demo and QA.** Owner: QA. DevOps supplies the database. See the demo plan below.
+**Stream M — Demo and QA.** Owner: QA.
 
-- Files: new `scripts/seed-pro-max-demo.ts`, new `scripts/cleanup-pro-max-demo.ts`, new `fixtures/pro-max/**`, new `tests/e2e/**`. Do not edit `lib/demo/seed-demo-kitchen.ts` in this wave (it is the old demo and contains the committed password). Do not edit `lib/services/order.service.ts`.
-- Acceptance: seed and cleanup refuse any URI that is not loopback. Cleanup deletes only documents whose ids start with the demo prefix. Playwright, when added, points at `localhost`.
+- New `scripts/seed-pro-max-demo.ts`, `scripts/cleanup-pro-max-demo.ts`, `fixtures/pro-max/**`, `tests/e2e/**` only. The legacy seed route, `lib/demo/**`, and `scripts/verify-demo-reupload-import.mjs` are D's.
+- Phase A (one admin, 10 captains, 50 tables, 100+ items) can run on today's schema. Full-role QA (2 managers, 2 cashiers, 3 kitchen) merges only after D and H. Dependency additions go to L.
 
-**Stream N — UI shell.** Owner: UI/UX, implemented by Frontend.
+**Stream N — UI shell.** Owner: UI/UX, implemented by Frontend. Shell files only, as in the manifest. Feature streams do not edit the sidebar. They queue a one-line nav patch to N.
 
-- Files: `app/globals.css`, `components/shared/**`, `components/admin/AdminShell.tsx`, `components/admin/AdminSidebar.tsx`, `components/admin/AdminHeader.tsx`, `lib/admin-layout.ts`.
-- Other streams do not add sidebar entries themselves. They name the route in the PR; Stream N adds the link in a follow-up commit on these files only.
-- Acceptance: POS and kitchen stay full-width (`isImmersiveOpsPath`). Mobile nav still closes. No feature logic moves into the shell.
+### Merge order
 
-CTO acceptance for the whole wave: Streams A and B are merged before a production deploy. A deploy without them leaves loyalty, printing, and cancel math wrong. Streams C through N can land in any order relative to each other.
+There is no "C through N in any order."
+
+1. Wave 0 validation contracts.
+2. H's compatible schema and index changes, including barrels, before any consumer of those shapes. D's membership consumers wait for this step.
+3. B's billing contract (`lib/billing/**`, `lib/order-pricing.ts`, snapshot-safe order writes) before C, and before E's handoff of captain billing callers is integrated by C.
+4. A before K's connector acceptance and before G's loyalty acceptance.
+5. D and H both merged before M's full-role demo QA.
+6. L's final gates last: required CI, typecheck on, lockfile closed, `ignoreBuildErrors` removed.
+
+I1–I5, F, J, and N merge when their own paths are ready and any shared-file patch has been queued and landed by the owner. They do not skip steps 1–3 for a file they do not own.
+
+### Security and operations deliverables
+
+These are required for the production wave. Owners are named so the work has a queue.
+
+| Deliverable | Owner | Acceptance |
+| --- | --- | --- |
+| IDOR and tenant-boundary checks | A writes the matrix test; each API owner adds the case for their routes; M runs them on the demo seed | Restaurant A session requesting restaurant B's order, dish, customer, print job, and loyalty profile receives 404 or 403. Outlet id is never taken from the body to expand access. |
+| Origin and CSRF | A for cookie-authenticated mutations | State-changing routes that trust a cookie reject a cross-site `Origin` when `Origin` is present. `SameSite=lax` stays. Pairing and connector calls do not use the staff cookie, so they are not covered by the cookie CSRF check; they keep the code and secret contracts. |
+| Rate limits | A for login, public order create, Wi-Fi reveal, loyalty register/login/reset, and pairing claims; L for the shared store | A burst returns 429. The limiter fails closed when its store is down, replacing the fail-open path in `lib/security/login-rate-limiter.ts:40-44`. |
+| Credential rotation and reset | D | Staff and customer resets invalidate existing sessions. `CREDENTIALS_ENCRYPTION_KEY` and `WIFI_ENCRYPTION_KEY` rotation has a re-encryption step and a documented rollback. Revealing a stored staff password is an audited action with a reason, or the reveal path is removed. Reset tokens are not returned in production API bodies. Super-admin bootstrap passwords stay in the environment and are rotatable without a code change. |
+| Structured redacted logs | L provides the logger; every stream uses it | Logs are JSON. Phone, email, password, cookie, connector secret, pairing code, and payment account fields are redacted. `lib/ai/redact.ts` is the pattern, not a second redactor. |
+| Correlation ids | B on order and payment writes; K on print jobs; L on the request boundary | A request id is accepted or generated at the edge and stored on the order event, payment ledger entry, and print job. `correlationId` in `lib/db/mongo-tx.ts:40` is the existing helper to reuse, not a new format. |
+| KOT failure alerts and retries | B enqueues; K delivers | A failed or missing KOT after accept or append raises an outlet alert (the AI alert collection or a dedicated ops alert, chosen in the ADR). Retries use the existing print-job attempt counter and dedupe key. The order API still succeeds. The alert is visible to the outlet. Swallowing the error with only a returned warning is not enough (finding F-15). |
+| Backup, restore, RPO, RTO | L | A written drill against a copy of a synthetic database, not production. Restore steps are executed once and the result recorded. Target to declare in the drill record: RPO of 15 minutes and RTO of 1 hour for the order and payment collections. Those numbers are targets for the drill design, not measurements from a drill that has not been run. |
+
+### Schema changes
+
+Mongoose applies validators on write. It does not rewrite existing documents, and it does not drop an index that was removed from the schema. H's acceptance for every model change:
+
+- A version field or `schemaVersion` on the collection, and a backfill script that is safe to run twice.
+- Staged indexes: add the new index in a release that still accepts the old shape; backfill; switch readers; drop the old index in a later release. Do not drop a unique index in the same release that starts writing the new key.
+- Rollback compatibility: the new app reads documents written by the previous app. The previous app keeps working against documents written before the backfill, so an app rollback does not require an immediate database rollback.
+- Restore: take a backup of the affected collections before the backfill and before an index build. The backfill PR names the restore command and the point-in-time the backup must cover. L's drill uses that procedure on the synthetic copy.
+
+### ADR plan
+
+Proposed decisions live in `docs/adr/`. They are not accepted until the CTO marks them accepted. The set for this wave:
+
+- `docs/adr/0001-tenancy.md`
+- `docs/adr/0002-identity.md`
+- `docs/adr/0003-billing-snapshots.md`
+- `docs/adr/0004-transaction-requirements.md`
+- `docs/adr/0005-polling.md`
+
+CTO acceptance for a production deploy: Wave 0, H's schema for any collection that deploy writes, A, and B are merged. A deploy without A leaves loyalty and both connector contracts blocked. A deploy without B leaves cancel, append, and lost-update behavior as in F-02. L's required gates are the last merge on the release branch, not the first.
 
 ### TRONX PRO MAX DEMO RESTAURANT
 
-The current seed is not this demo. `lib/demo/seed-demo-kitchen.ts` upserts one restaurant, 8 tables, and dishes from `fixtures/tronx-demo-kitchen-menu.xlsx`. That workbook has 80 menu rows, 12 categories, and 16 items with Half or Full. It does not create captains, ingredients, recipes, suppliers, purchase orders, coupons, or shifts. It also embeds an admin password in source. Do not point it at a shared database.
+The current seed is not this demo. `lib/demo/seed-demo-kitchen.ts` upserts one restaurant, 8 tables, and dishes from `fixtures/tronx-demo-kitchen-menu.xlsx`. That workbook has 80 menu rows, 12 categories, and 16 items with Half or Full. It does not create captains, ingredients, recipes, suppliers, purchase orders, coupons, or shifts. It also embeds an admin password in source. Stream D owns that route, `lib/demo/**`, and `scripts/verify-demo-reupload-import.mjs`, and removes the literal. Do not point the seed at a shared database.
 
 Build a new pair of scripts. Do not run them in production.
 
@@ -397,9 +479,9 @@ QA acceptance: after seed, a captain with no phone on the guest can place an ord
 
 **E2E.** Playwright against `next start` on localhost with the demo seed. Cover guest QR, captain multi-table order without a phone, POS cash close, and kitchen column move. Do not point Playwright at `tronxvideomenu.vercel.app`.
 
-**Concurrency and load.** Re-enable `tests/integration/*.test.ts` on a replica set (coupon limit, loyalty overdraw, stock, print lease). Add a load script that starts 100 synthetic users against localhost: a mix of QR creates with distinct idempotency keys, captain polls, and kitchen polls. Payment calls use a mock adapter that records tenders in memory and never contacts a bank. Pass condition to write down when it is actually run: zero duplicate orders for one idempotency key, zero negative stock, zero coupon redemptions above `maxRedemptions`, and p95 of the poll endpoints recorded from that run. Do not invent those latencies now.
+**Concurrency and load.** Re-enable `tests/integration/*.test.ts` on a replica set (coupon limit, loyalty overdraw, stock, print lease). Add the lost-update and crash-retry tests from the money-integrity section. Add a load script that starts 100 synthetic users against localhost: a mix of QR creates with distinct idempotency keys, captain polls, and kitchen polls. Payment calls use a mock adapter that records tenders in memory and never contacts a bank. Pass condition to write down when it is actually run: zero duplicate orders for one idempotency key, zero negative stock, zero coupon redemptions above `maxRedemptions`, zero double cancels on retry, and p95 of the poll endpoints recorded from that run. Do not invent those latencies now.
 
-**Security.** CI runs `npm audit` and a secret scan that fails on `mongodb+srv://` with credentials and on private-key blocks. Authz matrix test from Stream A. IDOR fixtures: restaurant A cookie requesting restaurant B's order, dish, and customer. Connector secret required on `/api/connector/*` with no staff cookie. Rate limit on public order create and on Wi-Fi reveal, tested with a loop that expects 429. Login limiter must fail closed when its store is down, or the test documents the product decision if fail-open stays.
+**Security.** CI runs `npm audit` and a secret scan that fails on `mongodb+srv://` with credentials and on private-key blocks. Authz matrix test from Stream A, including the ten handler contracts. IDOR fixtures: restaurant A cookie requesting restaurant B's order, dish, customer, and print job. Pairing accepts a valid unused code and rejects a connector secret presented as a code. Heartbeat, job poll, and ack require the connector secret and reject a staff cookie used alone. Rate limits and CSRF checks are the deliverables in Security and operations. Login limiter must fail closed when its store is down.
 
 ## Appendix — route handlers
 
@@ -594,7 +676,8 @@ Handler purpose, by prefix:
 | `/api/auth` | Restaurant admin and super admin login and logout. |
 | `/api/captain/*` | Captain session, assigned tables, walk-in orders, QR approval, kitchen poll, service requests. |
 | `/api/categories`, `/api/dishes` | See catalog. |
-| `/api/connector/*` | Pair, heartbeat, poll, and ack for the Windows connector. Handler expects connector headers. Proxy currently requires a staff cookie. |
+| `/api/connector/pair` | Claim a one-time pairing code. No connector secret and no staff session. Proxy currently requires a staff cookie. |
+| `/api/connector/heartbeat`, `/api/connector/jobs` | Secret-authenticated heartbeat, poll, and ack. Not a pairing code. Proxy currently requires a staff cookie. |
 | `/api/crm/*` | Customers, coupons, feedback for the signed-in outlet. |
 | `/api/dev/seed-demo-kitchen` | Upsert the small demo kitchen. Public at the proxy. Blocked when `NODE_ENV` is `production` unless `ALLOW_PRODUCTION_SEED=true`. |
 | `/api/devices/*` | Register, assign, command, and diagnose printers and simulators. Pairing codes for connectors. |
@@ -606,7 +689,8 @@ Handler purpose, by prefix:
 | `/api/pos/orders` | Create a POS or captain-priced order. Refund and reprint are staff-only. |
 | `/api/pos/shifts` | Open and close the cash shift. Staff cookie only. |
 | `/api/procurement/*` | Suppliers, purchase orders, goods receipt. |
-| `/api/public/loyalty/*` | Customer register, login, logout, me, forgot and reset. Handlers exist. Proxy class is `staff`. |
+| `/api/public/loyalty/login`, `register`, `forgot-password`, `reset-password` | Anonymous. Must not require a customer session. Proxy class is `staff` today. |
+| `/api/public/loyalty/logout`, `/api/public/loyalty/me` | No staff cookie. Logout clears the customer cookie. `me` returns null without one. |
 | `/api/public/orders` | Guest QR order. |
 | `/api/public/reservations` | Guest availability and create. |
 | `/api/public/restaurants/[slug]/translations` | Public translated strings. |

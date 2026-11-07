@@ -133,7 +133,7 @@ Admin CRM: `app/admin/[slug]/crm/page.tsx`, `components/admin/CrmManager.tsx`. C
 
 **Status:** EXISTS-BROKEN
 
-Handlers and UI exist (`app/api/public/loyalty/`, `components/customer/CustomerLoyaltyPanel.tsx`, `app/menu/[slug]/loyalty/reset/page.tsx`, `lib/customer-auth.ts`). The proxy classifies every one of those routes as `staff` (finding F-01). A guest cannot register, log in, reset a password, or read `/me` unless they already hold a staff cookie. That is a broken customer path, not a missing screen.
+Handlers and UI exist (`app/api/public/loyalty/`, `components/customer/CustomerLoyaltyPanel.tsx`, `app/menu/[slug]/loyalty/reset/page.tsx`, `lib/customer-auth.ts`). The proxy classifies every one of those routes as `staff` (finding F-01), so a guest cannot register, log in, or reset a password. The repair is an allow-list per handler. Login, register, forgot-password, and reset-password stay reachable with no customer session. A proxy class that requires a customer cookie on the whole prefix would keep this path broken.
 
 ## Multi-outlet
 

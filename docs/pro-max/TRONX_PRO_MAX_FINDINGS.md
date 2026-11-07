@@ -9,7 +9,7 @@ Severity: **S1** breaks money, tenant safety, or a production request path. **S2
 | ID | Sev | Title |
 | --- | --- | --- |
 | F-01 | S1 | Edge proxy rejects customer loyalty and the device connector before their own auth runs |
-| F-02 | S1 | Line cancel recomputes tax with a second formula and leaves GST split, packaging, and service charge stale |
+| F-02 | S1 | Cancel, append, and replace are not snapshot-safe and can lose updates |
 | F-03 | S2 | POS and captain screens show a different bill than the server stores |
 | F-04 | S2 | QR ordering cannot select variants and always prices the dish base price |
 | F-05 | S2 | Production builds skip TypeScript; `tsc` currently fails |
@@ -36,22 +36,19 @@ Customer loyalty calls are not on that allow-list:
 - `POST /api/public/loyalty/logout`
 - `GET /api/public/loyalty/me`
 
-The UI calls them with no staff cookie (`components/customer/CustomerLoyaltyPanel.tsx:32`, `:70`, `:91`, `:114`, `:133` and `app/menu/[slug]/loyalty/reset/page.tsx:34`). The handlers themselves implement customer sessions (`app/api/public/loyalty/login/route.ts:22`). The proxy returns 401 before those handlers run.
+The UI calls them with no staff cookie (`components/customer/CustomerLoyaltyPanel.tsx:32`, `:70`, `:91`, `:114`, `:133` and `app/menu/[slug]/loyalty/reset/page.tsx:34`). The proxy returns 401 before those handlers run.
 
-The Windows connector authenticates with `x-connector-id` and `x-connector-secret` (`device-connector/src/cloud/client.ts:22-27`) against:
+Those six handlers do not share one auth contract. Login, register, forgot-password, and reset-password must stay reachable with no customer session and no staff session. A blanket proxy class that requires a customer cookie would block account creation and password reset. Logout only clears the customer cookie. `GET /me` reads a customer cookie when one is present and returns `data: null` when it is not (`app/api/public/loyalty/me/route.ts:10-12`). The per-handler contract is in the architecture doc. The proxy fix is an explicit public allow-list for those paths, not a `customer` class applied to `/api/public/loyalty/*`.
 
-- `POST /api/connector/pair`
-- `POST /api/connector/heartbeat`
-- `GET /api/connector/jobs`
-- `POST /api/connector/jobs/[jobId]/ack`
+`POST /api/connector/pair` is not a connector-secret call. The handler comment and schema take a pairing `code` and no `x-connector-secret` (`app/api/connector/pair/route.ts:6-20`). Tenancy comes from the pairing-code record an admin already created. Heartbeat, job poll, and ack are the secret-authenticated channel (`requireConnectorAuth` in `app/api/connector/heartbeat/route.ts:26` and `app/api/connector/jobs/route.ts:8`). The connector client sends the secret on those three and only a code on pair (`device-connector/src/cloud/client.ts:22-50`). All four are classified `staff` today, so both contracts fail closed. Pair must be allowed through on the code alone. The other three must be allowed through so `requireConnectorAuth` can run. They must not be folded into the pairing-code rule.
 
-Those paths are also classified `staff`. `requireConnectorAuth` in `app/api/connector/heartbeat/route.ts:26` never runs for a connector that has no admin cookie. Heartbeats, pairing, and print-job polling fail closed.
+`GET /api/kitchen/orders` is the same `staff` class. The handler allows a captain (`app/api/kitchen/orders/route.ts:16-18`), but a captain cookie alone is rejected by the proxy. The captain UI uses `/api/captain/kitchen` instead, so the captain branch of the admin kitchen route is dead.
 
-`GET /api/kitchen/orders` is the same class. The handler allows a captain (`app/api/kitchen/orders/route.ts:16-18`), but a captain cookie alone is rejected by the proxy. The captain UI uses `/api/captain/kitchen` instead, so the captain branch of the admin kitchen route is dead.
+**Why it matters:** Loyalty self-service and both connector contracts are implemented and then blocked by the only request gate Next.js 16 installs. This is not an auth bypass. It is an authorization matrix that does not match the handlers. The repair is per handler. It is not one new customer-auth class and not one connector class that treats pairing and job polling as the same credential.
 
-**Why it matters:** Loyalty self-service and cloud printing are implemented and then blocked by the only request gate Next.js 16 installs. This is not an auth bypass. It is an authorization matrix that does not match the handlers.
+## F-02 — Cancel, append, and replace are not snapshot-safe
 
-## F-02 — Two bill formulas, and cancel does not refresh GST components
+**Also:** line cancel still uses a second tax formula. See the money-integrity policy in the architecture doc. The defects below are what that policy has to close.
 
 **Severity:** S1
 
@@ -63,7 +60,13 @@ Those paths are also classified `staff`. `requireConnectorAuth` in `app/api/conn
 - Line cancel calls `computeBillTotals`: `lib/services/order.service.ts:1530-1534`.
 - `replaceItemsAndTotals` writes CGST/SGST/IGST/packaging/service/bill snapshot only when the caller passes them: `lib/repositories/order.repository.ts:388-394`. The cancel caller does not pass them (`lib/services/order.service.ts:1543-1550`).
 
-**Why it matters:** After a partial cancel, `total` and `taxAmount` can move under the legacy formula while `cgstAmount`, `sgstAmount`, `igstAmount`, `packagingCharge`, `serviceCharge`, and `billSnapshot` stay at the pre-cancel values. A printed bill, a report, and the order total can disagree. Unit tests cover each function separately (`tests/billing-calculator.test.ts`, `tests/order-pricing.test.ts`). They do not assert that cancel uses the restaurant calculator.
+**Append re-rates existing lines.** `appendItemsToOrder` builds `merged` from the stored lines plus the new lines, then runs `resolveLineTaxRate` against the live menu for every line (`lib/services/order.service.ts:750-770`). A later change to the dish, category, or outlet GST rate changes the tax on lines whose `unitPriceSnapshot` and `itemTotal` were already frozen. Packaging and service charge are also taken from the live billing settings.
+
+**Replace has no version check.** `replaceItemsAndTotals` updates by `restaurantId`, `id`, and a status exclusion (`lib/repositories/order.repository.ts:399-406`). It does not compare `updatedAt` or a version. Two callers that read the same order can each write, and the second write drops the first.
+
+**Cancel writes money before the idempotency marker.** `cancelOrderLines` looks for `idempotencyKey` first (`lib/services/order.service.ts:1442-1454`). On a miss it updates totals via `replaceItemsAndTotals` (`:1543`) and only afterwards inserts the per-line rows and the parent marker (`:1588-1626`). A crash after the total write and before the parent insert retries as a new cancel. The early read cannot see a marker that was never written. Per-line keys are `${idempotencyKey}:${lineId}` (`:1520`), so they also do not satisfy the parent lookup on retry.
+
+**Why it matters:** A partial cancel can move `total` and `taxAmount` under the legacy formula while `cgstAmount`, `sgstAmount`, `igstAmount`, `packagingCharge`, `serviceCharge`, and `billSnapshot` stay at the pre-cancel values. An append can change tax on history. Concurrent appends or a crashed cancel can double-apply. Unit tests cover each calculator in isolation. They do not cover lost updates or a retry after a crash between the money write and the marker. Those two tests are now required before this finding is closed.
 
 ## F-03 — Staff screens preview the legacy bill
 
