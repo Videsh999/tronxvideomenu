@@ -423,7 +423,7 @@ Role: Backend Engineer. Reviewer: CTO. The Frontend Engineer alone edits the ded
 - `tests/payments/**` and `tests/whatsapp/**`: unit, adapter, signature, tenancy, Mongo integration, and concurrency tests. Do not claim B's order-test glob, I1's integration file, or M's E2E namespace.
 - `docs/pro-max/whatsapp-payments/**`: feature architecture, capability, implementation, security, reconciliation, and template docs. The Founder brief and provider research already live at `docs/whatsapp-payments/FOUNDER_BRIEF.md` and `docs/whatsapp-payments/PROVIDER_CAPABILITY_RESEARCH.md`.
 
-ADR numbers 0006–0011 are reserved by this patch for payments and WhatsApp. The ADR files themselves were not in the attachments for this commit, so they were not added. ADR 0005 remains the KOT failure-alert record. No KOT ADR was numbered 0006, so nothing was moved to 0012.
+ADRs 0006–0011 are in `docs/adr/` with status Proposed. ADR 0005 remains the KOT failure-alert record. No KOT ADR was numbered 0006, so nothing was moved to 0012.
 
 ### Frontend Engineer-owned dedicated UI paths
 
@@ -468,7 +468,7 @@ The patch's effort range is an estimate, not a commitment: 35–55 engineering p
 | `docs/ops/BACKUP_RESTORE_DRILL.md` | L |
 | `PRODUCTION_DEPLOYMENT_CHECKLIST.md` | L |
 
-ADR 0005 (`docs/adr/0005-polling.md`) covers KOT failure alerts and retries. The v2 board did not create a KOT ADR numbered 0006, so nothing was renumbered to 0012. The CTO patch reserves numbers 0006–0011 for payments and WhatsApp. Those six ADR files were not attached and were not committed. Proposed author of ADR 0001 through ADR 0005: TRONX BACKEND ENGINEER. Pending CTO confirmation.
+ADR 0005 (`docs/adr/0005-polling.md`) covers KOT failure alerts and retries. The v2 board did not create a KOT ADR numbered 0006, so nothing was renumbered to 0012. ADRs 0006–0011 are now in `docs/adr/` as Proposed. Proposed author of ADR 0001 through ADR 0005: TRONX BACKEND ENGINEER. Pending CTO confirmation.
 
 ## Validation modules after Wave 0
 
