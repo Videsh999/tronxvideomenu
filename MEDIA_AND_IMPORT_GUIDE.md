@@ -45,7 +45,7 @@ npm run demo:seed:http          # while next dev is running
 npm run demo:verify:reupload    # live login → import reupload xlsx → assert no SKU dups
 ```
 
-Demo login: `demo@tronx.local` / `DemoKitchen!2026` (local only).
+Demo login email: `demo@tronx.local`. The password comes from `TRONX_DEMO_ADMIN_PASSWORD` and is not stored in source.
 
 ### Media → menu (POS same)
 

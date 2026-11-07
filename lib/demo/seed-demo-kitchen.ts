@@ -1,6 +1,6 @@
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import * as XLSX from "xlsx";
+import { readXlsxSheets } from "@/lib/spreadsheet";
 import { connectToDatabase } from "@/lib/db/mongodb";
 import { CategoryModel, DishModel, RestaurantModel, TableModel } from "@/lib/db/models";
 import { restaurantAdminService } from "@/lib/services/restaurant-admin.service";
@@ -9,8 +9,40 @@ export const DEMO_KITCHEN = {
   restaurantId: "tronx-demo-kitchen",
   slug: "tronx-demo-kitchen",
   adminEmail: "demo@tronx.local",
-  adminPassword: "DemoKitchen!2026",
 } as const;
+
+function isLoopbackMongoUri(uri: string): boolean {
+  if (!uri.startsWith("mongodb://")) return false;
+  const withoutScheme = uri.slice("mongodb://".length);
+  const hostPart = (withoutScheme.split("@").pop() ?? "").split("/")[0] ?? "";
+  if (!hostPart) return false;
+  return hostPart.split(",").every((entry) => {
+    const host = entry.trim().replace(/^\[|\]$/g, "").split(":")[0];
+    return host === "localhost" || host === "127.0.0.1";
+  });
+}
+
+/**
+ * Fail closed. Production is never allowed. A loopback URI, an explicit
+ * confirm flag, and a password from the environment are all required.
+ * The password is returned to the caller and must not be logged.
+ */
+export function assertSafeDemoSeed(): string {
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("Refusing to seed in production.");
+  }
+  if (process.env.TRONX_DEMO_SEED_CONFIRM !== "localhost") {
+    throw new Error("Refusing to seed without TRONX_DEMO_SEED_CONFIRM=localhost.");
+  }
+  if (!isLoopbackMongoUri(process.env.MONGODB_URI ?? "")) {
+    throw new Error("Refusing to seed unless MONGODB_URI is a loopback MongoDB.");
+  }
+  const password = process.env.TRONX_DEMO_ADMIN_PASSWORD ?? "";
+  if (password.length < 12) {
+    throw new Error("TRONX_DEMO_ADMIN_PASSWORD is required and must be at least 12 characters.");
+  }
+  return password;
+}
 
 async function upsertById(
   model: { updateOne: (f: object, u: object, o?: object) => Promise<unknown> },
@@ -20,27 +52,25 @@ async function upsertById(
   await model.updateOne({ id }, { $set: { ...doc, id } }, { upsert: true });
 }
 
-function loadMenuRows(): Record<string, unknown>[] {
+async function loadMenuRows(): Promise<Record<string, unknown>[]> {
   const path = join(process.cwd(), "fixtures", "tronx-demo-kitchen-menu.xlsx");
   if (!existsSync(path)) {
     throw new Error(`Missing ${path}. Run: npm run demo:workbook`);
   }
-  const buffer = readFileSync(path);
-  const book = XLSX.read(buffer, { type: "buffer" });
-  const sheet = book.Sheets.Menu;
+  const sheets = await readXlsxSheets(readFileSync(path));
+  const sheet = sheets.find((entry) => entry.name === "Menu");
   if (!sheet) throw new Error("Menu sheet missing in workbook");
-  return XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
+  const [header, ...body] = sheet.rows;
+  if (!header) throw new Error("Menu sheet missing in workbook");
+  return body.map((row) => Object.fromEntries(header.map((key, index) => [key, row[index] ?? ""])));
 }
 
 export async function seedTronxDemoKitchen() {
-  if (process.env.NODE_ENV === "production" && process.env.ALLOW_PRODUCTION_SEED !== "true") {
-    throw new Error("Refusing to seed in production without ALLOW_PRODUCTION_SEED=true");
-  }
+  const adminPassword = assertSafeDemoSeed();
 
   await connectToDatabase();
   const now = new Date().toISOString();
-  const { restaurantId: RESTAURANT_ID, slug: SLUG, adminEmail: ADMIN_EMAIL, adminPassword: ADMIN_PASSWORD } =
-    DEMO_KITCHEN;
+  const { restaurantId: RESTAURANT_ID, slug: SLUG, adminEmail: ADMIN_EMAIL } = DEMO_KITCHEN;
 
   await upsertById(RestaurantModel, RESTAURANT_ID, {
     name: "TRONX Demo Kitchen",
@@ -66,7 +96,7 @@ export async function seedTronxDemoKitchen() {
     createdAt: now,
   });
 
-  const rows = loadMenuRows();
+  const rows = await loadMenuRows();
   const categoryNames = [...new Set(rows.map((row) => String(row.Category || "").trim()).filter(Boolean))];
   const categoryIds = new Map<string, string>();
 
@@ -148,7 +178,7 @@ export async function seedTronxDemoKitchen() {
 
   await restaurantAdminService.setCredentials(RESTAURANT_ID, {
     email: ADMIN_EMAIL,
-    password: ADMIN_PASSWORD,
+    password: adminPassword,
   });
 
   return {
