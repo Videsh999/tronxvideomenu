@@ -10,7 +10,7 @@ const schema = z
     decision: z.enum(["APPROVE", "REJECT", "CORRECTION"]),
     reason: z.string().trim().max(500).optional(),
     idempotencyKey: z.string().uuid(),
-    sendToKitchen: z.boolean().optional().default(true),
+    sendToKitchen: z.boolean().optional().default(false),
   })
   .strict();
 
@@ -65,7 +65,6 @@ export async function POST(
         decision: parsed.data.decision,
         sentToKitchen:
           parsed.data.decision === "APPROVE" &&
-          parsed.data.sendToKitchen !== false &&
           ["ACCEPTED", "PREPARING", "READY"].includes(updated.status),
       },
     });

@@ -76,7 +76,7 @@ export default function CaptainApprovals({
           decision,
           reason: reasonText,
           idempotencyKey: crypto.randomUUID(),
-          sendToKitchen: true,
+          sendToKitchen: false,
         }),
       });
       const json = await response.json();
@@ -86,7 +86,7 @@ export default function CaptainApprovals({
       setReason("");
       setMessage(
         decision === "APPROVE"
-          ? `Order #${order.orderNumber} approved${json.meta?.sentToKitchen ? " · sent to kitchen" : ""}`
+          ? `Order #${order.orderNumber} approved · moved to New orders`
           : `Order #${order.orderNumber} ${decision === "REJECT" ? "rejected" : "sent back for correction"}`,
       );
     } catch (error) {
@@ -104,8 +104,8 @@ export default function CaptainApprovals({
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-neutral-400">Authorization</p>
           <h1 className="mt-1 text-3xl font-bold tracking-tight">Pending approvals</h1>
           <p className="mt-1 max-w-2xl text-sm text-neutral-500">
-            Customer ordered on QR at one of your tables. Tick <strong>Approve & send to kitchen</strong> only after you
-            check the dishes. Until you approve, kitchen and KOT stay empty for that order.
+            Customer ordered on QR at one of your tables. Approve after checking the dishes; the order then appears
+            under New. Kitchen and KOT remain empty until the order is separately accepted.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -215,7 +215,7 @@ export default function CaptainApprovals({
                     className="inline-flex min-h-11 items-center gap-2 rounded-full bg-emerald-700 px-4 text-sm font-bold text-white disabled:opacity-50"
                   >
                     <ShieldCheck className="h-4 w-4" />
-                    Approve & send to kitchen
+                    Approve order
                   </button>
                   <button
                     type="button"

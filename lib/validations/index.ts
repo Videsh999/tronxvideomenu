@@ -520,7 +520,7 @@ export const placeCaptainOrderSchema = z
     couponCode: z.string().trim().min(3).max(40).optional(),
     redeemLoyaltyPoints: z.number().int().min(0).max(1_000_000).optional(),
     idempotencyKey: z.string().uuid(),
-    sendToKitchen: z.boolean().optional().default(true),
+    sendToKitchen: z.boolean().optional().default(false),
     items: z.array(posOrderItemSchema).min(1).max(80),
   })
   .strict();

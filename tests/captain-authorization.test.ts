@@ -77,5 +77,6 @@ describe("captain authorization gate", () => {
       idempotencyKey: "22222222-2222-4222-8222-222222222222",
     });
     assert.equal(ok.success, true);
+    if (ok.success) assert.equal(ok.data.sendToKitchen, false);
   });
 });

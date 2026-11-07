@@ -249,7 +249,7 @@ export default function CaptainOrderPad({
             couponCode: session.couponCode.trim() || undefined,
             redeemLoyaltyPoints: session.redeemLoyaltyPoints || undefined,
             idempotencyKey: session.idempotencyKey,
-            sendToKitchen: true,
+            sendToKitchen: false,
             items: session.cart.map((line) => ({
               dishId: line.dishId,
               variantId: line.variantId,
@@ -283,7 +283,7 @@ export default function CaptainOrderPad({
           if (!canPay) {
             patchSession(emptyCartState());
             setMessage(
-              `Order #${json.data.orderNumber} sent to kitchen — payment not permitted for ${payMethod}. Hand over to cashier.`,
+              `Order #${json.data.orderNumber} saved in New orders — payment not permitted for ${payMethod}. Hand over to cashier.`,
             );
             return;
           }

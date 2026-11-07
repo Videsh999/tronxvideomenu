@@ -832,7 +832,6 @@ export class OrderService {
       decision: "APPROVE" | "REJECT" | "CORRECTION";
       reason?: string;
       idempotencyKey: string;
-      sendToKitchen?: boolean;
     },
     actor: PaymentAuditActor,
   ) {
@@ -903,10 +902,6 @@ export class OrderService {
         "Authorization conflict — another captain may have already decided. Refresh and try again.",
         409,
       );
-    }
-
-    if (input.decision === "APPROVE" && input.sendToKitchen !== false && updated.status === "PENDING") {
-      return this.acceptToKitchen(restaurantId, orderId, updated, actor);
     }
 
     return staffOrderView(updated);

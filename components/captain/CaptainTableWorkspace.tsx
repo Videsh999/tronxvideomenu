@@ -146,7 +146,7 @@ export default function CaptainTableWorkspace({
       });
   }
 
-  /** QR approve → kitchen, or Accept & send for captain/POS new orders. */
+  /** Approval clears the captain gate; a separate acceptance sends the order to kitchen. */
   function sendToKitchen() {
     if (!order) return;
     startTransition(async () => {
@@ -159,14 +159,13 @@ export default function CaptainTableWorkspace({
             body: JSON.stringify({
               decision: "APPROVE",
               idempotencyKey: crypto.randomUUID(),
-              sendToKitchen: true,
+              sendToKitchen: false,
             }),
           });
           const json = await response.json();
           if (!json.success) throw new Error(json.error || "Unable to approve order");
           setOrder(json.data);
-          setMessage(`Order #${order.orderNumber} approved · sent to kitchen`);
-          printKitchenOrderTicket(json.data);
+          setMessage(`Order #${order.orderNumber} approved · now waiting in New orders`);
         } else {
           const response = await fetch(`/api/captain/orders/${order.id}`, {
             method: "PATCH",
@@ -333,7 +332,7 @@ export default function CaptainTableWorkspace({
               <div className="sticky top-14 z-10 space-y-2 rounded-2xl border border-neutral-200 bg-white/95 p-3 shadow-sm backdrop-blur-md lg:top-4">
                 {isPendingCaptainApproval(order) ? (
                   <p className="text-sm text-amber-950">
-                    Customer QR order — approve to print KOT and release to kitchen.
+                    Customer QR order — approve it first. It will remain under New until accepted.
                   </p>
                 ) : order.status === "PENDING" ? (
                   <p className="text-sm text-sky-950">New order waiting — accept to send KOT to kitchen.</p>
@@ -351,7 +350,7 @@ export default function CaptainTableWorkspace({
                       className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-neutral-900 px-4 text-sm font-bold text-white disabled:opacity-50 sm:flex-none"
                     >
                       {isPendingCaptainApproval(order)
-                        ? "Approve & send to kitchen"
+                        ? "Approve order"
                         : "Accept & send to kitchen"}
                     </button>
                   ) : null}

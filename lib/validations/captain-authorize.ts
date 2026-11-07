@@ -5,7 +5,7 @@ export const captainAuthorizeSchema = z
     decision: z.enum(["APPROVE", "REJECT", "CORRECTION"]),
     reason: z.string().trim().max(500).optional(),
     idempotencyKey: z.string().uuid(),
-    sendToKitchen: z.boolean().optional().default(true),
+    sendToKitchen: z.boolean().optional().default(false),
   })
   .strict()
   .superRefine((value, context) => {

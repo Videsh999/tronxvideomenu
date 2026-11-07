@@ -10,7 +10,7 @@ test("captain order allows walk-in without phone", () => {
   });
   assert.equal(parsed.success, true);
   if (!parsed.success) return;
-  assert.equal(parsed.data.sendToKitchen, true);
+  assert.equal(parsed.data.sendToKitchen, false);
   assert.equal(parsed.data.customerPhone, undefined);
 });
 

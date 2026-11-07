@@ -185,41 +185,15 @@ export async function POST(request: Request) {
       );
     }
 
-    let kitchenWarning: string | undefined;
-    let sentToKitchen = false;
-    if (parsed.data.sendToKitchen !== false) {
-      try {
-        if (order.status === "PENDING") {
-          const advanced = await orderService.updateStatus(
-            captain.restaurantId,
-            order.id,
-            "PREPARING",
-            actor,
-          );
-          if (advanced) {
-            order = advanced;
-            sentToKitchen = true;
-          } else {
-            kitchenWarning =
-              "Order saved but kitchen handoff could not be confirmed — accept from Orders.";
-          }
-        } else if (appended && ["ACCEPTED", "PREPARING", "READY"].includes(order.status)) {
-          // appendItemsToOrder already enqueues KOT; mark kitchen notified.
-          sentToKitchen = true;
-        }
-      } catch (kitchenError) {
-        kitchenWarning =
-          kitchenError instanceof Error
-            ? kitchenError.message
-            : "Order saved but kitchen handoff failed — accept from Orders.";
-      }
-    }
+    // New captain-entered orders always remain in New until explicitly accepted from Orders.
+    // Items appended to an order already in production are sent by appendItemsToOrder.
+    const sentToKitchen = appended && ["ACCEPTED", "PREPARING", "READY"].includes(order.status);
 
     return NextResponse.json(
       {
         success: true,
         data: order,
-        meta: { sentToKitchen, appended, warning: kitchenWarning, source: "CAPTAIN_DIRECT" },
+        meta: { sentToKitchen, appended, source: "CAPTAIN_DIRECT" },
       },
       { status: 201 },
     );
