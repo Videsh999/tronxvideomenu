@@ -327,6 +327,10 @@ const orderItemSnapshotSchema = new Schema(
       enum: ["QUEUED", "PREPARING", "READY"],
       default: "QUEUED",
     },
+    /** GST rate resolved when the line was added. Append and cancel must not replace it. */
+    gstRateSnapshot: { type: Number, min: 0, max: 100 },
+    /** Cumulative quantity cancelled on this line. Persisted; strict mode used to drop it. */
+    cancelledQuantity: { type: Number, min: 0, default: 0 },
     itemTotal: { type: Number, required: true, min: 0 },
   },
   { _id: false, strict: true },
@@ -389,6 +393,7 @@ const paymentLedgerEntrySchema = new Schema(
       name: String,
     },
     reason: String,
+    idempotencyKey: String,
   },
   { _id: false, strict: true },
 );
@@ -531,6 +536,8 @@ const orderSchema = new Schema<RestaurantOrder>(
       default: [],
     },
     shiftId: String,
+    /** Optimistic concurrency token. Missing on older documents means 0. */
+    version: { type: Number, min: 0, default: 0 },
     createdAt: { type: String, required: true },
     updatedAt: { type: String, required: true },
     completedAt: String,
@@ -1154,6 +1161,10 @@ const orderLineCancellationSchema = new Schema(
       name: String,
     },
     createdAt: { type: String, required: true },
+    /** PENDING is written before totals. APPLIED means the bill write landed. Missing means APPLIED. */
+    applyStatus: { type: String, enum: ["PENDING", "APPLIED"] },
+    baseVersion: { type: Number, min: 0 },
+    plannedCancelled: { type: Schema.Types.Mixed },
   },
   { ...baseOptions, collection: "orderLineCancellations" },
 );

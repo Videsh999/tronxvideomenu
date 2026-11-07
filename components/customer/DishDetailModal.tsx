@@ -16,7 +16,7 @@ type DishDetailModalProps = {
   orderingEnabled?: boolean;
   videoMenuEnabled?: boolean;
   categoryName?: string;
-  onAddToCart: (entry: { dishId: string; quantity: number; selections: { groupId: string; addonIds: string[] }[] }) => void;
+  onAddToCart: (entry: { dishId: string; quantity: number; variantId?: string; selections: { groupId: string; addonIds: string[] }[] }) => void;
 };
 
 function createInitialAddonSelections(dish: Dish | null) {
@@ -53,6 +53,16 @@ export default function DishDetailModal({
     values: Record<string, string[]>;
   }>({ dishId: null, values: {} });
   const [quantity, setQuantity] = useState(1);
+  const [variantState, setVariantState] = useState<{ dishId: string | null; variantId: string }>({
+    dishId: null,
+    variantId: "",
+  });
+  const availableVariants = (dish?.variants ?? []).filter((variant) => variant.isAvailable !== false);
+  const selectedVariantId =
+    dish && variantState.dishId === dish.id
+      ? variantState.variantId
+      : (availableVariants[0]?.id ?? "");
+  const selectedVariant = availableVariants.find((variant) => variant.id === selectedVariantId);
   const selectedAddons =
     dish && selectionState.dishId === dish.id
       ? selectionState.values
@@ -128,8 +138,9 @@ export default function DishDetailModal({
     return total;
   }, [dish, selectedAddons]);
 
-  const totalPrice = (dish?.price ?? 0) + addonsTotal;
-  const hasValidSelections = (dish?.addonGroups ?? []).every((group) => {
+  const totalPrice = (selectedVariant?.price ?? dish?.price ?? 0) + addonsTotal;
+  const hasVariantChoice = availableVariants.length === 0 || Boolean(selectedVariant);
+  const hasValidSelections = hasVariantChoice && (dish?.addonGroups ?? []).every((group) => {
     if (group.isActive === false) return true;
     const ids = selectedAddons[group.id] ?? [];
     const count = ids.length;
@@ -287,6 +298,28 @@ export default function DishDetailModal({
                 </div>
 
                 <div className="space-y-5">
+                  {availableVariants.length > 0 ? (
+                    <div className="overflow-hidden rounded-2xl border border-[var(--customer-border)] bg-white">
+                      <div className="border-b border-[var(--customer-border)] bg-[var(--customer-cream)]/60 px-4 py-3 sm:px-5">
+                        <span className="text-base font-semibold text-[var(--restaurant-text)]">Size</span>
+                      </div>
+                      <div className="flex flex-wrap gap-2 px-4 py-3">
+                        {availableVariants.map((variant) => {
+                          const selected = variant.id === selectedVariantId;
+                          return (
+                            <button
+                              key={variant.id}
+                              type="button"
+                              onClick={() => setVariantState({ dishId: dish.id, variantId: variant.id })}
+                              className={`rounded-full border px-3 py-1.5 text-sm font-semibold ${selected ? "border-[var(--restaurant-primary)] bg-[var(--restaurant-primary)] text-white" : "border-[var(--customer-border)] text-[var(--restaurant-text)]"}`}
+                            >
+                              {variant.name} · ₹{variant.price}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : null}
                   {dish.addonGroups.filter((group) => group.isActive !== false).map((group) => {
                     const currentSelections = selectedAddons[group.id] || [];
                     const isSingleSelect = group.maxSelect === 1;
@@ -438,6 +471,7 @@ export default function DishDetailModal({
                 onAddToCart({
                   dishId: dish.id,
                   quantity,
+                  variantId: selectedVariant?.id,
                   selections: (dish.addonGroups ?? []).filter((group) => group.isActive !== false).map((group) => ({ groupId: group.id, addonIds: selectedAddons[group.id] ?? [] })),
                 });
                 onClose();

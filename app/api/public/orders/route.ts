@@ -47,7 +47,7 @@ export async function POST(request: Request) {
     const result = await orderService.createPublic(input, { loyaltyCustomerId });
     return NextResponse.json(
       { success: true, data: result },
-      { status: 201, headers: { "Cache-Control": "no-store" } },
+      { status: result.duplicate ? 200 : 201, headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
     const validation = error && typeof error === "object" && "issues" in error;

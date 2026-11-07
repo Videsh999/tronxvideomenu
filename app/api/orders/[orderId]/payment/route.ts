@@ -149,6 +149,7 @@ export async function POST(request: Request, { params }: RouteContext) {
       parsed.data.method,
       actor,
       parsed.data.amount,
+      parsed.data.idempotencyKey,
     );
 
     return NextResponse.json({ success: true, data: updated });

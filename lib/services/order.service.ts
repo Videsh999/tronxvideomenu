@@ -11,7 +11,15 @@ import { OrderLineCancellationModel } from "@/lib/db/models";
 import { connectToDatabase } from "@/lib/db/mongodb";
 import { toDomain } from "@/lib/db/mongo-mappers";
 import { hasRestaurantFeature } from "@/lib/features";
-import { lineItemTotal, computeBillTotals, amountRemaining, roundMoney } from "@/lib/order-pricing";
+import { lineItemTotal, amountRemaining, roundMoney } from "@/lib/order-pricing";
+import {
+  billFromStoredLines,
+  billMoneyFields,
+  linesReflectCancellation,
+  planLineCancellation,
+  snapshotGstRate,
+} from "@/lib/billing/order-bill";
+import { resolveOrderedUnitPrice, VariantPriceError } from "@/lib/billing/price-line";
 import type { OrderLineCancellation } from "@/types";
 import { canTransition } from "@/lib/order-transitions";
 import {
@@ -106,6 +114,40 @@ function resolveStation(
   return dishStation ?? categoryStation ?? "MAIN";
 }
 
+function isDuplicateKey(error: unknown): boolean {
+  return Boolean(error && typeof error === "object" && "code" in error && error.code === 11000);
+}
+
+function priceVariant(dish: { name: string; price: number; variants?: Array<{ id: string; name: string; price: number; isAvailable?: boolean }> }, variantId?: string) {
+  try {
+    return resolveOrderedUnitPrice(dish, variantId);
+  } catch (error) {
+    if (error instanceof VariantPriceError) throw new OrderServiceError(error.message);
+    throw error;
+  }
+}
+
+function withGstSnapshot<T extends { dishId: string; gstRateSnapshot?: number }>(
+  item: T,
+  menu: {
+    dishes: Array<{ id: string; categoryId: string; taxRatePercent?: number | null }>;
+    categories: Array<{ id: string; taxRatePercent?: number | null }>;
+    restaurant: { billing?: import("@/types").RestaurantBillingSettings | null };
+  },
+): T {
+  if (item.gstRateSnapshot != null) return item;
+  const dish = menu.dishes.find((entry) => entry.id === item.dishId);
+  const category = dish ? menu.categories.find((entry) => entry.id === dish.categoryId) : undefined;
+  return {
+    ...item,
+    gstRateSnapshot: snapshotGstRate({
+      dish: dish ? { taxRatePercent: dish.taxRatePercent ?? undefined } : undefined,
+      category: category ? { taxRatePercent: category.taxRatePercent ?? undefined } : undefined,
+      billing: menu.restaurant.billing,
+    }),
+  };
+}
+
 export class OrderServiceError extends Error {
   constructor(message: string, readonly statusCode = 409) {
     super(message);
@@ -146,8 +188,9 @@ export class OrderService {
     if (!table || !table.isActive || table.status === "CLOSED") {
       throw new OrderServiceError("This table is unavailable. Please ask restaurant staff for help.");
     }
-    if (await orderRepository.hasIdempotencyKey(menu.restaurant.id, input.idempotencyKey)) {
-      throw new OrderServiceError("This order was already submitted. Refresh the page to see your order status.");
+    const existing = await orderRepository.findByIdempotencyKey(menu.restaurant.id, input.idempotencyKey);
+    if (existing) {
+      return { order: customerOrderView(existing), duplicate: true as const };
     }
 
     // Optional loyalty link only — never required for QR ordering / privacy.
@@ -216,7 +259,8 @@ export class OrderService {
         });
       });
 
-      const unitPriceSnapshot = dish.price;
+      const priced = priceVariant(dish, requested.variantId);
+      const unitPriceSnapshot = priced.unitPrice;
       if (requested.expectedUnitPrice !== unitPriceSnapshot) {
         throw new OrderServiceError(`The price for ${dish.name} changed. Please review your cart.`);
       }
@@ -229,6 +273,8 @@ export class OrderService {
         lineId: `line-${randomUUID()}`,
         dishId: dish.id,
         dishNameSnapshot: dish.name,
+        variantId: priced.variantId,
+        variantNameSnapshot: priced.variantName,
         quantity: requested.quantity,
         unitPriceSnapshot,
         addons,
@@ -238,24 +284,9 @@ export class OrderService {
       };
     });
 
-    const { calculateRestaurantBill } = await import("@/lib/billing/calculate-bill");
-    const { resolveLineTaxRate } = await import("@/lib/billing/resolve-tax-rate");
-    const categoryById = new Map(menu.categories.map((category) => [category.id, category]));
-    const bill = calculateRestaurantBill({
-      lines: items.map((item) => {
-        const dish = menu.dishes.find((entry) => entry.id === item.dishId);
-        const category = dish ? categoryById.get(dish.categoryId) : undefined;
-        const resolved = resolveLineTaxRate({
-          dish,
-          category,
-          billing: menu.restaurant.billing,
-        });
-        return {
-          lineTotal: item.itemTotal,
-          quantity: item.quantity,
-          gstRatePercent: resolved.rate,
-        };
-      }),
+    const pricedItems = items.map((item) => withGstSnapshot(item, menu));
+    const bill = billFromStoredLines({
+      items: pricedItems,
       billing: menu.restaurant.billing,
     });
 
@@ -269,39 +300,37 @@ export class OrderService {
       billSnapshot: bill,
       captainAuthorization,
     });
-    const created = await orderRepository.create({
-      id: `order-${randomUUID()}`,
-      restaurantId: menu.restaurant.id,
-      tableId: table.id,
-      tableNumber: table.tableNumber,
-      customerTokenHash: createHash("sha256").update(customerToken).digest("hex"),
-      idempotencyKey: input.idempotencyKey,
-      status: "PENDING",
-      channel: "QR",
-      source: "QR",
-      captainAuthorization,
-      customerId: loyaltyCustomerId,
-      items,
-      subtotal: bill.itemsSubtotal,
-      billDiscountAmount: 0,
-      taxRatePercent: bill.gstRatePercent,
-      taxAmount: bill.taxAmount,
-      packagingCharge: bill.packagingCharge,
-      serviceCharge: bill.serviceCharge,
-      cgstAmount: bill.cgstAmount,
-      sgstAmount: bill.sgstAmount,
-      igstAmount: bill.igstAmount,
-      billSnapshot: bill,
-      total: bill.total,
-      payment: {
-        status: "UNPAID",
-        amountPaid: 0,
-        auditTrail: [],
-        ledger: [],
-      },
-      events: [createdEvent],
-    });
-    return { order: customerOrderView(created), customerToken };
+    try {
+      const created = await orderRepository.create({
+        id: `order-${randomUUID()}`,
+        restaurantId: menu.restaurant.id,
+        tableId: table.id,
+        tableNumber: table.tableNumber,
+        customerTokenHash: createHash("sha256").update(customerToken).digest("hex"),
+        idempotencyKey: input.idempotencyKey,
+        status: "PENDING",
+        channel: "QR",
+        source: "QR",
+        captainAuthorization,
+        customerId: loyaltyCustomerId,
+        items: pricedItems,
+        ...billMoneyFields(bill),
+        payment: {
+          status: "UNPAID",
+          amountPaid: 0,
+          auditTrail: [],
+          ledger: [],
+        },
+        events: [createdEvent],
+      });
+      return { order: customerOrderView(created), customerToken };
+    } catch (error) {
+      if (isDuplicateKey(error)) {
+        const again = await orderRepository.findByIdempotencyKey(menu.restaurant.id, input.idempotencyKey);
+        if (again) return { order: customerOrderView(again), duplicate: true as const };
+      }
+      throw error;
+    }
   }
 
   async createPosOrder(
@@ -349,20 +378,10 @@ export class OrderService {
       }
       if (!dish.isAvailable) throw new OrderServiceError(`${dish.name} is currently unavailable.`);
 
-      let unitPriceSnapshot = dish.price;
-      let variantNameSnapshot: string | undefined;
-      let variantId: string | undefined;
-      if (requested.variantId) {
-        const variant = (dish.variants ?? []).find((entry) => entry.id === requested.variantId);
-        if (!variant || variant.isAvailable === false) {
-          throw new OrderServiceError(`A variant for ${dish.name} is unavailable.`);
-        }
-        unitPriceSnapshot = variant.price;
-        variantNameSnapshot = variant.name;
-        variantId = variant.id;
-      } else if ((dish.variants ?? []).length > 0) {
-        throw new OrderServiceError(`Select a variant for ${dish.name}.`);
-      }
+      const priced = priceVariant(dish, requested.variantId);
+      const unitPriceSnapshot = priced.unitPrice;
+      const variantNameSnapshot = priced.variantName;
+      const variantId = priced.variantId;
 
       const selections = new Map(requested.selections.map((selection) => [selection.groupId, selection]));
       const dishGroups = dish.addonGroups ?? [];
@@ -463,24 +482,9 @@ export class OrderService {
       }
     }
 
-    const { calculateRestaurantBill } = await import("@/lib/billing/calculate-bill");
-    const { resolveLineTaxRate } = await import("@/lib/billing/resolve-tax-rate");
-    const categoryById = new Map(menu.categories.map((category) => [category.id, category]));
-    const bill = calculateRestaurantBill({
-      lines: items.map((item) => {
-        const dish = menu.dishes.find((entry) => entry.id === item.dishId);
-        const category = dish ? categoryById.get(dish.categoryId) : undefined;
-        const resolved = resolveLineTaxRate({
-          dish,
-          category,
-          billing: menu.restaurant.billing,
-        });
-        return {
-          lineTotal: item.itemTotal,
-          quantity: item.quantity,
-          gstRatePercent: resolved.rate,
-        };
-      }),
+    const pricedItems = items.map((item) => withGstSnapshot(item, menu));
+    const bill = billFromStoredLines({
+      items: pricedItems,
       billDiscountAmount,
       billing: menu.restaurant.billing,
     });
@@ -572,7 +576,7 @@ export class OrderService {
         guestCount: input.guestCount,
         orderNote: input.orderNote,
         captainAuthorization,
-        items,
+        items: pricedItems,
         subtotal: totals.itemsSubtotal,
         billDiscountAmount: totals.billDiscount,
         couponCodeSnapshot,
@@ -643,19 +647,6 @@ export class OrderService {
     },
     actor: PaymentAuditActor,
   ) {
-    const current = await orderRepository.findByRestaurantAndId(restaurantId, orderId);
-    if (!current) throw new OrderServiceError("Order not found.", 404);
-    const alreadyAppended = (current.events ?? []).some(
-      (event) => event.meta?.appendIdempotencyKey === input.idempotencyKey,
-    );
-    if (alreadyAppended) return staffOrderView(current);
-    if (["COMPLETED", "CANCELLED", "REJECTED", "REFUNDED"].includes(current.status)) {
-      throw new OrderServiceError("Cannot add items to a closed order.", 409);
-    }
-    if (current.payment?.status === "PAID") {
-      throw new OrderServiceError("Cannot add items after full payment.", 409);
-    }
-
     const menu = await restaurantService.getFullMenu(restaurantSlug);
     if (!menu || menu.restaurant.id !== restaurantId) {
       throw new OrderServiceError("Restaurant not found.", 404);
@@ -672,20 +663,10 @@ export class OrderService {
       }
       if (!dish.isAvailable) throw new OrderServiceError(`${dish.name} is currently unavailable.`);
 
-      let unitPriceSnapshot = dish.price;
-      let variantNameSnapshot: string | undefined;
-      let variantId: string | undefined;
-      if (requested.variantId) {
-        const variant = (dish.variants ?? []).find((entry) => entry.id === requested.variantId);
-        if (!variant || variant.isAvailable === false) {
-          throw new OrderServiceError(`A variant for ${dish.name} is unavailable.`);
-        }
-        unitPriceSnapshot = variant.price;
-        variantNameSnapshot = variant.name;
-        variantId = variant.id;
-      } else if ((dish.variants ?? []).length > 0) {
-        throw new OrderServiceError(`Select a variant for ${dish.name}.`);
-      }
+      const priced = priceVariant(dish, requested.variantId);
+      const unitPriceSnapshot = priced.unitPrice;
+      const variantNameSnapshot = priced.variantName;
+      const variantId = priced.variantId;
 
       const selections = new Map(requested.selections.map((selection) => [selection.groupId, selection]));
       const dishGroups = dish.addonGroups ?? [];
@@ -747,63 +728,59 @@ export class OrderService {
       };
     });
 
-    const merged = [...current.items, ...newItems];
-    const { calculateRestaurantBill } = await import("@/lib/billing/calculate-bill");
-    const { resolveLineTaxRate } = await import("@/lib/billing/resolve-tax-rate");
-    const categoryById = new Map(menu.categories.map((category) => [category.id, category]));
-    const bill = calculateRestaurantBill({
-      lines: merged.map((item) => {
-        const dish = menu.dishes.find((entry) => entry.id === item.dishId);
-        const category = dish ? categoryById.get(dish.categoryId) : undefined;
-        const resolved = resolveLineTaxRate({
-          dish,
-          category,
-          billing: menu.restaurant.billing,
-        });
-        return {
-          lineTotal: item.itemTotal,
-          quantity: item.quantity,
-          gstRatePercent: resolved.rate,
-        };
-      }),
-      billDiscountAmount: current.billDiscountAmount ?? 0,
-      billing: menu.restaurant.billing,
-    });
+    const snapshottedNew = newItems.map((item) => withGstSnapshot(item, menu));
 
-    const event = makeEvent(
-      "NOTE",
-      `Added ${newItems.length} item(s) to order`,
-      actor,
-      {
-        appendIdempotencyKey: input.idempotencyKey,
-        newLineIds: newItems.map((item) => item.lineId),
-        billSnapshot: bill,
-      },
-    );
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      const current = await orderRepository.findByRestaurantAndId(restaurantId, orderId);
+      if (!current) throw new OrderServiceError("Order not found.", 404);
+      const alreadyAppended = (current.events ?? []).some(
+        (event) => event.meta?.appendIdempotencyKey === input.idempotencyKey,
+      );
+      if (alreadyAppended) return staffOrderView(current);
+      if (["COMPLETED", "CANCELLED", "REJECTED", "REFUNDED"].includes(current.status)) {
+        throw new OrderServiceError("Cannot add items to a closed order.", 409);
+      }
+      if (current.payment?.status === "PAID") {
+        throw new OrderServiceError("Cannot add items after full payment.", 409);
+      }
 
-    const updated = await orderRepository.replaceItemsAndTotals(restaurantId, orderId, {
-      items: merged,
-      subtotal: bill.itemsSubtotal,
-      taxRatePercent: bill.gstRatePercent,
-      taxAmount: bill.taxAmount,
-      packagingCharge: bill.packagingCharge,
-      serviceCharge: bill.serviceCharge,
-      cgstAmount: bill.cgstAmount,
-      sgstAmount: bill.sgstAmount,
-      igstAmount: bill.igstAmount,
-      billSnapshot: bill,
-      total: bill.total,
-      orderNote: input.orderNote
-        ? [current.orderNote, input.orderNote].filter(Boolean).join(" · ")
-        : current.orderNote,
-      event,
-      reopenForKitchen: ["READY", "SERVED"].includes(current.status),
-    });
+      // Existing lines keep unit price and gstRateSnapshot. Only the new lines are priced from the catalog.
+      const merged = [...current.items, ...snapshottedNew];
+      const bill = billFromStoredLines({
+        items: merged,
+        billDiscountAmount: current.billDiscountAmount ?? 0,
+        billing: menu.restaurant.billing,
+        orderTaxRatePercent: current.taxRatePercent,
+        historicalBill: current.billSnapshot,
+      });
 
-    if (!updated) throw new OrderServiceError("Unable to update order.", 500);
-    // Additional-item KOT — does not re-print the whole ticket; enqueue uses current order snapshot.
-    void this.enqueueKotPrintSafe(updated, { actorId: actor.id });
-    return staffOrderView(updated);
+      const event = makeEvent(
+        "NOTE",
+        `Added ${snapshottedNew.length} item(s) to order`,
+        actor,
+        {
+          appendIdempotencyKey: input.idempotencyKey,
+          newLineIds: snapshottedNew.map((item) => item.lineId),
+          billSnapshot: bill,
+        },
+      );
+
+      const updated = await orderRepository.replaceItemsAndTotals(restaurantId, orderId, {
+        items: merged,
+        ...billMoneyFields(bill),
+        orderNote: input.orderNote
+          ? [current.orderNote, input.orderNote].filter(Boolean).join(" · ")
+          : current.orderNote,
+        event,
+        reopenForKitchen: ["READY", "SERVED"].includes(current.status),
+        expectedVersion: current.version ?? 0,
+      });
+      if (!updated) continue;
+      void this.enqueueKotPrintSafe(updated, { actorId: actor.id });
+      return staffOrderView(updated);
+    }
+
+    throw new OrderServiceError("Order changed while adding items. Please retry.", 409);
   }
 
   /** Explicit additional KOT enqueue for captain append flows (idempotent print layer handles dupes). */
@@ -913,9 +890,17 @@ export class OrderService {
     method: PaymentMethod,
     actor: PaymentAuditActor,
     amount?: number,
+    idempotencyKey?: string,
   ) {
+    for (let attempt = 0; attempt < 6; attempt += 1) {
     const current = await orderRepository.findByRestaurantAndId(restaurantId, id);
     if (!current) throw new OrderServiceError("Order not found.", 404);
+    if (
+      idempotencyKey &&
+      (current.payment?.ledger ?? []).some((entry) => entry.idempotencyKey === idempotencyKey)
+    ) {
+      return staffOrderView(current);
+    }
     if (current.status === "CANCELLED" || current.status === "REJECTED") {
       throw new OrderServiceError("Cannot record payment for a cancelled or rejected order.", 409);
     }
@@ -959,6 +944,7 @@ export class OrderService {
       amount: chargeAmount,
       recordedAt: event.timestamp,
       recordedBy: actor,
+      idempotencyKey,
     };
 
     const orderEvent = makeEvent(
@@ -980,15 +966,13 @@ export class OrderService {
         amountPaid: nextPaid,
         ledgerEntry,
         orderEvent,
+        expectedVersion: current.version ?? 0,
+        expectedAmountPaid: alreadyPaid,
+        idempotencyKey,
       },
     );
 
-    if (!updated) {
-      throw new OrderServiceError(
-        "Payment could not be recorded. The order may have been modified concurrently.",
-        409,
-      );
-    }
+    if (!updated) continue;
 
     // Hardware: enqueue receipt print after successful payment — never blocks payment.
     if (paymentStatus === "PAID") {
@@ -1016,6 +1000,11 @@ export class OrderService {
     }
 
     return staffOrderView(updated);
+    }
+    throw new OrderServiceError(
+      "Payment could not be recorded. The order may have been modified concurrently.",
+      409,
+    );
   }
 
   async refundPayment(
@@ -1439,203 +1428,194 @@ export class OrderService {
     }
 
     await connectToDatabase();
-    const existingCancel = await OrderLineCancellationModel.findOne({
-      restaurantId,
-      idempotencyKey: input.idempotencyKey,
-    }).lean();
-    if (existingCancel) {
+
+    const duplicateResult = async () => {
       const order = await orderRepository.findByRestaurantAndId(restaurantId, orderId);
       if (!order) throw new OrderServiceError("Order not found.", 404);
+      const savedMarker = await OrderLineCancellationModel.findOne({
+        restaurantId,
+        idempotencyKey: input.idempotencyKey,
+      }).lean();
       return {
         order: staffOrderView(order),
-        cancellations: [toDomain<OrderLineCancellation>(existingCancel)],
+        cancellations: savedMarker ? [toDomain<OrderLineCancellation>(savedMarker)] : [],
         duplicate: true as const,
       };
-    }
+    };
 
-    const current = await orderRepository.findByRestaurantAndId(restaurantId, orderId);
-    if (!current) throw new OrderServiceError("Order not found.", 404);
-    if (["CANCELLED", "REJECTED", "REFUNDED"].includes(current.status)) {
-      throw new OrderServiceError("Order is already closed for cancellation.", 409);
-    }
-
-    const nextItems = current.items.map((item) => ({ ...item }));
-    const cancelledLineIds: string[] = [];
-    const cancellationRows: Omit<OrderLineCancellation, "createdAt">[] = [];
-
-    for (const request of input.lines) {
-      if (!Number.isInteger(request.quantity) || request.quantity < 1) {
-        throw new OrderServiceError("Cancellation quantity must be a positive integer.");
-      }
-      const idx = nextItems.findIndex((item) => item.lineId === request.lineId);
-      if (idx < 0) throw new OrderServiceError(`Order line ${request.lineId} not found.`, 404);
-      const line = nextItems[idx];
-      const alreadyCancelled = line.cancelledQuantity ?? 0;
-      const remaining = line.quantity - alreadyCancelled;
-      if (request.quantity > remaining) {
-        throw new OrderServiceError(
-          `Cannot cancel ${request.quantity} of ${line.dishNameSnapshot}; only ${remaining} remaining.`,
-          409,
-        );
-      }
-      if (line.preparationStatus === "PREPARING" || line.preparationStatus === "READY") {
-        // Allowed to record cancel of unprepared remainder only — block when fully in prep.
-        // If any qty remains QUEUED conceptually we still allow reducing unpaid remainder;
-        // for safety, block cancel of lines already in prep/ready.
-        throw new OrderServiceError(
-          `${line.dishNameSnapshot} is already being prepared and cannot be cancelled.`,
-          409,
-        );
-      }
-
-      const newCancelled = alreadyCancelled + request.quantity;
-      const activeQty = line.quantity - newCancelled;
-      const addonTotals = (line.addons ?? []).map((addon) => addon.unitPriceSnapshot);
-      const itemTotal =
-        activeQty < 1
-          ? 0
-          : lineItemTotal({
-              unitPrice: line.unitPriceSnapshot,
-              quantity: activeQty,
-              addonTotals,
-              itemDiscountAmount: line.itemDiscountAmount
-                ? roundMoney((line.itemDiscountAmount * activeQty) / Math.max(1, line.quantity - alreadyCancelled))
-                : 0,
-            });
-
-      nextItems[idx] = {
-        ...line,
-        cancelledQuantity: newCancelled,
-        itemTotal,
-      };
-      cancelledLineIds.push(request.lineId);
-      cancellationRows.push({
-        id: `olc-${randomUUID()}`,
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const marker = await OrderLineCancellationModel.findOne({
         restaurantId,
-        orderId,
-        orderLineId: request.lineId,
-        quantityCancelled: request.quantity,
-        reason,
-        inventoryRestoreStatus: "NONE",
-        idempotencyKey: `${input.idempotencyKey}:${request.lineId}`,
-        actor: input.actor,
-      });
-    }
+        idempotencyKey: input.idempotencyKey,
+      }).lean();
+      const markerStatus = marker?.applyStatus as "PENDING" | "APPLIED" | undefined;
+      const applied = Boolean(marker) && (markerStatus == null || markerStatus === "APPLIED");
+      if (applied) return duplicateResult();
 
-    const activeLineTotals = nextItems.map((item) => {
-      const active = item.quantity - (item.cancelledQuantity ?? 0);
-      return active > 0 ? item.itemTotal : 0;
-    });
-    const billDiscountCap = Math.min(current.billDiscountAmount ?? 0, activeLineTotals.reduce((a, b) => a + b, 0));
-    const totals = computeBillTotals({
-      lineTotals: activeLineTotals,
-      billDiscountAmount: billDiscountCap,
-      taxRatePercent: current.taxRatePercent ?? 0,
-    });
+      const current = await orderRepository.findByRestaurantAndId(restaurantId, orderId);
+      if (!current) throw new OrderServiceError("Order not found.", 404);
+      if (["CANCELLED", "REJECTED", "REFUNDED"].includes(current.status)) {
+        throw new OrderServiceError("Order is already closed for cancellation.", 409);
+      }
 
-    const event = makeEvent(
-      "LINE_CANCELLED",
-      `Cancelled lines: ${input.lines.map((l) => `${l.lineId}×${l.quantity}`).join(", ")} — ${reason}`,
-      input.actor,
-      { lines: input.lines, reason, idempotencyKey: input.idempotencyKey },
-    );
+      const plannedOnMarker =
+        marker?.plannedCancelled && typeof marker.plannedCancelled === "object"
+          ? (marker.plannedCancelled as Record<string, number>)
+          : undefined;
+      if (marker && markerStatus === "PENDING" && linesReflectCancellation(current.items, plannedOnMarker)) {
+        await OrderLineCancellationModel.updateOne(
+          { restaurantId, idempotencyKey: input.idempotencyKey },
+          { $set: { applyStatus: "APPLIED" } },
+        );
+        return duplicateResult();
+      }
 
-    const updated = await orderRepository.replaceItemsAndTotals(restaurantId, orderId, {
-      items: nextItems,
-      subtotal: totals.itemsSubtotal,
-      billDiscountAmount: totals.billDiscount,
-      taxAmount: totals.taxAmount,
-      total: totals.total,
-      event,
-    });
-    if (!updated) throw new OrderServiceError("Order could not be updated for cancellation.", 409);
-
-    // If all lines fully cancelled, move order to CANCELLED.
-    const allGone = nextItems.every((item) => (item.cancelledQuantity ?? 0) >= item.quantity);
-    let finalOrder = updated;
-    if (allGone && canTransition(updated.status, "CANCELLED")) {
-      const cancelEvent = makeEvent(
-        "STATUS_CHANGED",
-        "Order cancelled after all lines cancelled",
-        input.actor,
-        { from: updated.status, to: "CANCELLED" },
-      );
-      const cancelled = await orderRepository.updateStatus(
-        restaurantId,
-        orderId,
-        updated.status,
-        "CANCELLED",
-        cancelEvent,
-      );
-      if (cancelled) finalOrder = cancelled;
-    }
-
-    const restaurant = await restaurantService.getById(restaurantId);
-    let restoreStatus: OrderLineCancellation["inventoryRestoreStatus"] = "NONE";
-    if (restaurant && hasRestaurantFeature(restaurant, "INVENTORY")) {
-      const restore = await inventoryService.restoreForCancelledLines(
-        restaurant,
-        finalOrder,
-        cancelledLineIds,
-        current.status,
-      );
-      if (restore.skipped) restoreStatus = "NONE";
-      else if ("blocked" in restore && restore.blocked) restoreStatus = "BLOCKED";
-      else restoreStatus = "RESTORED";
-    }
-
-    const now = new Date().toISOString();
-    const saved: OrderLineCancellation[] = [];
-    for (const row of cancellationRows) {
+      let plan: ReturnType<typeof planLineCancellation>;
       try {
-        const created = await OrderLineCancellationModel.create({
-          ...row,
-          inventoryRestoreStatus: restoreStatus,
-          createdAt: now,
-        });
-        saved.push(toDomain<OrderLineCancellation>(created.toObject()));
+        plan = planLineCancellation(current.items, input.lines);
       } catch (error) {
-        if (error && typeof error === "object" && "code" in error && error.code === 11000) {
+        const message = error instanceof Error ? error.message : "Unable to cancel lines.";
+        throw new OrderServiceError(message, /not found/i.test(message) ? 404 : 409);
+      }
+
+      const restaurant = await restaurantService.getById(restaurantId);
+      const bill = billFromStoredLines({
+        items: plan.items,
+        billDiscountAmount: current.billDiscountAmount ?? 0,
+        billing: restaurant?.billing,
+        orderTaxRatePercent: current.taxRatePercent,
+        historicalBill: current.billSnapshot,
+      });
+
+      const now = new Date().toISOString();
+      if (!marker) {
+        try {
+          await OrderLineCancellationModel.create({
+            id: `olc-parent-${randomUUID()}`,
+            restaurantId,
+            orderId,
+            orderLineId: "*",
+            quantityCancelled: input.lines.reduce((sum, line) => sum + line.quantity, 0),
+            reason,
+            inventoryRestoreStatus: "NONE",
+            idempotencyKey: input.idempotencyKey,
+            actor: input.actor,
+            createdAt: now,
+            applyStatus: "PENDING",
+            baseVersion: current.version ?? 0,
+            plannedCancelled: plan.plannedCancelled,
+          });
+        } catch (error) {
+          if (isDuplicateKey(error)) continue;
+          throw error;
+        }
+      } else {
+        await OrderLineCancellationModel.updateOne(
+          { restaurantId, idempotencyKey: input.idempotencyKey, applyStatus: { $ne: "APPLIED" } },
+          {
+            $set: {
+              applyStatus: "PENDING",
+              baseVersion: current.version ?? 0,
+              plannedCancelled: plan.plannedCancelled,
+            },
+          },
+        );
+      }
+
+      const event = makeEvent(
+        "LINE_CANCELLED",
+        `Cancelled lines: ${input.lines.map((line) => `${line.lineId}×${line.quantity}`).join(", ")} — ${reason}`,
+        input.actor,
+        { lines: input.lines, reason, idempotencyKey: input.idempotencyKey },
+      );
+
+      const updated = await orderRepository.replaceItemsAndTotals(restaurantId, orderId, {
+        items: plan.items,
+        ...billMoneyFields(bill),
+        event,
+        expectedVersion: current.version ?? 0,
+      });
+      if (!updated) continue;
+
+      let finalOrder = updated;
+      const allGone = plan.items.every((item) => (item.cancelledQuantity ?? 0) >= item.quantity);
+      if (allGone && canTransition(updated.status, "CANCELLED")) {
+        const cancelEvent = makeEvent(
+          "STATUS_CHANGED",
+          "Order cancelled after all lines cancelled",
+          input.actor,
+          { from: updated.status, to: "CANCELLED" },
+        );
+        const cancelled = await orderRepository.updateStatus(
+          restaurantId,
+          orderId,
+          updated.status,
+          "CANCELLED",
+          cancelEvent,
+        );
+        if (cancelled) finalOrder = cancelled;
+      }
+
+      let restoreStatus: OrderLineCancellation["inventoryRestoreStatus"] = "NONE";
+      if (restaurant && hasRestaurantFeature(restaurant, "INVENTORY")) {
+        const restore = await inventoryService.restoreForCancelledLines(
+          restaurant,
+          finalOrder,
+          input.lines.map((line) => line.lineId),
+          current.status,
+        );
+        if (restore.skipped) restoreStatus = "NONE";
+        else if ("blocked" in restore && restore.blocked) restoreStatus = "BLOCKED";
+        else restoreStatus = "RESTORED";
+      }
+
+      const saved: OrderLineCancellation[] = [];
+      for (const request of input.lines) {
+        const row = {
+          id: `olc-${randomUUID()}`,
+          restaurantId,
+          orderId,
+          orderLineId: request.lineId,
+          quantityCancelled: request.quantity,
+          reason,
+          inventoryRestoreStatus: restoreStatus,
+          idempotencyKey: `${input.idempotencyKey}:${request.lineId}`,
+          actor: input.actor,
+          createdAt: now,
+          applyStatus: "APPLIED" as const,
+        };
+        try {
+          const created = await OrderLineCancellationModel.create(row);
+          saved.push(toDomain<OrderLineCancellation>(created.toObject()));
+        } catch (error) {
+          if (!isDuplicateKey(error)) throw error;
           const again = await OrderLineCancellationModel.findOne({
             restaurantId,
             idempotencyKey: row.idempotencyKey,
           }).lean();
           if (again) saved.push(toDomain<OrderLineCancellation>(again));
-          continue;
         }
-        throw error;
       }
+
+      await OrderLineCancellationModel.updateOne(
+        { restaurantId, idempotencyKey: input.idempotencyKey },
+        { $set: { applyStatus: "APPLIED", inventoryRestoreStatus: restoreStatus } },
+      );
+
+      if (finalOrder.status === "CANCELLED") {
+        await this.runInventorySideEffects(restaurantId, finalOrder, current.status);
+      }
+
+      const amountPaid = finalOrder.payment?.amountPaid ?? 0;
+      return {
+        order: staffOrderView(finalOrder),
+        cancellations: saved,
+        duplicate: false as const,
+        refundSuggested: amountPaid > finalOrder.total ? roundMoney(amountPaid - finalOrder.total) : 0,
+      };
     }
 
-    // Parent idempotency marker
-    try {
-      await OrderLineCancellationModel.create({
-        id: `olc-parent-${randomUUID()}`,
-        restaurantId,
-        orderId,
-        orderLineId: "*",
-        quantityCancelled: input.lines.reduce((sum, line) => sum + line.quantity, 0),
-        reason,
-        inventoryRestoreStatus: restoreStatus,
-        idempotencyKey: input.idempotencyKey,
-        actor: input.actor,
-        createdAt: now,
-      });
-    } catch (error) {
-      if (!(error && typeof error === "object" && "code" in error && error.code === 11000)) throw error;
-    }
-
-    if (finalOrder.status === "CANCELLED") {
-      await this.runInventorySideEffects(restaurantId, finalOrder, current.status);
-    }
-
-    const amountPaid = finalOrder.payment?.amountPaid ?? 0;
-    return {
-      order: staffOrderView(finalOrder),
-      cancellations: saved,
-      duplicate: false as const,
-      refundSuggested: amountPaid > finalOrder.total ? roundMoney(amountPaid - finalOrder.total) : 0,
-    };
+    throw new OrderServiceError("Order changed during cancellation. Please retry.", 409);
   }
 
   listLineCancellations(restaurantId: string, orderId: string) {

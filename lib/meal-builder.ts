@@ -15,6 +15,7 @@ type Selection = { groupId: string; addonIds: string[] };
 
 /** Default add-on choices that satisfy every rule, or null when the guest must choose. */
 export function defaultSelections(dish: Dish): Selection[] | null {
+  if ((dish.variants ?? []).some((variant) => variant.isAvailable !== false)) return null;
   const selections: Selection[] = [];
   for (const group of dish.addonGroups ?? []) {
     if (group.isActive === false) continue;
