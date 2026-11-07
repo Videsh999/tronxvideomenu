@@ -4,7 +4,7 @@
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import * as XLSX from "xlsx";
+import { writeXlsxSheets } from "../lib/spreadsheet";
 
 const OUT = join(process.cwd(), "fixtures", "tronx-demo-kitchen-reupload.xlsx");
 
@@ -74,8 +74,17 @@ const rows = [
   },
 ];
 
-const book = XLSX.utils.book_new();
-XLSX.utils.book_append_sheet(book, XLSX.utils.json_to_sheet(rows), "Menu");
-mkdirSync(dirname(OUT), { recursive: true });
-writeFileSync(OUT, XLSX.write(book, { type: "buffer", bookType: "xlsx" }) as Buffer);
-console.log(JSON.stringify({ path: OUT, rows: rows.length }, null, 2));
+async function main() {
+  const headers = Object.keys(rows[0] ?? {});
+  const buffer = await writeXlsxSheets([
+    {
+      name: "Menu",
+      rows: [headers, ...rows.map((row) => headers.map((header) => (row as Record<string, string | number>)[header] ?? ""))],
+    },
+  ]);
+  mkdirSync(dirname(OUT), { recursive: true });
+  writeFileSync(OUT, buffer);
+  console.log(JSON.stringify({ path: OUT, rows: rows.length }, null, 2));
+}
+
+void main();

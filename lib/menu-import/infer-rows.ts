@@ -89,7 +89,35 @@ export function buildItemDraftsFromGrid(
       continue;
     }
 
-    if (!name) continue;
+    if (!name) {
+      const hasPrice = priceCols.some((mapping) => cell(row, mapping.columnIndex).length > 0);
+      const hasSku = Boolean(cell(row, skuCol));
+      const hasDescription = Boolean(cell(row, descriptionCol));
+      if (!hasPrice && !hasSku && !hasDescription) continue;
+      const invalid = validateImportItemDraft({
+        rowKey: `missing-name-${spreadsheetRow}`,
+        sourceRowNumbers: [spreadsheetRow],
+        name: "",
+        categoryName: categoryName || defaultCategory,
+        description: normalizeOptionalString(cell(row, descriptionCol)),
+        price: null,
+        compareAtPrice: null,
+        dietary: "UNKNOWN",
+        prepTimeMinutes: null,
+        sku: normalizeOptionalString(cell(row, skuCol)),
+        tags: [],
+        isAvailable: true,
+        variants: [],
+        addons: [],
+        confidence: 0,
+        action: "CREATE",
+        errors: [],
+        warnings: [],
+        included: true,
+      });
+      drafts.push(invalid);
+      continue;
+    }
 
     const variants: ImportVariant[] = [];
     let basePrice: number | null = null;

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import * as XLSX from "xlsx";
 import { parseWorkbookBuffer } from "../lib/menu-import/parse-workbook";
+import { writeXlsxSheets } from "../lib/spreadsheet";
 import { suggestColumnMappings } from "../lib/menu-import/map-columns";
 import { buildItemDraftsFromGrid } from "../lib/menu-import/infer-rows";
 import { applyExistingMatches } from "../lib/menu-import/match-existing";
@@ -169,17 +169,19 @@ test("match-existing skips second identical draft when two reach the matcher", (
   assert.equal(preview.items[1]?.action, "SKIP");
 });
 
-test("parseWorkbookBuffer reads CSV buffers without executing formulas", () => {
+test("parseWorkbookBuffer reads generated xlsx files without executing formulas", async () => {
   const csv = "Category,Item Name,Price\nMains,Dal Tadka,180\nMains,Butter Chicken,280\n";
-  const workbook = XLSX.utils.book_new();
-  const sheet = XLSX.utils.aoa_to_sheet([
-    ["Category", "Item Name", "Price"],
-    ["Mains", "Dal Tadka", 180],
-    ["Mains", "Butter Chicken", 280],
+  const buffer = await writeXlsxSheets([
+    {
+      name: "Menu",
+      rows: [
+        ["Category", "Item Name", "Price"],
+        ["Mains", "Dal Tadka", 180],
+        ["Mains", "Butter Chicken", 280],
+      ],
+    },
   ]);
-  XLSX.utils.book_append_sheet(workbook, sheet, "Menu");
-  const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }) as Buffer;
-  const parsed = parseWorkbookBuffer(buffer);
+  const parsed = await parseWorkbookBuffer(buffer);
   assert.equal(parsed.sheets.length, 1);
   assert.equal(parsed.sheets[0]?.name, "Menu");
   assert.ok(parsed.sheets[0]!.rowCount >= 2);
@@ -250,13 +252,15 @@ test("missing required dish names are blocking; mixed valid/invalid reported", (
     ],
     suggestColumnMappings(["Category", "Item Name", "Price"]),
   );
-  // Empty name rows are skipped by the grid builder (not imported as blank dishes).
-  assert.equal(drafts.length, 2);
+  // A priced row with a blank name is reported, not dropped.
+  assert.equal(drafts.length, 3);
+  assert.ok(drafts.some((draft) => draft.errors.some((error) => /name/i.test(error))));
   assert.equal(drafts[0]?.name, "Good Dish");
   assert.equal(drafts[0]?.errors.length, 0);
-  assert.ok(drafts[1]?.errors.some((error) => /price/i.test(error)));
+  assert.ok(drafts[1]?.errors.some((error) => /name/i.test(error)));
+  assert.ok(drafts[2]?.errors.some((error) => /price/i.test(error)));
   assert.equal(drafts.filter((d) => d.errors.length === 0).length, 1);
-  assert.equal(drafts.filter((d) => d.errors.length > 0).length, 1);
+  assert.equal(drafts.filter((d) => d.errors.length > 0).length, 2);
 });
 
 test("create-only and smart-merge behaviour remain intact with blank optional fields", () => {
@@ -298,7 +302,7 @@ test("create-only and smart-merge behaviour remain intact with blank optional fi
   assert.equal(merge.items.find((item) => item.name === "Paneer Tikka")?.included, false);
 });
 
-test("excel and csv empty optional cells normalize consistently", () => {
+test("excel and csv empty optional cells normalize consistently", async () => {
   const headers = ["Category", "Item Name", "Description", "SKU", "Price"];
   const xlsxGrid = [
     headers,
@@ -307,15 +311,17 @@ test("excel and csv empty optional cells normalize consistently", () => {
   ];
   const csv = "Category,Item Name,Description,SKU,Price\nMains,Idli,,,40\nMains,Dosa,   ,  ,60\n";
   const fromGrid = buildItemDraftsFromGrid(xlsxGrid, suggestColumnMappings(headers));
-  const csvSheet = XLSX.utils.aoa_to_sheet([
-    headers,
-    ["Mains", "Idli", "", "", 40],
-    ["Mains", "Dosa", "   ", "  ", 60],
+  const buffer = await writeXlsxSheets([
+    {
+      name: "Menu",
+      rows: [
+        headers,
+        ["Mains", "Idli", "", "", 40],
+        ["Mains", "Dosa", "   ", "  ", 60],
+      ],
+    },
   ]);
-  const book = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(book, csvSheet, "Menu");
-  const buffer = XLSX.write(book, { type: "buffer", bookType: "xlsx" }) as Buffer;
-  const parsed = parseWorkbookBuffer(buffer);
+  const parsed = await parseWorkbookBuffer(buffer);
   const fromParsed = buildItemDraftsFromGrid(
     parsed.sheets[0] ? parsed.grids[parsed.sheets[0].name]! : xlsxGrid,
     suggestColumnMappings(headers),
@@ -366,4 +372,26 @@ test("validation summary reports row-level errors and warnings", () => {
   assert.equal(summary.invalidRowCount, 1);
   assert.equal(summary.warningCount, 1);
   assert.ok(summary.errors[0]?.message.includes("Row 3"));
+});
+
+test("malformed workbooks fail closed and invalid generated rows are reported", async () => {
+  await assert.rejects(() => parseWorkbookBuffer(Buffer.from("this is not a workbook")), /could not be read|No readable/);
+  await assert.rejects(() => parseWorkbookBuffer(Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x00])), /could not be read/);
+  const buffer = await writeXlsxSheets([
+    {
+      name: "Menu",
+      rows: [
+        ["Category", "Item Name", "Price"],
+        ["Mains", "Valid Dish", 120],
+        ["Mains", "", 99],
+        ["Mains", "Bad Price", "nope"],
+      ],
+    },
+  ]);
+  const parsed = await parseWorkbookBuffer(buffer);
+  const drafts = buildItemDraftsFromGrid(parsed.grids.Menu ?? [], suggestColumnMappings(parsed.sheets[0]?.headers ?? []));
+  assert.equal(drafts.length, 3);
+  assert.equal(drafts.filter((draft) => draft.errors.length > 0).length, 2);
+  assert.ok(drafts.some((draft) => draft.errors.some((error) => /name/i.test(error))));
+  assert.ok(drafts.some((draft) => draft.errors.some((error) => /price/i.test(error))));
 });
