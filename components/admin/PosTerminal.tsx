@@ -81,6 +81,7 @@ export default function PosTerminal({
   const [selectedAddons, setSelectedAddons] = useState<
     Record<string, string[]>
   >({});
+  const [extrasOpen, setExtrasOpen] = useState(false);
 
   const availableDishes = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -740,72 +741,95 @@ export default function PosTerminal({
                       )}
                     </span>
                   </div>
+                  <input
+                    value={line.note}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setCart((prev) =>
+                        prev.map((entry) =>
+                          entry.key === line.key ? { ...entry, note: value } : entry,
+                        ),
+                      );
+                    }}
+                    placeholder="Notes"
+                    className="mt-2 min-h-8 w-full rounded-lg border border-white/15 bg-transparent px-2 text-xs text-[#f7f1e8] placeholder:text-white/35"
+                  />
                 </li>
               ))
             )}
           </ul>
 
-          <div className="shrink-0 border-t border-white/10 bg-[#241c16]">
-            <div className="max-h-[26vh] space-y-2 overflow-y-auto px-3 pt-3 sm:px-4">
-              <div className="grid grid-cols-2 gap-2">
-                <label className="block text-[11px] text-[#d9cfc0]">
-                  Coupon
-                  <input
-                    value={couponCode}
-                    onChange={(event) => setCouponCode(event.target.value)}
-                    className="mt-1 min-h-9 w-full rounded-lg border border-white/20 bg-transparent px-2 text-sm"
-                  />
-                </label>
-                <label className="block text-[11px] text-[#d9cfc0]">
-                  ₹ off
-                  <input
-                    type="number"
-                    min={0}
-                    value={billDiscount || ""}
-                    onChange={(event) => setBillDiscount(Number(event.target.value) || 0)}
-                    className="mt-1 min-h-9 w-full rounded-lg border border-white/20 bg-transparent px-2 text-sm"
-                  />
-                </label>
-              </div>
-              <label className="block text-[11px] text-[#d9cfc0]">
-                Order note
+          <div className="shrink-0 border-t border-white/10 bg-[#241c16] px-3 py-2.5 sm:px-4">
+            <div className="flex items-center gap-2">
+              <span className="shrink-0 rounded-lg border border-white/15 px-2 py-1.5 text-[11px] font-semibold text-[#d9cfc0]">
+                ₹ off
+              </span>
+              <input
+                type="number"
+                min={0}
+                value={billDiscount || ""}
+                onChange={(event) => setBillDiscount(Number(event.target.value) || 0)}
+                placeholder="0"
+                className="min-h-9 min-w-0 flex-1 rounded-lg border border-white/20 bg-transparent px-2 text-sm"
+              />
+              <button
+                type="button"
+                onClick={() => setExtrasOpen((open) => !open)}
+                className="shrink-0 rounded-lg border border-white/15 px-2.5 py-1.5 text-[11px] font-semibold text-[#d9cfc0]"
+              >
+                {extrasOpen ? "Hide" : "Coupon · note · phone"}
+              </button>
+            </div>
+
+            {extrasOpen ? (
+              <div className="mt-2 grid gap-1.5 sm:grid-cols-3">
+                <input
+                  value={couponCode}
+                  onChange={(event) => setCouponCode(event.target.value)}
+                  placeholder="Coupon"
+                  className="min-h-9 rounded-lg border border-white/20 bg-transparent px-2 text-xs"
+                />
                 <input
                   value={orderNote}
                   onChange={(event) => setOrderNote(event.target.value)}
-                  className="mt-1 min-h-9 w-full rounded-lg border border-white/20 bg-transparent px-2 text-sm"
-                  placeholder="Allergy / preference"
+                  placeholder="Order note"
+                  className="min-h-9 rounded-lg border border-white/20 bg-transparent px-2 text-xs"
                 />
-              </label>
-              <label className="block text-[11px] text-[#d9cfc0]">
-                Phone (optional loyalty)
                 <input
                   value={customerPhone}
                   onChange={(event) => setCustomerPhone(event.target.value)}
-                  className="mt-1 min-h-9 w-full rounded-lg border border-white/20 bg-transparent px-2 text-sm"
+                  placeholder="Phone (optional)"
+                  className="min-h-9 rounded-lg border border-white/20 bg-transparent px-2 text-xs"
                 />
-              </label>
-            </div>
+              </div>
+            ) : null}
 
-            <div className="space-y-1 border-t border-white/10 px-3 py-2 text-sm sm:px-4">
+            <div className="mt-2 space-y-0.5 text-sm">
               <div className="flex justify-between text-[#d9cfc0]">
                 <span>Subtotal</span>
                 <span>{money(totals.itemsSubtotal, currency)}</span>
               </div>
+              {billDiscount > 0 ? (
+                <div className="flex justify-between text-emerald-200">
+                  <span>Discount</span>
+                  <span>−{money(billDiscount, currency)}</span>
+                </div>
+              ) : null}
               <div className="flex justify-between text-[#d9cfc0]">
                 <span>
                   {taxLabel} ({taxRatePercent}%)
                 </span>
                 <span>{money(totals.taxAmount, currency)}</span>
               </div>
-              <div className="flex justify-between text-xl font-bold">
+              <div className="flex justify-between text-lg font-bold">
                 <span>Total</span>
                 <span>{money(totals.total, currency)}</span>
               </div>
             </div>
 
-            <div className="space-y-2 px-3 pb-3 sm:px-4">
+            <div className="mt-2 space-y-1.5">
               {placeBlocked ? (
-                <p className="rounded-lg bg-amber-500/20 px-3 py-2 text-xs font-medium text-amber-100">
+                <p className="rounded-lg bg-amber-500/20 px-3 py-1.5 text-xs font-medium text-amber-100">
                   {placeBlocked}
                 </p>
               ) : null}
@@ -813,7 +837,7 @@ export default function PosTerminal({
                 type="button"
                 disabled={pending || Boolean(placeBlocked)}
                 onClick={placeOrder}
-                className="min-h-12 w-full rounded-xl bg-[#f59e0b] text-base font-bold text-[#1a120c] shadow-[0_8px_24px_-10px_rgba(245,158,11,0.75)] disabled:opacity-50"
+                className="min-h-11 w-full rounded-xl bg-[#f59e0b] text-sm font-bold text-[#1a120c] disabled:opacity-50"
               >
                 {pending ? "Sending…" : "Save & send to kitchen"}
               </button>
@@ -821,25 +845,23 @@ export default function PosTerminal({
                 type="button"
                 disabled={pending || Boolean(placeBlocked)}
                 onClick={placeAndPay}
-                className="min-h-11 w-full rounded-xl border border-white/30 bg-white text-sm font-bold text-[#2f241c] disabled:opacity-50"
+                className="min-h-10 w-full rounded-xl border border-white/30 bg-white text-sm font-bold text-[#2f241c] disabled:opacity-50"
               >
                 Bill &amp; pay ({payMethod})
               </button>
-              <div className="grid grid-cols-3 gap-1.5">
+              <div className="flex items-center gap-1.5">
                 {(["CASH", "UPI", "CARD"] as PaymentMethod[]).map((method) => (
                   <button
                     key={method}
                     type="button"
                     onClick={() => setPayMethod(method)}
-                    className={`min-h-9 rounded-lg text-xs font-semibold ${
+                    className={`min-h-8 flex-1 rounded-lg text-[11px] font-semibold ${
                       payMethod === method ? "bg-[#f59e0b] text-[#1a120c]" : "bg-white/10"
                     }`}
                   >
                     {method}
                   </button>
                 ))}
-              </div>
-              <div className="flex gap-2">
                 <input
                   type="number"
                   min={0}
@@ -849,13 +871,13 @@ export default function PosTerminal({
                   onChange={(event) =>
                     setPayAmount(event.target.value === "" ? "" : Number(event.target.value))
                   }
-                  className="min-h-10 min-w-0 flex-1 rounded-xl border border-white/20 bg-transparent px-3 text-sm"
+                  className="min-h-8 w-20 rounded-lg border border-white/20 bg-transparent px-1.5 text-[11px]"
                 />
                 <button
                   type="button"
                   disabled={pending || !lastOrderId}
                   onClick={recordPay}
-                  className="min-h-10 shrink-0 rounded-xl bg-white/15 px-4 text-sm disabled:opacity-40"
+                  className="min-h-8 shrink-0 rounded-lg bg-white/15 px-2.5 text-[11px] disabled:opacity-40"
                 >
                   Record
                 </button>

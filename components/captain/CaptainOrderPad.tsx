@@ -92,6 +92,7 @@ export default function CaptainOrderPad({
   const [lastOrderId, setLastOrderId] = useState<string | null>(null);
   const [payMethod, setPayMethod] = useState<PaymentMethod>("CASH");
   const [payAmount, setPayAmount] = useState<number | "">("");
+  const [extrasOpen, setExtrasOpen] = useState(false);
 
   const tableKey = tableNumber === "" ? "" : String(tableNumber);
   const session = cartsByTable[tableKey] ?? emptyCartState();
@@ -604,67 +605,68 @@ export default function CaptainOrderPad({
                         ),
                       })
                     }
-                    placeholder="Item note / prep instruction"
-                    className="mt-2 min-h-9 w-full rounded-lg border border-white/15 bg-transparent px-2 text-xs text-white placeholder:text-white/40"
+                    placeholder="Notes"
+                    className="mt-2 min-h-8 w-full rounded-lg border border-white/15 bg-transparent px-2 text-xs text-white placeholder:text-white/40"
                   />
                 </li>
               ))
             )}
           </ul>
 
-          {/* Sticky checkout dock — always visible; extras scroll above */}
-          <div className="shrink-0 border-t border-white/10 bg-neutral-950">
-            <div className="max-h-[28vh] space-y-2 overflow-y-auto px-3 pt-3 sm:px-4">
-              <div className="grid grid-cols-2 gap-2">
-                {permissions.applyCoupon ? (
-                  <label className="block text-[11px] text-white/70">
-                    Coupon
-                    <input
-                      value={session.couponCode}
-                      onChange={(event) => patchSession({ couponCode: event.target.value })}
-                      disabled={!tableKey}
-                      className="mt-1 min-h-9 w-full rounded-lg border border-white/20 bg-transparent px-2 text-sm disabled:opacity-40"
-                    />
-                  </label>
-                ) : (
-                  <div className="rounded-lg border border-white/10 px-2 py-2 text-[11px] text-white/40">
-                    Coupons locked
-                  </div>
-                )}
-                {permissions.applyDiscount ? (
-                  <label className="block text-[11px] text-white/70">
-                    ₹ off
-                    <input
-                      type="number"
-                      min={0}
-                      value={session.billDiscount || ""}
-                      onChange={(event) =>
-                        patchSession({ billDiscount: Number(event.target.value) || 0 })
-                      }
-                      disabled={!tableKey}
-                      className="mt-1 min-h-9 w-full rounded-lg border border-white/20 bg-transparent px-2 text-sm disabled:opacity-40"
-                    />
-                  </label>
-                ) : (
-                  <div className="rounded-lg border border-white/10 px-2 py-2 text-[11px] text-white/40">
-                    Discounts locked
-                  </div>
-                )}
-              </div>
-              <label className="block text-[11px] text-white/70">
-                Order note
+          {/* Compact dock — ordered items stay the main view */}
+          <div className="shrink-0 border-t border-white/10 bg-neutral-950 px-3 py-2.5 sm:px-4">
+            <div className="flex items-center gap-2">
+              <span className="shrink-0 rounded-lg border border-white/15 px-2 py-1.5 text-[11px] font-semibold text-white/70">
+                ₹ off
+              </span>
+              <input
+                type="number"
+                min={0}
+                value={session.billDiscount || ""}
+                onChange={(event) =>
+                  patchSession({ billDiscount: Number(event.target.value) || 0 })
+                }
+                disabled={!tableKey || !permissions.applyDiscount}
+                placeholder="0"
+                className="min-h-9 min-w-0 flex-1 rounded-lg border border-white/20 bg-transparent px-2 text-sm disabled:opacity-40"
+              />
+              <button
+                type="button"
+                onClick={() => setExtrasOpen((open) => !open)}
+                className="shrink-0 rounded-lg border border-white/15 px-2.5 py-1.5 text-[11px] font-semibold text-white/80"
+              >
+                {extrasOpen ? "Hide" : "Coupon · note · phone"}
+              </button>
+            </div>
+
+            {extrasOpen ? (
+              <div className="mt-2 grid gap-1.5 sm:grid-cols-3">
+                <input
+                  value={session.couponCode}
+                  onChange={(event) => patchSession({ couponCode: event.target.value })}
+                  disabled={!tableKey || !permissions.applyCoupon}
+                  placeholder="Coupon"
+                  className="min-h-9 rounded-lg border border-white/20 bg-transparent px-2 text-xs disabled:opacity-40"
+                />
                 <input
                   value={session.orderNote}
                   onChange={(event) => patchSession({ orderNote: event.target.value })}
                   disabled={!tableKey}
-                  className="mt-1 min-h-9 w-full rounded-lg border border-white/20 bg-transparent px-2 text-sm disabled:opacity-40"
-                  placeholder="Allergy / preference"
+                  placeholder="Order note"
+                  className="min-h-9 rounded-lg border border-white/20 bg-transparent px-2 text-xs disabled:opacity-40"
                 />
-              </label>
-            </div>
+                <input
+                  value={session.customerPhone}
+                  onChange={(event) => patchSession({ customerPhone: event.target.value })}
+                  disabled={!tableKey}
+                  placeholder="Phone (optional)"
+                  className="min-h-9 rounded-lg border border-white/20 bg-transparent px-2 text-xs disabled:opacity-40"
+                />
+              </div>
+            ) : null}
 
-            <div className="space-y-1 border-t border-white/10 px-3 py-2 text-sm sm:px-4">
-              <div className="flex justify-between text-white/70">
+            <div className="mt-2 space-y-0.5 text-sm">
+              <div className="flex justify-between text-white/65">
                 <span>Subtotal</span>
                 <span>{money(totals.itemsSubtotal, currency)}</span>
               </div>
@@ -674,24 +676,24 @@ export default function CaptainOrderPad({
                   <span>−{money(totals.billDiscount, currency)}</span>
                 </div>
               ) : null}
-              <div className="flex justify-between text-white/70">
+              <div className="flex justify-between text-white/65">
                 <span>
                   {taxLabel} ({taxRatePercent}%)
                 </span>
                 <span>{money(totals.taxAmount, currency)}</span>
               </div>
-              <div className="flex justify-between text-xl font-bold">
+              <div className="flex justify-between text-lg font-bold">
                 <span>Total</span>
                 <span>{money(totals.total, currency)}</span>
               </div>
             </div>
 
-            <div className="space-y-2 px-3 pb-3 sm:px-4">
+            <div className="mt-2 space-y-1.5">
               <button
                 type="button"
                 disabled={pending || session.cart.length === 0 || tableNumber === ""}
                 onClick={() => placeOrder(false)}
-                className="min-h-12 w-full rounded-xl bg-[#f59e0b] text-base font-bold text-neutral-950 shadow-[0_8px_24px_-10px_rgba(245,158,11,0.8)] disabled:opacity-40"
+                className="min-h-11 w-full rounded-xl bg-[#f59e0b] text-sm font-bold text-neutral-950 disabled:opacity-40"
               >
                 {pending ? "Sending…" : "Save & send to kitchen"}
               </button>
@@ -701,11 +703,11 @@ export default function CaptainOrderPad({
                     type="button"
                     disabled={pending || session.cart.length === 0 || tableNumber === ""}
                     onClick={() => placeOrder(true)}
-                    className="min-h-11 w-full rounded-xl border border-white/30 bg-white text-sm font-bold text-neutral-900 disabled:opacity-40"
+                    className="min-h-10 w-full rounded-xl border border-white/30 bg-white text-sm font-bold text-neutral-900 disabled:opacity-40"
                   >
                     Bill &amp; pay ({payMethod})
                   </button>
-                  <div className="grid grid-cols-3 gap-1.5">
+                  <div className="flex items-center gap-1.5">
                     {(["CASH", "UPI", "CARD"] as PaymentMethod[]).map((method) => {
                       const allowed =
                         (method === "CASH" && permissions.recordCashPayment) ||
@@ -717,7 +719,7 @@ export default function CaptainOrderPad({
                           type="button"
                           disabled={!allowed}
                           onClick={() => setPayMethod(method)}
-                          className={`min-h-9 rounded-lg text-xs font-semibold disabled:opacity-30 ${
+                          className={`min-h-8 flex-1 rounded-lg text-[11px] font-semibold disabled:opacity-30 ${
                             payMethod === method ? "bg-[#f59e0b] text-neutral-950" : "bg-white/10"
                           }`}
                         >
@@ -725,8 +727,6 @@ export default function CaptainOrderPad({
                         </button>
                       );
                     })}
-                  </div>
-                  <div className="flex gap-2">
                     <input
                       type="number"
                       min={0}
@@ -736,21 +736,21 @@ export default function CaptainOrderPad({
                         setPayAmount(event.target.value === "" ? "" : Number(event.target.value))
                       }
                       placeholder={String(roundMoney(totals.total))}
-                      className="min-h-10 min-w-0 flex-1 rounded-xl border border-white/20 bg-transparent px-3 text-sm"
+                      className="min-h-8 w-20 rounded-lg border border-white/20 bg-transparent px-1.5 text-[11px]"
                     />
                     <button
                       type="button"
                       disabled={pending || !lastOrderId}
                       onClick={recordPay}
-                      className="min-h-10 shrink-0 rounded-xl bg-white/15 px-4 text-sm disabled:opacity-40"
+                      className="min-h-8 shrink-0 rounded-lg bg-white/15 px-2.5 text-[11px] disabled:opacity-40"
                     >
                       Record
                     </button>
                   </div>
                 </>
               ) : (
-                <p className="rounded-lg bg-white/5 px-3 py-2 text-[11px] text-white/60">
-                  Payment locked for this captain — send to kitchen, then hand over to cashier.
+                <p className="text-[11px] text-white/55">
+                  Payment locked — send to kitchen, then hand over to cashier.
                 </p>
               )}
             </div>
