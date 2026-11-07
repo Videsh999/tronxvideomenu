@@ -12,6 +12,12 @@ export function defaultAuthorizationForSource(
   return { status: "NOT_REQUIRED", entrySource: "POS" };
 }
 
+export function authorizationForCustomerQr(requiresCaptainApproval: boolean): CaptainAuthorization {
+  return requiresCaptainApproval
+    ? defaultAuthorizationForSource("CUSTOMER_QR")
+    : { status: "NOT_REQUIRED", entrySource: "CUSTOMER_QR" };
+}
+
 export function resolveAuthorization(
   order: Pick<RestaurantOrder, "captainAuthorization" | "source" | "channel" | "status">,
 ): CaptainAuthorization {

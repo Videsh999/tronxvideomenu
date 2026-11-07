@@ -21,9 +21,11 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 export default function CaptainManagement({
   restaurantSlug,
   tables = [],
+  initialQrRequiresCaptainApproval = true,
 }: {
   restaurantSlug: string;
   tables?: RestaurantTable[];
+  initialQrRequiresCaptainApproval?: boolean;
 }) {
   const [captains, setCaptains] = useState<CaptainView[]>([]);
   const [name, setName] = useState("");
@@ -38,7 +40,28 @@ export default function CaptainManagement({
   const [resetPassword, setResetPassword] = useState("");
   const [resetVisible, setResetVisible] = useState(false);
   const [assignDraft, setAssignDraft] = useState<Record<string, string[]>>({});
+  const [qrRequiresCaptainApproval, setQrRequiresCaptainApproval] = useState(initialQrRequiresCaptainApproval);
+  const [savingApprovalPolicy, setSavingApprovalPolicy] = useState(false);
   const activeTables = tables.filter((table) => table.isActive);
+
+  const saveApprovalPolicy = async (required: boolean) => {
+    setSavingApprovalPolicy(true);
+    setMessage("");
+    try {
+      await request("/api/admin/captain-settings", {
+        method: "PATCH",
+        body: JSON.stringify({ qrRequiresCaptainApproval: required }),
+      });
+      setQrRequiresCaptainApproval(required);
+      setMessage(required
+        ? "QR orders now wait for captain approval before reaching the kitchen."
+        : "Direct QR ordering enabled. New customer orders will go straight to the kitchen.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to update QR approval policy");
+    } finally {
+      setSavingApprovalPolicy(false);
+    }
+  };
 
   const refresh = async () => {
     const data = await request<CaptainView[]>("/api/admin/captains");
@@ -270,6 +293,40 @@ export default function CaptainManagement({
           </button>
         </div>
       </header>
+
+      <section className="rounded-2xl border border-neutral-200 bg-white p-4 sm:p-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="max-w-2xl">
+            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-neutral-400">Customer QR order policy</p>
+            <h2 className="mt-1 text-lg font-bold text-neutral-900">Send QR orders directly to kitchen</h2>
+            <p className="mt-1 text-sm text-neutral-500">
+              In direct mode, valid customer orders skip captain approval, enter preparation, and generate KOT immediately. Captain permissions and table assignments remain unchanged.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={!qrRequiresCaptainApproval}
+            disabled={savingApprovalPolicy}
+            onClick={() => void saveApprovalPolicy(!qrRequiresCaptainApproval)}
+            className={`relative inline-flex min-h-12 min-w-[13rem] shrink-0 items-center justify-between gap-3 rounded-xl px-4 text-sm font-bold transition disabled:opacity-50 ${
+              !qrRequiresCaptainApproval ? "bg-emerald-600 text-white" : "bg-neutral-100 text-neutral-700"
+            }`}
+          >
+            <span>{savingApprovalPolicy ? "Saving…" : !qrRequiresCaptainApproval ? "Direct to kitchen: ON" : "Captain approval: ON"}</span>
+            <span className={`relative h-6 w-11 rounded-full ${!qrRequiresCaptainApproval ? "bg-white/30" : "bg-neutral-300"}`}>
+              <span className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow transition-all ${!qrRequiresCaptainApproval ? "left-6" : "left-1"}`} />
+            </span>
+          </button>
+        </div>
+        <p className={`mt-3 rounded-xl px-3 py-2 text-xs font-semibold ${
+          qrRequiresCaptainApproval ? "bg-amber-50 text-amber-800" : "bg-emerald-50 text-emerald-800"
+        }`}>
+          {qrRequiresCaptainApproval
+            ? "Current workflow: customer → captain approval → KOT → kitchen"
+            : "Current workflow: customer → KOT → kitchen (no captain approval)"}
+        </p>
+      </section>
 
       <section className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4 text-sm text-neutral-600">
         <p className="font-semibold text-neutral-900">Captain sign-in portal</p>

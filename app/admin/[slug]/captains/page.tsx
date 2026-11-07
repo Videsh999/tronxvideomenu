@@ -16,5 +16,9 @@ export default async function CaptainsPage({ params }: { params: Promise<{ slug:
   const feature = requireRestaurantFeature(restaurant, "CAPTAIN_ACCESS");
   if (!feature.allowed) notFound();
   const tables = await tableRepository.findByRestaurantId(restaurant.id);
-  return <CaptainManagement restaurantSlug={restaurant.slug} tables={tables} />;
+  return <CaptainManagement
+    restaurantSlug={restaurant.slug}
+    tables={tables}
+    initialQrRequiresCaptainApproval={restaurant.orderSettings?.qrRequiresCaptainApproval !== false}
+  />;
 }

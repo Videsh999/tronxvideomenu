@@ -16,6 +16,7 @@ import type { OrderLineCancellation } from "@/types";
 import { canTransition } from "@/lib/order-transitions";
 import {
   defaultAuthorizationForSource,
+  authorizationForCustomerQr,
   isCaptainKitchenEligible,
   resolveAuthorization,
 } from "@/lib/order-authorization";
@@ -266,8 +267,11 @@ export class OrderService {
       throw new OrderServiceError("This table became unavailable. Please ask restaurant staff for help.");
     }
     const customerToken = randomBytes(32).toString("base64url");
-    const captainAuthorization = defaultAuthorizationForSource("CUSTOMER_QR");
-    const createdEvent = makeEvent("CREATED", "Order placed via QR menu — awaiting captain approval", undefined, {
+    const requiresCaptainApproval = menu.restaurant.orderSettings?.qrRequiresCaptainApproval !== false;
+    const captainAuthorization = authorizationForCustomerQr(requiresCaptainApproval);
+    const createdEvent = makeEvent("CREATED", requiresCaptainApproval
+      ? "Order placed via QR menu — awaiting captain approval"
+      : "Order placed via QR menu — direct kitchen routing enabled", undefined, {
       billSnapshot: bill,
       captainAuthorization,
     });
@@ -304,7 +308,10 @@ export class OrderService {
       },
       events: [createdEvent],
     });
-    return { order: customerOrderView(created), customerToken };
+    const routed = requiresCaptainApproval
+      ? created
+      : await this.acceptToKitchen(menu.restaurant.id, created.id, created);
+    return { order: customerOrderView(routed as RestaurantOrder), customerToken };
   }
 
   async createPosOrder(

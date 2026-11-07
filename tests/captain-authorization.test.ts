@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   authorizationBlocksKitchen,
+  authorizationForCustomerQr,
   defaultAuthorizationForSource,
   isCaptainKitchenEligible,
   isPendingCaptainApproval,
@@ -27,6 +28,14 @@ describe("captain authorization gate", () => {
       }),
       true,
     );
+  });
+
+  it("restaurant policy can route valid QR orders without captain approval", () => {
+    assert.equal(authorizationForCustomerQr(true).status, "PENDING_CAPTAIN_APPROVAL");
+    assert.deepEqual(authorizationForCustomerQr(false), {
+      status: "NOT_REQUIRED",
+      entrySource: "CUSTOMER_QR",
+    });
   });
 
   it("legacy pending QR without field requires approval", () => {

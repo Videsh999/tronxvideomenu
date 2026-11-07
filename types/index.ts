@@ -272,6 +272,12 @@ export type Restaurant = {
   organizationId?: string;
   inventorySettings?: RestaurantInventorySettings;
   loyaltySettings?: RestaurantLoyaltySettings;
+  orderSettings?: RestaurantOrderSettings;
+};
+
+export type RestaurantOrderSettings = {
+  /** Defaults to true for legacy restaurants. False sends valid QR orders directly to kitchen. */
+  qrRequiresCaptainApproval?: boolean;
 };
 
 export type InventoryConsumptionPoint = "ACCEPTED" | "PREPARING" | "READY" | "SERVED";

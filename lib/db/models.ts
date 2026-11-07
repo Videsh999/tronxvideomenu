@@ -133,6 +133,9 @@ const restaurantSchema = new Schema<Restaurant>(
       currencyPerPoint: { type: Number, min: 0 },
       enabled: { type: Boolean, default: false },
     },
+    orderSettings: {
+      qrRequiresCaptainApproval: { type: Boolean, default: true },
+    },
   },
   { ...baseOptions, collection: "restaurants" },
 );
