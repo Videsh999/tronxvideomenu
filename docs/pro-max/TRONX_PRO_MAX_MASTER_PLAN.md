@@ -27,9 +27,9 @@ Take the existing Restaurant OS to production-grade ("Pro Max") by **evolving th
 | Epic | Stream | Delivers | Owner (audit) |
 |---|---|---|---|
 | ROS-E00 | Wave 0 | Split `lib/validations/index.ts` into domain modules (no feature change) | Backend, CTO review |
-| ROS-E01 | A – Authz matrix | Per-handler contracts. No blanket customer or connector class. Login, register, and reset must not require an existing customer session. Pair is a pairing code. Heartbeat, jobs, and ack use the connector secret (F-01, F-07) | Backend |
-| ROS-E02 | B – Order aggregate | Frozen line tax and settings snapshots; compare-and-swap; atomic cancel marker; cancellation crash-retry stays separate from payment-recording retry (ROS-E12-T015); QR variants; QR idempotency returns the existing order (F-02, F-04, F-11, F-12, F-15) | Backend |
-| ROS-E03 | C – Bill UI | POS and captain previews consume B's billing contract and do not edit `lib/billing/**` or `lib/order-pricing.ts`. The billing parity test file is B's (F-03) | Frontend, after B |
+| ROS-E01 | A – Authz matrix | `customer` + `connector` proxy classes; every route classified by test (F-01, F-07) | Backend |
+| ROS-E02 | B – Order aggregate | Cancel uses `calculateRestaurantBill` & writes all money fields; QR variants; QR idempotency returns existing order (F-02, F-04, F-11, F-12, F-15) | Backend |
+| ROS-E03 | C – Bill UI | POS & captain previews equal server bill; parity test (F-03) | Frontend (Backend reviews calculator import) |
 | ROS-E04 | D – Identities | Fix credential test; demo passwords out of git; memberships; audited/no password reveal (F-06, F-09, F-13, F-16) | Backend, UI by Frontend |
 | ROS-E05 | E – Floor UI | Table statuses tsc-clean; captain/KDS intact (F-05, F-17) | Frontend, QA writes cases |
 | ROS-E06 | F – Menu & catalog | Replace/isolate `xlsx` (F-08); import/export tests pass | Frontend + Backend for import |
@@ -37,27 +37,17 @@ Take the existing Restaurant OS to production-grade ("Pro Max") by **evolving th
 | ROS-E08 | H – Schema steward | Sole editor of `lib/db/models.ts`, `types/index.ts`, `lib/db/mongo-mappers.ts`; membership collection (F-09, F-18) | Backend, CTO reviews every change |
 | ROS-E09 | I1–I5 – Inventory / Procurement / CRM / Multi-outlet / Reports | Tests still pass; idempotency kept; separate owners and merge queues | Backend (one per sub-stream) |
 | ROS-E10 | J – AI | Heuristic still refuses unknown tools; no provider call in unit tests | Backend |
-| ROS-E11 | K – Hardware | Pair uses a pairing code. Heartbeat, job poll, and ack use the connector secret. No staff cookie (F-01) | Backend |
+| ROS-E11 | K – Hardware | Connector handlers/client work via `connector` class | Backend |
 | ROS-E12 | L – DevOps | PR workflow (lint, typecheck, unit), integration on replica set, remove `ignoreBuildErrors`, env template (F-05, F-10, F-21, F-22) | DevOps |
 | ROS-E13 | M – Demo & QA | `seed-pro-max-demo.ts` / `cleanup-pro-max-demo.ts` (loopback only), E2E, API, load tests | QA; DevOps supplies DB |
 | ROS-E15 | O – WhatsApp Billing + Dynamic UPI + Billing Policies + Tips | Provider abstraction, per-outlet merchant mapping, dynamic QR, verified webhooks, ledger states, partial/refunds, policy engine, tips, WhatsApp Cloud API, admin/captain/POS/customer payment UI, 12 docs in `docs/whatsapp-payments/` | CTO, Finance, Backend, Frontend, UI/UX, QA (Founder order 2026-11-07, UX_SPEC.md) |
 | ROS-E14 | N – UI shell | Shell/sidebar owner; POS & kitchen full-width | UI/UX, implemented by Frontend |
 
-File ownership: `docs/pro-max/PATH_OWNERS.md` governs from Wave 2 on; changes outside a stream's paths are queued patches landed by the owner, one at a time. `lib/services/order.service.ts`, `lib/billing/**`, and `lib/order-pricing.ts` → B only. `lib/db/models.ts` and `types/index.ts` → H only. `proxy.ts` and `lib/api-authz.ts` → A only. `next.config.ts` and the root `package.json` → L only. Sidebar → N only. `lib/demo/seed-demo-kitchen.ts` and the legacy seed route → D. M never edits those paths. `app/admin/menu/**`, `app/admin/media/**`, and `app/admin/availability/**` → F. `app/admin/profile/**`, `app/admin/[slug]/profile/**`, and `RestaurantProfileForm.tsx` are FROZEN until an owner is assigned. Restaurant APIs stay with D. Stream O is the CTO section in PATH_OWNERS.md: Backend owns `lib/payments/**` and `lib/messaging/whatsapp/**`; Frontend owns `components/payments/**`, `components/messaging/whatsapp/**`, and `app/admin/[slug]/settings/payments-whatsapp/**`. B still owns the billing contract and the policy resolver. There is no blanket `app/api/webhooks/**` owner.
-
-Handler contracts for Stream A:
-
-| Handler | Contract |
-|---|---|
-| Loyalty login, register, forgot-password, reset-password | Anonymous. The proxy must not require an existing customer session or a staff session. |
-| Loyalty logout | Anonymous. Clears the customer cookie even when it is missing. |
-| `GET /api/public/loyalty/me` | No staff cookie. Returns `data: null` when the customer cookie is absent. |
-| `POST /api/connector/pair` | Pairing code only. Not `requireConnectorAuth` and not a connector secret. |
-| Heartbeat, job poll, ack | Connector id and secret. Not a pairing code. |
+File ownership: `docs/pro-max/PATH_OWNERS.md` (CTO) governs from Wave 2 on; changes outside a stream's paths are queued patches landed by the owner, one at a time. Earlier rule (audit): streams run in parallel only inside their listed paths. `lib/services/order.service.ts` → B only; `lib/db/models.ts`/`types/index.ts` → H only; `proxy.ts`/`lib/api-authz.ts` → A only; `next.config.ts` → L only; sidebar → N only.
 
 ## 4. Waves and merge order
 
-All implementation PRs target the integration branch `pro-max/release`. That branch now exists. It was created from `main` at `fcc89586190e2dd40673c7cb04f6baa358dd7969` (`fcc8958`). This audit PR stays on `pro-max/audit` and is not an implementation PR.
+All PRs target the integration branch `pro-max/release` (created from `main` at `fcc8958`).
 
 - **Wave 0, In Progress, merges first:** validation contracts (ROS-E00-T001). ADRs 0001–0005 (ROS-E00-T002 to T006) are Ready.
 - **Wave 1, In Progress:**
@@ -86,14 +76,14 @@ Founder approval (via CEO) is an extra gate, on top of normal review, for:
 
 ## 5. Dependencies between workstreams
 
-- G loyalty → A (per-handler allow-list, not a customer-session class). K connector → A (pair is a pairing code; heartbeat, jobs, and ack are the connector secret).
+- G loyalty → A (proxy). K connector → A (connector class).
 - G variant UI → B (server accepts variantId). B variant schema → Wave 0 split.
-- C (ROS-E03-T001 and T002) starts only after B's billing contract. C imports that contract and does not edit `lib/billing/**` or `lib/order-pricing.ts`. The billing parity test file is B's.
-- L `ignoreBuildErrors` removal → E (table statuses) and B leave `tsc` clean. CI fails if integration tests are skipped.
+- C → may import `calculateRestaurantBill` now; must not edit `lib/order-pricing.ts` until B removes the cancel dependency.
+- L `ignoreBuildErrors` removal → E (table statuses) and B leave `tsc` clean.
 - D memberships, Phase B demo users (M) → H membership collection.
 - M → L/DevOps for a local replica-set database.
 - All streams → N for sidebar links; → H for schema patches; → L for root dependency changes.
-- M never edits `lib/demo/seed-demo-kitchen.ts`, `lib/demo/**`, `app/api/dev/seed-demo-kitchen/**`, or `scripts/verify-demo-reupload-import.mjs`. Those stay with D.
+- M → D: M doesn't touch `lib/demo/seed-demo-kitchen.ts` until ROS-E04-T002 merges.
 - E15 depends on:
   - the Wave 1 billing writer and B's contract (ROS-E02-T001/T007/T008/T009)
   - CTO provider approval (ROS-E15-T001)
@@ -121,9 +111,9 @@ Founder approval (via CEO) is an extra gate, on top of normal review, for:
 ## 7. Roles
 
 - **TRONX Project Director** – owns the task board and register; assigns, tracks status.
-- **TRONX CTO** – reviews all engineering work before it is eligible for release. A and B must be in the release candidate or loyalty, printing, and cancel math stay wrong.
+- **TRONX CTO** – reviews all engineering work; gates production deploy on A + B.
 - **TRONX QA ENGINEER** – verifies against acceptance criteria; only QA sets **Verified**.
-- **Founder** – approves scope, deadline and budget changes, routed via **CEO**. Every merge to `main` and every production deploy needs explicit Founder approval after CTO review, QA sign-off, and green CI. No one else may merge or deploy to `main`. Client, deadline, and budget stay TBD until the Founder sets them.
+- **Founder** – approves scope, deadline and budget changes, routed via **CEO**.
 - **TRONX FINANCE MANAGER:** E15 billing workflows, reconciliation and tip accounting. Finance-related tasks are reviewed by CTO + Finance.
 - Engineers: TRONX BACKEND / FRONTEND / DEVOPS ENGINEER, TRONX UI UX DESIGNER, TRONX OPERATIONS & SUPPORT – one accountable owner per task.
 
@@ -133,8 +123,6 @@ Founder approval (via CEO) is an extra gate, on top of normal review, for:
 
 - In Review = CTO review. QA = handed to QA with acceptance criteria, preview/staging link and engineer name.
 - **No task is done until QA marks it Verified.** Test evidence must be attached on the board.
-- **Release branch.** Every implementation PR targets `pro-max/release`, which exists at `fcc89586190e2dd40673c7cb04f6baa358dd7969`. This audit PR is docs-only and is not merged to `main` until the Founder approves.
-- **Merge and deploy to `main`.** Required order: CTO review, then QA sign-off, then green CI on `pro-max/release`, then explicit Founder approval. The gate task is ROS-E12-T014. A merge or deploy to `main` without that approval does not happen.
 
 ## 9. Decisions and open items
 
@@ -143,30 +131,3 @@ CEO decisions (2026-11-07), the CTO review mapping, the UX_SPEC TBD-PD mapping a
 ## 10. Open items
 
 See "Open questions" in `TRONX_PRO_MAX_TASK_BOARD.md`. All dates, budget and client details: TBD – needs Founder approval via CEO.
-
-## 11. Unmapped items (pending CTO confirmation)
-
-These proposals are not approved. They fill gaps the board left open. Each line is **pending CTO confirmation**.
-
-| Item | Proposed owner | Proposed path | Notes |
-|---|---|---|---|
-| Structured logger | L | `lib/observability/logger.ts` | JSON logs. Redaction reuses `lib/ai/redact.ts`. Other streams call it; they do not add a second logger. |
-| Request / correlation id | L proposes the helper; A lands the edge read because A owns `proxy.ts` | `lib/observability/request-id.ts`, queued patch on `proxy.ts` | Reuse `correlationId` in `lib/db/mongo-tx.ts` (H). B stores it on order events and the payment ledger. K stores it on print jobs. |
-| Rate-limit store | L | `lib/rate-limit/store.ts` | Not inside `lib/security/**` (D). Login, public order, Wi-Fi, loyalty, and pairing limiters call it. Fail closed when the store is down. |
-| Backup and restore drill | L | `docs/ops/BACKUP_RESTORE_DRILL.md` | Synthetic copy only. RPO 15 minutes and RTO 1 hour stay design targets, not measurements. |
-| `PRODUCTION_DEPLOYMENT_CHECKLIST.md` | L | repo root, existing file | Deploy checklist. No secret values. |
-| Legacy `/admin` pages | Already assigned, not a new proposal | `app/admin/menu/**`, `app/admin/media/**`, `app/admin/availability/**` → F. Profile paths FROZEN | APIs stay with their domain owners. See PATH_OWNERS.md. |
-
-ADR authors, also **pending CTO confirmation**: TRONX BACKEND ENGINEER for `docs/adr/0001-tenancy.md` through `docs/adr/0005-polling.md`. ADR 0005 already covers KOT failure alerts and retries. ADRs 0006–0011 are in `docs/adr/` as Proposed. Nothing was renumbered to 0012.
-
-Billing policy precedence, for the resolver B owns: **order override, then table or session, then channel or order type, then outlet, then organization, then default.** Kitchen release is a separate policy and is not forced by the payment policy. The prepay kitchen gate is the bill total excluding tip.
-
-## 12. CTO fixes re-applied on this v2.2 copy
-
-v2.2 is the board and plan. These approved rules were put back where v2.2 dropped them:
-
-- Per-handler auth contracts replace the blanket customer and connector classes.
-- M never edits D's legacy seed. PATH_OWNERS Stream O stays the CTO patch.
-- Profile paths stay FROZEN. Menu, media, and availability stay with F.
-- Payment-recording retry and concurrency is ROS-E12-T015. v2.2 reused ROS-E12-T014 for the release gate, and that gate is kept.
-- Razorpay stays the conditional primary. Cashfree stays a capability proof with no exception to credential isolation.
