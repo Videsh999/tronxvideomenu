@@ -1,6 +1,6 @@
-# TRONX PRO MAX Task Board – Restaurant OS (ROS) — v2
+# TRONX PRO MAX Task Board – Restaurant OS (ROS) — v2.2
 
-Sources: audit PR https://github.com/Videsh999/tronxvideomenu/pull/1 (branch `pro-max/audit`): `docs/pro-max/TRONX_PRO_MAX_MODULE_INVENTORY.md`, `TRONX_PRO_MAX_FINDINGS.md`, `TRONX_PRO_MAX_ARCHITECTURE.md` (CTO-revised), `PATH_OWNERS.md`. E15 from `whatsapp-payments/FOUNDER_ORDER_2026-11-07.md` and `whatsapp-payments/UX_SPEC.md`. v2 by TRONX Project Director, 2026-11-07. Previous version: `TRONX_PRO_MAX_TASK_BOARD.md.v1.bak`. A task is done only when TRONX QA ENGINEER marks it **Verified**. `EXT:` dependencies are external inputs, not tasks.
+Sources: audit PR https://github.com/Videsh999/tronxvideomenu/pull/1 (branch `pro-max/audit`): `docs/pro-max/TRONX_PRO_MAX_MODULE_INVENTORY.md`, `TRONX_PRO_MAX_FINDINGS.md`, `TRONX_PRO_MAX_ARCHITECTURE.md` (CTO-revised), `PATH_OWNERS.md`. E15 from `whatsapp-payments/FOUNDER_ORDER_2026-11-07.md` and `whatsapp-payments/UX_SPEC.md`. v2.2 by TRONX Project Director, 2026-11-07. Previous versions: `.v2.1.bak`, `.v2.bak`, `.v1.bak`; change log in `CHANGES_v2.1.md` (includes the v2.2 section). A task is done only when TRONX QA ENGINEER marks it **Verified**. `EXT:` dependencies are external inputs, not tasks.
 
 ## Epic → workstream mapping
 
@@ -18,12 +18,12 @@ Sources: audit PR https://github.com/Videsh999/tronxvideomenu/pull/1 (branch `pr
 | ROS-E09 | I1–I5 | Inventory, procurement, CRM, multi-outlet, reports (separate queues) | 1 |
 | ROS-E10 | J | AI | 1 |
 | ROS-E11 | K | Hardware | 2 |
-| ROS-E12 | L | DevOps | 14 |
+| ROS-E12 | L | DevOps | 15 |
 | ROS-E13 | M | Demo and QA | 7 |
 | ROS-E14 | N | UI shell | 1 |
-| ROS-E15 | O | WhatsApp Billing + Dynamic UPI + Billing Policies + Tips | 47 |
+| ROS-E15 | O | WhatsApp Billing + Dynamic UPI + Billing Policies + Tips | 48 |
 
-**Status counts:** In Progress 35, Backlog 61, Ready 20, Blocked 8 (total 124)
+**Status counts:** In Progress 36, Backlog 63, Ready 14, In Review 6, Blocked 8 (total 127). The extra In Progress task is ROS-E12-T015, restored because v2.2 reused ROS-E12-T014 for the release gate.
 
 ## Summary
 
@@ -106,26 +106,25 @@ Sources: audit PR https://github.com/Videsh999/tronxvideomenu/pull/1 (branch `pr
 | ROS-E12-T011 | Request/correlation id at the edge | TRONX DEVOPS ENGINEER | Backlog | TRONX CTO |
 | ROS-E12-T012 | Backup/restore drill on a synthetic database copy | TRONX DEVOPS ENGINEER | Backlog | TRONX CTO |
 | ROS-E12-T013 | Shared rate-limit store | TRONX DEVOPS ENGINEER | Backlog | TRONX CTO |
-| ROS-E12-T014 | Payment-recording retry and concurrency gate | TRONX DEVOPS ENGINEER | In Progress | TRONX CTO |
-| ROS-E15-T001 | Provider capability verification and architecture/provider approval | TRONX CTO | Ready | Founder (via CEO) |
-| ROS-E15-T002 | India payment requirements and WhatsApp policy/template review (pre-production) | TRONX CTO | Ready | Founder (via CEO) |
-| ROS-E15-T003 | Payment & tip UX spec (UX_SPEC.md) – finalize, replace TBD-PD tags, resolve §15 | TRONX UI UX DESIGNER | In Progress | TRONX CTO |
+| ROS-E15-T001 | Provider capability verification and architecture/provider approval | TRONX CTO | Ready | TRONX CEO |
+| ROS-E15-T002 | India payment requirements and WhatsApp policy/template review (pre-production) | TRONX CTO | Ready | TRONX CEO |
+| ROS-E15-T003 | Payment & tip UX spec v1.1 (UX_SPEC.md) | TRONX UI UX DESIGNER | In Review | TRONX CTO |
 | ROS-E15-T004 | Design tokens + shared status chip (icon+label) and TEST band design | TRONX UI UX DESIGNER | Ready | TRONX CTO |
 | ROS-E15-T005 | Accessibility & localisation audit (contrast, screen reader, 200% zoom, Hindi with Noto UI) | TRONX UI UX DESIGNER | Backlog | TRONX CTO |
 | ROS-E15-T006 | Design QA on preview build before QA hand-off | TRONX UI UX DESIGNER | Backlog | TRONX CTO |
-| ROS-E15-T007 | Reconciliation workflow: late/superseded requests, wrong amount, partial, double pay, manual review | TRONX FINANCE MANAGER | Ready | TRONX CTO + TRONX FINANCE MANAGER |
-| ROS-E15-T008 | Tip tax treatment, receipt presentation and customer tip wording | TRONX FINANCE MANAGER | Ready | TRONX CTO + TRONX FINANCE MANAGER |
-| ROS-E15-T009 | QA test plan: Order 1 failure list, Order 2 '20 listed tests', UX_SPEC AC-1…AC-5, regression | TRONX QA ENGINEER | Ready | TRONX CTO |
-| ROS-E15-T010 | Doc: WHATSAPP_BILLING_ARCHITECTURE.md | TRONX CTO | Ready | Founder (via CEO) |
+| ROS-E15-T007 | Reconciliation workflow: late/superseded requests, wrong amount, partial, double pay, manual review | TRONX FINANCE MANAGER | In Review | TRONX CTO + TRONX FINANCE MANAGER |
+| ROS-E15-T008 | Tip tax treatment, receipt presentation and customer tip wording | TRONX FINANCE MANAGER | In Progress | TRONX CTO + TRONX FINANCE MANAGER |
+| ROS-E15-T009 | QA test plan: Order 1 failure list, Order 2 '20 listed tests', UX_SPEC AC-1…AC-5, regression | TRONX QA ENGINEER | In Review (draft: whatsapp-payments/TEST_PLAN.md) | TRONX CTO |
+| ROS-E15-T010 | Doc: WHATSAPP_BILLING_ARCHITECTURE.md | TRONX CTO | Ready | TRONX CEO |
 | ROS-E15-T011 | Doc: DYNAMIC_UPI_QR_IMPLEMENTATION.md | TRONX BACKEND ENGINEER | Ready | TRONX CTO |
 | ROS-E15-T012 | Doc: PAYMENT_WEBHOOK_SECURITY.md | TRONX BACKEND ENGINEER | Ready | TRONX CTO |
 | ROS-E15-T013 | Doc: WHATSAPP_TEMPLATE_GUIDE.md | TRONX BACKEND ENGINEER | Ready | TRONX CTO |
 | ROS-E15-T014 | Doc: PAYMENT_RECONCILIATION_REPORT.md | TRONX FINANCE MANAGER | Blocked | TRONX CTO + TRONX FINANCE MANAGER |
 | ROS-E15-T015 | Doc: WHATSAPP_PAYMENT_E2E_REPORT.md | TRONX QA ENGINEER | Blocked | TRONX CTO |
-| ROS-E15-T016 | Doc: RESTAURANT_BILLING_POLICIES.md | TRONX FINANCE MANAGER | Ready | TRONX CTO + TRONX FINANCE MANAGER |
-| ROS-E15-T017 | Doc: BILL_GENERATION_WORKFLOW.md | TRONX FINANCE MANAGER | Ready | TRONX CTO + TRONX FINANCE MANAGER |
-| ROS-E15-T018 | Doc: CUSTOMER_TIP_CONFIGURATION.md | TRONX UI UX DESIGNER | Ready | TRONX CTO + TRONX FINANCE MANAGER |
-| ROS-E15-T019 | Doc: TIP_ACCOUNTING_AND_RECONCILIATION.md | TRONX FINANCE MANAGER | Ready | TRONX CTO + TRONX FINANCE MANAGER |
+| ROS-E15-T016 | Doc: RESTAURANT_BILLING_POLICIES.md | TRONX FINANCE MANAGER | In Review | TRONX CTO + TRONX FINANCE MANAGER |
+| ROS-E15-T017 | Doc: BILL_GENERATION_WORKFLOW.md | TRONX FINANCE MANAGER | In Review | TRONX CTO + TRONX FINANCE MANAGER |
+| ROS-E15-T018 | Doc: CUSTOMER_TIP_CONFIGURATION.md | TRONX UI UX DESIGNER | In Review | TRONX CTO + TRONX FINANCE MANAGER |
+| ROS-E15-T019 | Doc: TIP_ACCOUNTING_AND_RECONCILIATION.md | TRONX FINANCE MANAGER | In Review | TRONX CTO + TRONX FINANCE MANAGER |
 | ROS-E15-T020 | Doc: DYNAMIC_PAYMENT_AMOUNT_RULES.md | TRONX BACKEND ENGINEER | Ready | TRONX CTO + TRONX FINANCE MANAGER |
 | ROS-E15-T021 | Doc: BILLING_POLICY_E2E_REPORT.md | TRONX QA ENGINEER | Backlog | TRONX CTO |
 | ROS-E15-T022 | Payment provider abstraction (extends PaymentAdapter) | TRONX BACKEND ENGINEER | Backlog | TRONX CTO |
@@ -153,13 +152,16 @@ Sources: audit PR https://github.com/Videsh999/tronxvideomenu/pull/1 (branch `pr
 | ROS-E15-T044 | Payment state catalogue on all surfaces (Screen 5) | TRONX FRONTEND ENGINEER | Backlog | TRONX CTO |
 | ROS-E15-T045 | TRONX WHATSAPP PAYMENT DEMO + test restaurants A/B/C (sandbox only) | TRONX QA ENGINEER | Blocked | TRONX CTO |
 | ROS-E15-T046 | Execute all scenarios (failure list, 20 tests, UX ACs, regression) | TRONX QA ENGINEER | Blocked | TRONX CTO |
-| ROS-E15-T047 | Production readiness gate: no live payments before onboarding + production credentials + Founder approval | TRONX CTO | Backlog | Founder (via CEO) |
+| ROS-E15-T047 | Production readiness gate: no live payments before onboarding + production credentials + Founder approval | TRONX CTO | Backlog | TRONX CEO |
+| ROS-E15-T048 | First real-money test (gate) | TRONX QA ENGINEER | Backlog | TRONX CEO |
+| ROS-E12-T014 | Release merge/deploy of pro-max/release to main (gate) | TRONX DEVOPS ENGINEER | Backlog | TRONX CEO |
+| ROS-E12-T015 | Payment-recording retry and concurrency gate | TRONX DEVOPS ENGINEER | In Progress | TRONX CTO |
 
 ## CEO decisions (2026-11-07)
 
 1. **Wave 0 first:** ROS-E00-T001 is In Progress. It merges first, per the CTO's merge order, into the integration branch `pro-max/release`, before the Wave 2 streams. ROS-E02-T002 keeps its dependency on it.
 2. **D Wave 1 = F-16 + F-06:** ROS-E04-T001 and ROS-E04-T002 (the credential literals plus `scripts/verify-demo-reupload-import.mjs` / `scripts/seed-tronx-demo-kitchen.ts`). The seed-route handler lockdown is added as ROS-E04-T009 (In Progress). The edge half stays ROS-E01-T004. Memberships (ROS-E04-T004) are deferred to Backlog.
-3. **Legacy seed ownership:** D owns `lib/demo/seed-demo-kitchen.ts` and only removes the credential literals in Wave 1. M never edits that file, `lib/demo/**`, the legacy seed route, or the credential verification script. M builds `scripts/seed-pro-max-demo.ts` only.
+3. **Legacy seed ownership:** D owns `lib/demo/seed-demo-kitchen.ts` and only removes the credential literals in Wave 1. M builds the new demo seed separately and never edits that file, `lib/demo/**`, the legacy seed route, or `scripts/verify-demo-reupload-import.mjs`. Every E13 task depends on ROS-E04-T002.
 4. **Wave 1 typecheck/lint:** fixes are made serially by one implementer (TRONX FRONTEND ENGINEER: ROS-E05-T001, then ROS-E12-T005). The owning C/E/F lead reviews the diff in the Wave 1 PR. From Wave 2 on, `docs/pro-max/PATH_OWNERS.md` governs.
 5. **F-20 payment adapter (ROS-E04-T007):** status note "Founder decision pending".
 6. **Client, deadline, budget:** stay TBD. The CEO is taking them to the Founder.
@@ -175,7 +177,7 @@ Sources: audit PR https://github.com/Videsh999/tronxvideomenu/pull/1 (branch `pr
   6. L final gates last (ROS-E12-T003)
 - **Ownership manifest:** task file lists were updated to the manifest. Stream I is now I1–I5 (ROS-E09). C now owns POS shifts. D owns the seed route, `lib/demo/**`, `app/api/restaurants/**` and `restaurant-normalize`. H owns `mongo-tx`, `mongodb` and the barrels. L owns the root manifests, so the xlsx change is ROS-E12-T009.
 - **Per-handler authz contracts** (no blanket customer class; pair vs secret): ROS-E01-T001/T002/T003, ROS-E11-T001.
-- **Money integrity** (snapshot-safe append, CAS lost updates, crash-retry marker, the three required tests): ROS-E02-T001, T007, T008, T009 and T010.
+- **Money integrity** (snapshot-safe append, CAS lost updates, crash-retry marker, the three required tests): ROS-E02-T001, T007, T008, T009 and T010. Payment-recording retry and concurrency is ROS-E12-T015 and does not replace the cancellation tests.
 - **Security/ops deliverables:**
   - IDOR: ROS-E01-T005
   - CSRF: ROS-E01-T006
@@ -203,34 +205,40 @@ Sources: audit PR https://github.com/Videsh999/tronxvideomenu/pull/1 (branch `pr
 
 Other spec ACs already tagged with existing IDs (ROS-E04-T007, E03-T001/T002, E04-T005, E08-T003) also map to the E15 Frontend tasks named in their acceptance criteria.
 
+## PD decisions (2026-11-07)
+
+- **PD-1:** a Manager or Admin cannot close a bill while a payment is in Manual review; the review must be resolved first. PD proposal; the CTO confirms it under ROS-E15-T030/T027.
+- **PD-2:** when the tip base is ₹0, the tip prompt is hidden, so no fixed or custom tip can be added (Finance case V36). The Founder may override this.
+
 ## Open questions
 
-1. **Branch `pro-max/release`** now exists, created from `main` at `fcc89586190e2dd40673c7cb04f6baa358dd7969` (`fcc8958`). Implementation PRs target it.
-2. **ADR authors — pending CTO confirmation.** Proposed author for `docs/adr/0001` through `docs/adr/0005` is TRONX BACKEND ENGINEER. ADR 0005 covers KOT failure alerts and retries. No KOT ADR was numbered 0006, so none was moved to 0012. ADRs 0006–0011 are now in `docs/adr/` as Proposed.
-3. **Paths — pending CTO confirmation** except the legacy admin pages, which are already assigned. Logger: L, `lib/observability/logger.ts`. Request id: L proposes `lib/observability/request-id.ts`; A lands the `proxy.ts` patch. Rate-limit store: L, `lib/rate-limit/store.ts`. Backup drill: L, `docs/ops/BACKUP_RESTORE_DRILL.md`. `PRODUCTION_DEPLOYMENT_CHECKLIST.md`: L. Legacy `app/admin/menu/**`, `media/**`, and `availability/**`: F. Profile pages and `RestaurantProfileForm.tsx`: FROZEN. API-test folder for ROS-E13-T006 remains unnamed.
-4. **Stream O** is now a PATH_OWNERS.md section. Backend owns `lib/payments/**`, `lib/whatsapp/**`, `app/api/payments/**`, and `app/api/webhooks/**`. Frontend owns the payment and WhatsApp settings UI and the captain and POS payment UI. B's billing contract stays with B. Pending CTO confirmation of those proposed paths.
-5. **RPO 15 min / RTO 1 h** are stated in the audit as drill-design targets, not measurements. The board records them only as targets. — CTO
-6. **Rate-limit thresholds** (public order, Wi-Fi, loyalty, pairing, payment) are not specified. — CTO
-7. **Product decisions not specified by the audit:** password recovery removed vs audited reveal (F-06), non-Kolkata reservation timezones (F-18), replacement marketing copy (F-19). — Founder via CEO
-8. **Payment gateway/provider:** Founder decision pending (ROS-E04-T007, ROS-E15-T001). This also covers UX_SPEC §15 Q2 on which capabilities are guaranteed. — Founder, then CTO verifies
-9. **Founder brief:** the 20 listed tests and the WhatsApp demo cases are in `docs/whatsapp-payments/FOUNDER_BRIEF.md`. Product questions that the brief does not decide stay in items 14–23.
-10. **TRONX FINANCE MANAGER** is a new owner bot not in the original owner list. Confirm it exists. It is also the reviewer on CTO/Finance-pair tasks. — PD/CEO
-11. **Reviewer for CTO-owned E15 tasks** is set to "Founder (via CEO)". Confirm. — CEO
-12. **Local vs repo copies:** `pro-max/audit` now has `docs/pro-max/TRONX_PRO_MAX_MASTER_PLAN.md` and `TRONX_PRO_MAX_TASK_BOARD.md` committed. This local v2 diverges from them. — CEO (single source)
-13. **Deadlines, budget, client:** TBD – needs Founder approval via CEO.
+1. **ADR authors** are not named in the architecture doc. ROS-E00-T002 to T006 are provisionally TRONX BACKEND ENGINEER. Which ADR records the KOT alert target is also not named. — CTO
+2. **Paths proposed, pending CTO confirmation:** structured logger `lib/observability/logger.ts` (L), request-id helper `lib/observability/request-id.ts` with A landing the `proxy.ts` patch (ROS-E12-T010 to T013), rate-limit store `lib/rate-limit/store.ts` (L), backup drill `docs/ops/BACKUP_RESTORE_DRILL.md` (L), and `PRODUCTION_DEPLOYMENT_CHECKLIST.md` (L). The C parity test file (ROS-E03-T003) and the API-test folder (ROS-E13-T006) are still unnamed. Legacy `app/admin/menu/**`, `media/**`, and `availability/**` are F. Profile pages and `RestaurantProfileForm.tsx` are FROZEN. — CTO confirms the proposals only
+3. **Stream O is the CTO section in PATH_OWNERS.md.** Backend owns `lib/payments/**` and `lib/messaging/whatsapp/**`. Frontend owns the payment and WhatsApp UI paths named there. B owns the billing contract and the policy resolver. E15 tasks that still list no files must use those paths. — closed by the CTO patch
+4. **RPO 15 min / RTO 1 h** are stated in the audit as drill-design targets, not measurements. The board records them only as targets. — CTO
+5. **Rate-limit thresholds** (public order, Wi-Fi, loyalty, pairing, payment) are not specified. — CTO
+6. **Product decisions not specified by the audit:** password recovery removed vs audited reveal (F-06), non-Kolkata reservation timezones (F-18), replacement marketing copy (F-19). — Founder via CEO
+7. **Payment gateway/provider:** ADR 0006: Razorpay is the conditional primary, pending the Founder. Cashfree is a capability proof only, with no exception to credential isolation. CTO review (ROS-E15-T001) and the Founder's decision are pending (ROS-E04-T007). This also covers UX_SPEC §15 Q2 on which capabilities are guaranteed. — Founder, then CTO verifies
+8. **TRONX FINANCE MANAGER** is a new owner bot not in the original owner list. Confirm it exists. It is also the reviewer on CTO/Finance-pair tasks. — PD/CEO
+9. **Local vs repo copies:** `pro-max/audit` now has `docs/pro-max/TRONX_PRO_MAX_MASTER_PLAN.md` and `TRONX_PRO_MAX_TASK_BOARD.md` committed. This local v2 diverges from them. — CEO (single source)
+10. **Deadlines, budget, client:** TBD – needs Founder approval via CEO.
 
 UX_SPEC §15 questions not answered by the Founder brief:
 
-14. Template constraints: can a variable-length itemized list fit an approved template, or summary + link/PDF? Can the QR be a media header? Which BSP or Cloud API? (Q3) — CTO
-15. Policy precedence is recorded: order override, then table or session, then channel or order type, then outlet, then organization, then default. Kitchen release is a separate policy. (Q4)
-16. Can the public payment page show the itemized bill (privacy review)? (Q5) — PD with CTO security review
-17. Is "superseded" its own status or CANCELLED with a reason? The brief's 9 statuses don't include it. (Q6) — CTO
-18. Customer-facing tip wording and tip % base (pre- or post-tax) (Q7), tip tax and receipt presentation (Q8). The brief only says "no assumed tax treatment". — Finance; Founder for wording
-19. Captain-device tip entry for guests without phones? (Q9) — PD (product), Founder if policy
-20. Which roles edit vs view Payments settings, and who resolves Manual review (depends on ROS-E04-T005)? (Q10) — PD with CTO
-21. Can customers regenerate an expired link themselves, or only staff? (Q11) — PD
-22. Status polling interval (no SSE; ADR 0005 polling). (Q12) — CTO
-23. Brand assets and launch languages. (Q13) — Founder via CEO
+11. Template constraints: can a variable-length itemized list fit an approved template, or summary + link/PDF? Can the QR be a media header? Which BSP or Cloud API? (Q3) — CTO
+12. Policy precedence is recorded in ADR 0009, pending Founder confirmation of the CEO defaults: order override, then table or session, then channel, then outlet, then organization, then default. Kitchen release is separate. The shorter Finance D1 order is not used. (Q4) — Founder confirms the ADR default
+13. Can the public payment page show the itemized bill (privacy review)? (Q5) — PD with CTO security review
+14. Is "superseded" its own status or CANCELLED with a reason? (UX Q6) — **CTO decides.** Interim position: a flag on the old request, not a ledger status.
+15. Customer-facing tip wording and tip % base (pre- or post-tax) (Q7), tip tax and receipt presentation (Q8). The brief only says "no assumed tax treatment". — Finance; Founder for wording
+16. Captain-device tip entry for guests without phones? (Q9) — PD (product), Founder if policy
+17. Which roles edit vs view Payments settings, and who resolves Manual review (depends on ROS-E04-T005)? (Q10) — PD with CTO
+18. Can customers regenerate an expired link themselves, or only staff? (Q11) — PD
+19. Status polling interval (no SSE; ADR 0005 polling). (Q12) — CTO
+20. Brand assets and launch languages. (Q13) — Founder via CEO
+21. **Unnumbered CEO defaults** that need the Founder's confirmation: Manual review roles, the WhatsApp summary template, and the neutral tip copy. — Founder via CEO
+22. **Tip base (Finance answer D9, pending Founder confirmation):** the tip base is the item subtotal after discount and before tax, so it excludes packaging and service charge. This matches CEO default D6. Finance proposal D9 (ROS-E15-T008) awaits the Founder's confirmation via CEO.
+24. **T008 tip tax:** waiting on written guidance from the CA. — Finance (ROS-E15-T008)
+25. **Receipt tip label:** Finance proposes 'Tip (voluntary)'; UX_SPEC uses 'Tip'. — Founder approves (via CEO)
 
 UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O), mapped above. Q2 is covered by item 8.
 
@@ -272,7 +280,6 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Affected files:** `proxy.ts`, `lib/api-authz.ts`, `tests/api-proxy-authz.test.ts`
 - **Acceptance criteria:**
   - [ ] Login, register, forgot-password and reset-password reachable with no customer cookie and no staff cookie
-  - [ ] The proxy must not require an existing customer session for login, register, or reset. A test fails if it does
   - [ ] Logout and GET /api/public/loyalty/me reachable with no staff cookie; `me` returns `data: null` without a customer cookie
   - [ ] No proxy class requires a customer session for every loyalty path
   - [ ] Existing captain-vs-admin proxy tests still pass
@@ -479,7 +486,7 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Affected files:** `components/admin/PosTerminal.tsx`, `components/captain/CaptainOrderPad.tsx`
 - **Acceptance criteria:**
   - [ ] A unit test feeds the same lines to the screen helper and to `calculateRestaurantBill` and asserts equal totals and tax split
-  - [ ] Covers packaging, service charge, inclusive and IGST cases
+  - [ ] Covers mixed rates, inclusive tax, IGST, discounts, packaging and service charges, and cancelled quantities
 - **Status:** In Progress
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
@@ -523,7 +530,7 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
 - **Completion date:** —
-- **Notes:** CEO decision 2026-11-07: D owns lib/demo/seed-demo-kitchen.ts and only removes the credential literals in Wave 1; covers the 'credential script' item. M must not touch that file until this merges.
+- **Notes:** CEO decision 2026-11-07: D owns lib/demo/seed-demo-kitchen.ts and only removes the credential literals in Wave 1; covers the 'credential script' item. M never edits that file. M builds a separate demo seed.
 
 #### ROS-E04-T003 — Remove recoverable staff passwords or gate behind an audited reveal with reason
 
@@ -875,7 +882,7 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Affected files:** `app/api/connector/`, `lib/connector-auth.ts`, `device-connector/`, `tests/connector-pairing.test.ts`
 - **Acceptance criteria:**
   - [ ] Connector can pair, heartbeat, poll jobs and ack with no staff cookie
-  - [ ] Handlers still require the connector secret
+  - [ ] Heartbeat, poll, and ack still require the connector secret. Pair does not
   - [ ] device-connector tests pass (8/8 baseline); USB stays labeled unsupported
   - [ ] Pair acceptance = pairing-code contract; heartbeat/poll/ack = secret contract
   - [ ] Rate limit on pairing-code claims (A spec, K lands)
@@ -897,6 +904,7 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Acceptance criteria:**
   - [ ] A pull_request workflow runs `npm run lint`, `tsc --noEmit` and `npm test`
   - [ ] Workflow fails the PR when any step fails
+  - [ ] Each Wave 1 PR declares migration-safety or "no data changes"
 - **Status:** In Progress
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
@@ -1036,7 +1044,7 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
 - **Completion date:** —
-- **Notes:** DevOps supplies the database (Stream M). CEO decision 2026-11-07: M builds the new demo seed separately and does not touch lib/demo/seed-demo-kitchen.ts until D's change (ROS-E04-T002) has merged. New npm deps go to L.
+- **Notes:** DevOps supplies the database (Stream M). CEO decision 2026-11-07: M builds the new demo seed separately and never edits lib/demo/seed-demo-kitchen.ts, lib/demo/**, the legacy seed route, or scripts/verify-demo-reupload-import.mjs. New npm deps go to L.
 
 #### ROS-E13-T002 — scripts/cleanup-pro-max-demo.ts
 
@@ -1055,7 +1063,7 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
 - **Completion date:** —
-- **Notes:** CEO decision 2026-11-07: M builds the new demo seed separately and does not touch lib/demo/seed-demo-kitchen.ts until D's change (ROS-E04-T002) has merged. New npm deps go to L.
+- **Notes:** CEO decision 2026-11-07: M builds the new demo seed separately and never edits lib/demo/seed-demo-kitchen.ts, lib/demo/**, the legacy seed route, or scripts/verify-demo-reupload-import.mjs. New npm deps go to L.
 
 #### ROS-E13-T003 — Demo seed Phase B: 2 managers, 2 cashiers, 3 kitchen users
 
@@ -1070,7 +1078,7 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
 - **Completion date:** —
-- **Notes:** CEO decision 2026-11-07: M builds the new demo seed separately and does not touch lib/demo/seed-demo-kitchen.ts until D's change (ROS-E04-T002) has merged. New npm deps go to L.
+- **Notes:** CEO decision 2026-11-07: M builds the new demo seed separately and never edits lib/demo/seed-demo-kitchen.ts, lib/demo/**, the legacy seed route, or scripts/verify-demo-reupload-import.mjs. New npm deps go to L.
 
 #### ROS-E13-T004 — QA demo acceptance run
 
@@ -1088,7 +1096,7 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
 - **Completion date:** —
-- **Notes:** CEO decision 2026-11-07: M builds the new demo seed separately and does not touch lib/demo/seed-demo-kitchen.ts until D's change (ROS-E04-T002) has merged. New npm deps go to L.
+- **Notes:** CEO decision 2026-11-07: M builds the new demo seed separately and never edits lib/demo/seed-demo-kitchen.ts, lib/demo/**, the legacy seed route, or scripts/verify-demo-reupload-import.mjs. New npm deps go to L.
 
 #### ROS-E13-T005 — Playwright E2E against localhost
 
@@ -1104,7 +1112,7 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
 - **Completion date:** —
-- **Notes:** CEO decision 2026-11-07: M builds the new demo seed separately and does not touch lib/demo/seed-demo-kitchen.ts until D's change (ROS-E04-T002) has merged. New npm deps go to L.
+- **Notes:** CEO decision 2026-11-07: M builds the new demo seed separately and never edits lib/demo/seed-demo-kitchen.ts, lib/demo/**, the legacy seed route, or scripts/verify-demo-reupload-import.mjs. New npm deps go to L.
 
 #### ROS-E13-T006 — API tests incl. IDOR and connector-secret checks on local replica set
 
@@ -1121,7 +1129,7 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
 - **Completion date:** —
-- **Notes:** Audit does not name a folder for API tests; tests/e2e/ assumed – open question. CEO decision 2026-11-07: M builds the new demo seed separately and does not touch lib/demo/seed-demo-kitchen.ts until D's change (ROS-E04-T002) has merged. New npm deps go to L.
+- **Notes:** Audit does not name a folder for API tests; tests/e2e/ assumed – open question. CEO decision 2026-11-07: M builds the new demo seed separately and never edits lib/demo/seed-demo-kitchen.ts, lib/demo/**, the legacy seed route, or scripts/verify-demo-reupload-import.mjs. New npm deps go to L.
 
 #### ROS-E13-T007 — 100-user load and concurrency run with mock payment adapter
 
@@ -1138,7 +1146,7 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
 - **Completion date:** —
-- **Notes:** Audit says to add a load script; file name not specified. CEO decision 2026-11-07: M builds the new demo seed separately and does not touch lib/demo/seed-demo-kitchen.ts until D's change (ROS-E04-T002) has merged. New npm deps go to L.
+- **Notes:** Audit says to add a load script; file name not specified. CEO decision 2026-11-07: M builds the new demo seed separately and never edits lib/demo/seed-demo-kitchen.ts, lib/demo/**, the legacy seed route, or scripts/verify-demo-reupload-import.mjs. New npm deps go to L.
 
 
 ### ROS-E14 — N: UI shell
@@ -1313,7 +1321,7 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
 - **Completion date:** —
-- **Notes:** This task is cancellation and append lost-update only. Payment-recording retry and concurrency are ROS-E12-T014, a separate requirement. B lands those payment tests on its own files. L does not edit them.
+- **Notes:** Cancellation crash-retry stays on this task and ROS-E02-T009. Payment-recording retry and concurrency is ROS-E12-T015. B lands the test code; L owns the CI gate.
 
 #### ROS-E02-T009 — Cancel idempotency marker commits in the same transaction as the money write
 
@@ -1339,7 +1347,7 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Dependencies:** ROS-E02-T001, ROS-E02-T007
 - **Affected files:** `tests/billing-calculator.test.ts`
 - **Acceptance criteria:**
-  - [ ] Parity fixtures for packaging, service charge, inclusive mode, mixed rates and IGST in tests/billing-calculator.test.ts
+  - [ ] Parity fixtures cover mixed rates, inclusive tax, IGST, discounts, packaging and service charges, and cancelled quantities in tests/billing-calculator.test.ts
   - [ ] Fixtures are exportable for C's screen half (ROS-E03-T003)
 - **Status:** In Progress
 - **Test evidence:** —
@@ -1515,7 +1523,7 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Owner:** TRONX DEVOPS ENGINEER
 - **Objective:** Provide one logger every stream uses.
 - **Dependencies:** —
-- **Affected files:** `lib/observability/logger.ts` (proposed, pending CTO confirmation)
+- **Affected files:** — (not named in source docs)
 - **Acceptance criteria:**
   - [ ] Logs are JSON
   - [ ] Phone, email, password, cookie, connector secret, pairing code and payment account fields redacted
@@ -1524,7 +1532,7 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
 - **Completion date:** —
-- **Notes:** Path proposed in MASTER_PLAN §11. Pending CTO confirmation.
+- **Notes:** Audit does not name the logger's file path.
 
 #### ROS-E12-T011 — Request/correlation id at the edge
 
@@ -1532,7 +1540,7 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Owner:** TRONX DEVOPS ENGINEER
 - **Objective:** Accept or generate a request id at the request boundary.
 - **Dependencies:** —
-- **Affected files:** `lib/observability/request-id.ts` (proposed, pending CTO confirmation). Any `proxy.ts` change is a queued patch to A.
+- **Affected files:** — (not named in source docs)
 - **Acceptance criteria:**
   - [ ] Request id accepted or generated at the edge and propagated
   - [ ] Reuses correlationId helper in lib/db/mongo-tx.ts:40
@@ -1540,7 +1548,7 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
 - **Completion date:** —
-- **Notes:** Proposed helper is `lib/observability/request-id.ts`. Pending CTO confirmation. `proxy.ts` stays A's.
+- **Notes:** proxy.ts is A's file – edge change is a queued patch to A; file path not specified.
 
 #### ROS-E12-T012 — Backup/restore drill on a synthetic database copy
 
@@ -1548,7 +1556,7 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Owner:** TRONX DEVOPS ENGINEER
 - **Objective:** Execute and record one restore drill.
 - **Dependencies:** ROS-E08-T004
-- **Affected files:** `docs/ops/BACKUP_RESTORE_DRILL.md` (proposed, pending CTO confirmation)
+- **Affected files:** — (not named in source docs)
 - **Acceptance criteria:**
   - [ ] Drill run against a synthetic copy, never production; steps executed once and result recorded
   - [ ] Drill record declares RPO/RTO targets for order and payment collections as targets, not measurements
@@ -1563,7 +1571,7 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Owner:** TRONX DEVOPS ENGINEER
 - **Objective:** Provide the store A's rate-limit specs use.
 - **Dependencies:** —
-- **Affected files:** `lib/rate-limit/store.ts` (proposed, pending CTO confirmation). Not `lib/security/**`.
+- **Affected files:** — (not named in source docs)
 - **Acceptance criteria:**
   - [ ] Store available to login, public order, Wi-Fi, loyalty and pairing limiters
   - [ ] Limiter fails closed if store is down
@@ -1571,26 +1579,7 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
 - **Completion date:** —
-- **Notes:** Proposed path `lib/rate-limit/store.ts`, owner L, pending CTO confirmation. Not inside `lib/security/**` (D). `PRODUCTION_DEPLOYMENT_CHECKLIST.md` is also proposed as L's.
-
-#### ROS-E12-T014 — Payment-recording retry and concurrency gate
-
-- **Source:** CTO approval follow-up. Separate from cancellation crash-retry on ROS-E02-T009 and lost-update on ROS-E02-T008.
-- **Owner:** TRONX DEVOPS ENGINEER
-- **Objective:** CI requires payment-recording retry and concurrency tests. v2 had reused ROS-E12-T010 for the logger, so this gate is restored under a new id.
-- **Dependencies:** ROS-E12-T001
-- **Affected files:** `.github/workflows/`
-- **Acceptance criteria:**
-  - [ ] Cancellation crash-retry and concurrency tests stay on ROS-E02-T008 and ROS-E02-T009. This task does not replace them, and those tests do not satisfy this task
-  - [ ] A repeated payment request with the same idempotency key does not add a second ledger entry and does not increase `amountPaid` a second time
-  - [ ] A payment recovered after a crash, including a crash between the ledger write and the response, does not duplicate a ledger entry or `amountPaid`
-  - [ ] Concurrent payment posts for the same order and key leave exactly one ledger entry and one `amountPaid` increment
-  - [ ] CI fails if those payment tests are missing or failing
-  - [ ] The test code is a queued patch to B (`lib/services/order.service.ts`, `lib/repositories/order.repository.ts`, `tests/order-payment-recording.test.ts`). L does not edit those files
-- **Status:** In Progress
-- **Test evidence:** —
-- **Reviewer:** TRONX CTO
-- **Completion date:** —
+- **Notes:** Implementation path not named in audit.
 
 
 ### ROS-E15 — O: WhatsApp Billing + Dynamic UPI + Billing Policies + Tips
@@ -1606,9 +1595,10 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
   - [ ] Capability matrix contains only verified capabilities; unconfirmed shown as unknown
   - [ ] No exact-amount claim unless provider guarantees it
   - [ ] Approval recorded for the Founder-chosen provider; no credentials invented
+  - [ ] Founder approval (via CEO) – extra approval gate: payment provider choice
 - **Status:** Ready
 - **Test evidence:** —
-- **Reviewer:** Founder (via CEO)
+- **Reviewer:** TRONX CEO
 - **Completion date:** —
 - **Notes:** No provider is named in the brief.
 
@@ -1624,10 +1614,10 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
   - [ ] Go-live blocked until signed off
 - **Status:** Ready
 - **Test evidence:** —
-- **Reviewer:** Founder (via CEO)
+- **Reviewer:** TRONX CEO
 - **Completion date:** —
 
-#### ROS-E15-T003 — Payment & tip UX spec (UX_SPEC.md) – finalize, replace TBD-PD tags, resolve §15
+#### ROS-E15-T003 — Payment & tip UX spec v1.1 (UX_SPEC.md)
 
 - **Source:** UX_SPEC; FOUNDER_ORDER Order 1; FOUNDER_ORDER Order 2
 - **Owner:** TRONX UI UX DESIGNER
@@ -1638,7 +1628,7 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
   - [ ] Every TBD-PD tag replaced with the E15 task ID from the board mapping
   - [ ] §15 questions resolved or tracked on the board
   - [ ] Spec covers all 9 provider statuses and fallbacks; tips never preselected; captain/POS share one payment flow
-- **Status:** In Progress
+- **Status:** In Review
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
 - **Completion date:** —
@@ -1702,10 +1692,11 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
   - [ ] Late payment on superseded/expired request → Manual review, never Paid
   - [ ] Wrong amount/duplicate → MANUAL_REVIEW; bill Paid once
   - [ ] Ledger stays source of truth
-- **Status:** Ready
+- **Status:** In Review
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO + TRONX FINANCE MANAGER
 - **Completion date:** —
+- **Notes:** Deliverable: PAYMENT_WORKFLOWS.md §5. Draft in ros-pro-max/whatsapp-payments/ with 42 validation cases covering D8 and D9; still needs committing to docs/whatsapp-payments/ via the CEO's commit path.
 
 #### ROS-E15-T008 — Tip tax treatment, receipt presentation and customer tip wording
 
@@ -1718,10 +1709,11 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
   - [ ] Written professional guidance recorded
   - [ ] Tip % base (pre/post tax) and customer wording decided (Founder sign-off on wording)
   - [ ] No promise that tips go directly to an employee
-- **Status:** Ready
+- **Status:** In Progress
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO + TRONX FINANCE MANAGER
 - **Completion date:** —
+- **Notes:** D9 (Finance proposal, pending Founder confirmation): tip base = item subtotal after discount, before tax; excludes packaging and service charge (matches CEO default D6). Waiting on written CA guidance and Founder approval of the receipt label ('Tip (voluntary)' proposed by Finance vs 'Tip' in UX_SPEC).
 
 #### ROS-E15-T009 — QA test plan: Order 1 failure list, Order 2 '20 listed tests', UX_SPEC AC-1…AC-5, regression
 
@@ -1731,15 +1723,13 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Dependencies:** —
 - **Affected files:** — (not named in source docs)
 - **Acceptance criteria:**
-  - [ ] All Order 1 failure cases listed
-  - [ ] Test restaurants A/B/C as in brief
+  - [ ] Plan covers FOUNDER_ORDER_2026-11-07.md 'Appendix: Part H' – restaurants A/B/C configs, tests 1–20 and the regression run (POS, Captain, QR, KDS, payment)
+  - [ ] Plan covers FOUNDER_ORDER_2026-11-07.md 'Appendix: Order 1 section 11 tests' (14 demo tests, sandbox amounts Rs 1/20/149/520/1,250) and its 'Section 9 failure cases' (15 items)
   - [ ] Every UX_SPEC AC (AC-1.x…AC-5.x) has a test case
-  - [ ] '20 listed tests'/'Part H' added once their text is supplied
 - **Status:** Ready
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
 - **Completion date:** —
-- **Notes:** The condensed brief contains neither the 20 tests nor 'Part H' (open question).
 
 #### ROS-E15-T010 — Doc: WHATSAPP_BILLING_ARCHITECTURE.md
 
@@ -1753,7 +1743,7 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
   - [ ] Accepted by reviewer
 - **Status:** Ready
 - **Test evidence:** —
-- **Reviewer:** Founder (via CEO)
+- **Reviewer:** TRONX CEO
 - **Completion date:** —
 
 #### ROS-E15-T011 — Doc: DYNAMIC_UPI_QR_IMPLEMENTATION.md
@@ -1827,6 +1817,7 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Acceptance criteria:**
   - [ ] `docs/whatsapp-payments/WHATSAPP_PAYMENT_E2E_REPORT.md` exists
   - [ ] Contains only results from runs actually executed (sandbox, no real money, no real customers)
+  - [ ] Reports a result for every FOUNDER_ORDER_2026-11-07.md Order 1 §11 demo test and every §9 failure case
 - **Status:** Blocked
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
@@ -1843,10 +1834,11 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Acceptance criteria:**
   - [ ] `docs/whatsapp-payments/RESTAURANT_BILLING_POLICIES.md` exists
   - [ ] Accepted by reviewer
-- **Status:** Ready
+- **Status:** In Review
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO + TRONX FINANCE MANAGER
 - **Completion date:** —
+- **Notes:** Draft in ros-pro-max/whatsapp-payments/ with 42 validation cases covering D8 and D9; still needs committing to docs/whatsapp-payments/ via the CEO's commit path.
 
 #### ROS-E15-T017 — Doc: BILL_GENERATION_WORKFLOW.md
 
@@ -1858,10 +1850,11 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Acceptance criteria:**
   - [ ] `docs/whatsapp-payments/BILL_GENERATION_WORKFLOW.md` exists
   - [ ] Accepted by reviewer
-- **Status:** Ready
+- **Status:** In Review
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO + TRONX FINANCE MANAGER
 - **Completion date:** —
+- **Notes:** Draft in ros-pro-max/whatsapp-payments/ with 42 validation cases covering D8 and D9; still needs committing to docs/whatsapp-payments/ via the CEO's commit path.
 
 #### ROS-E15-T018 — Doc: CUSTOMER_TIP_CONFIGURATION.md
 
@@ -1873,10 +1866,11 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Acceptance criteria:**
   - [ ] `docs/whatsapp-payments/CUSTOMER_TIP_CONFIGURATION.md` exists
   - [ ] Accepted by reviewer
-- **Status:** Ready
+- **Status:** In Review
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO + TRONX FINANCE MANAGER
 - **Completion date:** —
+- **Notes:** Draft at ros-pro-max/whatsapp-payments/CUSTOMER_TIP_CONFIGURATION.md; must also be committed to docs/whatsapp-payments/ via the CEO's commit path.
 
 #### ROS-E15-T019 — Doc: TIP_ACCOUNTING_AND_RECONCILIATION.md
 
@@ -1888,10 +1882,11 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Acceptance criteria:**
   - [ ] `docs/whatsapp-payments/TIP_ACCOUNTING_AND_RECONCILIATION.md` exists
   - [ ] Accepted by reviewer
-- **Status:** Ready
+- **Status:** In Review
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO + TRONX FINANCE MANAGER
 - **Completion date:** —
+- **Notes:** Draft in ros-pro-max/whatsapp-payments/ with 42 validation cases covering D8 and D9; still needs committing to docs/whatsapp-payments/ via the CEO's commit path.
 
 #### ROS-E15-T020 — Doc: DYNAMIC_PAYMENT_AMOUNT_RULES.md
 
@@ -1918,6 +1913,7 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Acceptance criteria:**
   - [ ] `docs/whatsapp-payments/BILLING_POLICY_E2E_REPORT.md` exists
   - [ ] Contains only results from runs actually executed (sandbox, no real money, no real customers)
+  - [ ] Reports a result for FOUNDER_ORDER_2026-11-07.md Part H tests 1–20 on restaurants A/B/C and the regression run
 - **Status:** Backlog
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
@@ -1968,6 +1964,7 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
   - [ ] Amount from server bill, never client (test)
   - [ ] Reuse for another order rejected
   - [ ] Bill/tip change supersedes old request and issues new (e.g. 500 → 550)
+  - [ ] §9 payment expires / §11 expired QR: server sets expiry on every request; after expiry the request is EXPIRED and cannot be paid against or re-shown as payable
 - **Status:** Backlog
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
@@ -2001,6 +1998,8 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
   - [ ] Invalid signature rejected
   - [ ] Checks merchant, payment ref, order ref, amount, currency, status
   - [ ] Duplicate/delayed webhooks idempotent; wrong amount → MANUAL_REVIEW
+  - [ ] §9 payment expires: a webhook arriving for an EXPIRED or superseded request never marks it SUCCESS; it goes to MANUAL_REVIEW
+  - [ ] §11 payment failure: a verified failure event sets FAILED and the bill stays unpaid
 - **Status:** Blocked
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
@@ -2018,11 +2017,13 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
   - [ ] PENDING, SUCCESS, FAILED, EXPIRED, CANCELLED, PARTIALLY_PAID, REFUND_PENDING, REFUNDED, MANUAL_REVIEW
   - [ ] Late payment on superseded/expired request → MANUAL_REVIEW, never SUCCESS
   - [ ] Uncertain → Pending/Manual review
+  - [ ] §9 customer pays twice: a second distinct verified payment for an already-paid bill is recorded once in the ledger, bill stays Paid once, payment flagged MANUAL_REVIEW for refund
+  - [ ] §9 webhook duplicated: same provider event id never creates a second ledger entry
 - **Status:** Backlog
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
 - **Completion date:** —
-- **Notes:** Build gated on Wave 1 merging into pro-max/release. order.service.ts changes are queued to B.
+- **Notes:** Build gated on Wave 1 merging into pro-max/release. order.service.ts changes are queued to B. PD-1 (proposal, CTO to confirm): bill cannot be closed while a payment is in Manual review.
 
 #### ROS-E15-T028 — Partial payments with remainder request; overpay guard
 
@@ -2035,6 +2036,7 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
   - [ ] 200 recorded, PARTIALLY_PAID, new 300 request
   - [ ] Amount above remaining rejected server-side, no request created
   - [ ] Paid only after remainder verified; no duplicates
+  - [ ] §9 customer pays twice / overpayment: any verified amount above the remaining balance is not applied to the bill; the excess is flagged for refund (REFUND_PENDING via ROS-E15-T029) and reconciliation
 - **Status:** Backlog
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
@@ -2066,15 +2068,14 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Affected files:** — (not named in source docs)
 - **Acceptance criteria:**
   - [ ] Effective policy and its reason exposed to managers
-  - [ ] Precedence is order override, then table or session, then channel or order type, then outlet, then organization, then default
-  - [ ] Kitchen release is a separate policy and is not forced
+  - [ ] Kitchen release separate, not forced
   - [ ] Open orders keep their policy when policy changes
   - [ ] Order/bill/request/collection/verification/receipt kept separate
 - **Status:** Backlog
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO + TRONX FINANCE MANAGER
 - **Completion date:** —
-- **Notes:** Build gated on Wave 1 merging into pro-max/release.
+- **Notes:** Build gated on Wave 1 merging into pro-max/release. PD-1 (proposal, CTO to confirm): bill cannot be closed while a payment is in Manual review.
 
 #### ROS-E15-T031 — Bill versioning: finalized-only send, new version on item add, no duplicate per version
 
@@ -2104,6 +2105,7 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
   - [ ] Tips default OFF for every new outlet
   - [ ] Tip separate from food revenue
   - [ ] No tax treatment assumed
+  - [ ] Part H #19: reports expose tip totals as a separate line/column from food revenue, per outlet and date range (report change is a queued patch to I5 reports paths)
 - **Status:** Backlog
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO + TRONX FINANCE MANAGER
@@ -2121,6 +2123,8 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
   - [ ] Itemized bill fields per brief
   - [ ] Send blocked without recorded consent
   - [ ] Receipt only after verified payment; no real customers in demo
+  - [ ] §9 invalid customer number: number validated before send; invalid number → no send, logged, staff shown the error, bill remains in POS
+  - [ ] §9 template rejected: a rejected/unapproved template blocks send, is logged with the provider reason, and the bill remains in POS/captain
 - **Status:** Blocked
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
@@ -2137,6 +2141,7 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Acceptance criteria:**
   - [ ] Burst returns 429
   - [ ] Phones and payment account fields redacted in logs
+  - [ ] Part H #20: every payment action (create/regenerate request, send/resend, record, refund, settle, cash close, resolve manual review) enforces role permission server-side; a captain calling the API directly gets 403 and nothing is written
 - **Status:** Backlog
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
@@ -2170,6 +2175,7 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
   - [ ] 'Checking payment…' until verified (AC-1b.5); Expired state at 0 (AC-1b.6)
   - [ ] Mobile/desktop primary action per AC-1b.7
   - [ ] Receipt only after verified payment
+  - [ ] Part H #17 / §11 receipt generation: receipt shows restaurant, outlet, order number, table, date/time, items, quantities, line totals, discounts, coupon, packaging, tax breakdown, tip line (only if a tip was paid), amount paid, payment reference and bill reference, all equal to the server bill and ledger
 - **Status:** Backlog
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
@@ -2187,11 +2193,15 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
   - [ ] Tips OFF → no tip element in DOM and no receipt tip line (test asserts absence)
   - [ ] No option preselected; Pay/QR unavailable until choice confirmed
   - [ ] Confirmed tip creates new request (500+50=550), old not payable
+  - [ ] Part H #7: 'No tip' selectable and confirmed; request amount equals bill amount
+  - [ ] Part H #8: fixed tip adds exactly the fixed amount to the confirmed request
+  - [ ] Part H #9: percentage tip (5/10/15% on restaurant B) computed on the D9 tip base and shown before confirmation
+  - [ ] Part H #10: custom tip accepted only when custom is enabled; invalid/negative values rejected
 - **Status:** Backlog
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO + TRONX FINANCE MANAGER
 - **Completion date:** —
-- **Notes:** Build gated on Wave 1 merging into pro-max/release.
+- **Notes:** Build gated on Wave 1 merging into pro-max/release. PD-2: tip prompt hidden when the tip base is ₹0 (V36); Founder may override.
 
 #### ROS-E15-T038 — Staff WhatsApp send/resend controls + delivery status (Screen 1)
 
@@ -2319,7 +2329,9 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Affected files:** — (not named in source docs)
 - **Acceptance criteria:**
   - [ ] Loopback DB only; no real money; no real customer messages
-  - [ ] All §10 states reachable in sandbox
+  - [ ] Restaurants A/B/C configured exactly as FOUNDER_ORDER_2026-11-07.md 'Appendix: Part H'
+  - [ ] Demo 'TRONX WHATSAPP PAYMENT DEMO' supports the §11 sandbox amounts Rs 1, 20, 149, 520, 1,250
+  - [ ] All UX_SPEC §10 states reachable in sandbox
 - **Status:** Blocked
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
@@ -2334,8 +2346,9 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Dependencies:** ROS-E15-T009, ROS-E15-T045, ROS-E15-T006, EXT: merchant sandbox keys, EXT: WhatsApp test number
 - **Affected files:** — (not named in source docs)
 - **Acceptance criteria:**
-  - [ ] Evidence from actual runs for every scenario
-  - [ ] Every policy demonstrated in the actual app
+  - [ ] Evidence from actual runs for Part H tests 1–20 on A/B/C plus regression (FOUNDER_ORDER_2026-11-07.md 'Appendix: Part H')
+  - [ ] Evidence for every Order 1 §11 demo test and every §9 failure case (FOUNDER_ORDER_2026-11-07.md)
+  - [ ] Every policy demonstrated in the actual app; nothing fabricated
 - **Status:** Blocked
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
@@ -2351,8 +2364,64 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Affected files:** — (not named in source docs)
 - **Acceptance criteria:**
   - [ ] Merchant onboarding and production credentials verified
-  - [ ] Founder approval recorded before live, before merges/deploys to main, and before any payments
+  - [ ] Founder approval (via CEO) – extra approval gate: going live
 - **Status:** Backlog
 - **Test evidence:** —
-- **Reviewer:** Founder (via CEO)
+- **Reviewer:** TRONX CEO
+- **Completion date:** —
+- **Notes:** First real-money test and main merge/deploy gates moved to ROS-E15-T048 and ROS-E12-T014 (v2.2).
+
+#### ROS-E15-T048 — First real-money test (gate)
+
+- **Source:** FOUNDER_ORDER standing constraints
+- **Owner:** TRONX QA ENGINEER
+- **Objective:** Run the first payment with real money only after sandbox scenarios pass and approvals are in place.
+- **Dependencies:** ROS-E15-T001, ROS-E15-T045, ROS-E15-T046
+- **Affected files:** — (not named in source docs)
+- **Acceptance criteria:**
+  - [ ] Runs only after ROS-E15-T045 and T046 have evidence
+  - [ ] Amount, outlet and merchant account recorded; result verified via ledger and provider status
+  - [ ] Founder approval (via CEO) – extra approval gate: first real-money test
+- **Status:** Backlog
+- **Test evidence:** —
+- **Reviewer:** TRONX CEO
+- **Completion date:** —
+
+
+### ROS-E12 — L: DevOps
+
+#### ROS-E12-T014 — Release merge/deploy of pro-max/release to main (gate)
+
+- **Source:** FOUNDER_ORDER standing constraints; ARCHITECTURE production-deploy acceptance
+- **Owner:** TRONX DEVOPS ENGINEER
+- **Objective:** Merge and deploy the integration branch to main.
+- **Dependencies:** ROS-E00-T001, ROS-E01-T003, ROS-E02-T009, ROS-E12-T003
+- **Affected files:** — (not named in source docs)
+- **Acceptance criteria:**
+  - [ ] Wave 0, H (for written collections), A and B merged into pro-max/release; L required gates green
+  - [ ] Merge/deploy record lists commit SHA and checks
+  - [ ] Founder approval (via CEO) – extra approval gate: any merge or deploy to main
+  - [ ] Required order before that approval: CTO review, QA sign-off, then green CI on pro-max/release
+- **Status:** Backlog
+- **Test evidence:** —
+- **Reviewer:** TRONX CEO
+- **Completion date:** —
+
+#### ROS-E12-T015 — Payment-recording retry and concurrency gate
+
+- **Source:** CTO approval follow-up. Separate from cancellation crash-retry on ROS-E02-T009 and lost-update on ROS-E02-T008. v2.2 reused ROS-E12-T014 for the release gate, so this gate keeps its own id.
+- **Owner:** TRONX DEVOPS ENGINEER
+- **Objective:** CI requires payment-recording retry and concurrency tests.
+- **Dependencies:** ROS-E12-T001
+- **Affected files:** `.github/workflows/`
+- **Acceptance criteria:**
+  - [ ] Cancellation crash-retry and concurrency tests stay on ROS-E02-T008 and ROS-E02-T009. This task does not replace them, and those tests do not satisfy this task
+  - [ ] A repeated payment request with the same idempotency key does not add a second ledger entry and does not increase `amountPaid` a second time
+  - [ ] A payment recovered after a crash, including a crash between the ledger write and the response, does not duplicate a ledger entry or `amountPaid`
+  - [ ] Concurrent payment posts for the same order and key leave exactly one ledger entry and one `amountPaid` increment
+  - [ ] CI fails if those payment tests are missing or failing
+  - [ ] The test code is a queued patch to B (`lib/services/order.service.ts`, `lib/repositories/order.repository.ts`, `tests/order-payment-recording.test.ts`). L does not edit those files
+- **Status:** In Progress
+- **Test evidence:** —
+- **Reviewer:** TRONX CTO
 - **Completion date:** —

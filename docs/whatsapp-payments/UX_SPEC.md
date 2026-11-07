@@ -1,5 +1,3 @@
-**Draft.**
-
 # UX SPEC — WhatsApp Billing, Dynamic UPI QR, Billing Policies & Optional Tips
 
 **Owner:** TRONX UI UX DESIGNER · **Status:** v1.1 (2026-11-07, IST) · Task: ROS-E15-T003 · **Source:** `FOUNDER_ORDER_2026-11-07.md` (Orders 1 & 2), `../TRONX_PRO_MAX_MASTER_PLAN.md`, `../TRONX_PRO_MAX_TASK_BOARD.md`, `/workspace/tronx-hq/design/research/restaurant-os-ux-patterns.md`.

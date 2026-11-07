@@ -1,6 +1,6 @@
 # TRONX PRO MAX Master Plan – Restaurant OS (ROS): Level 1 → Pro Max
 
-**Status:** Draft v0.2 (v0.1 backed up as `.v1.bak`; adds CEO decisions, CTO review incl. `docs/pro-max/PATH_OWNERS.md`, Epic E15). Originally drafted (TRONX Project Director, 2026-11-07). Source of every fact: audit PR https://github.com/Videsh999/tronxvideomenu/pull/1, branch `pro-max/audit`, files `docs/pro-max/TRONX_PRO_MAX_MODULE_INVENTORY.md`, `docs/pro-max/TRONX_PRO_MAX_FINDINGS.md`, `docs/pro-max/TRONX_PRO_MAX_ARCHITECTURE.md`. Audit baseline: `main` @ `fcc89586190e2dd40673c7cb04f6baa358dd7969`. Task detail: `TRONX_PRO_MAX_TASK_BOARD.md`.
+**Status:** Draft v0.2.2 (v0.2.1 backed up as `.v2.1.bak`). Earlier: v0.2.1 (v0.2 as `.v2.bak`). Earlier: v0.2 (v0.1 backed up as `.v1.bak`; adds CEO decisions, CTO review incl. `docs/pro-max/PATH_OWNERS.md`, Epic E15). Originally drafted (TRONX Project Director, 2026-11-07). Source of every fact: audit PR https://github.com/Videsh999/tronxvideomenu/pull/1, branch `pro-max/audit`, files `docs/pro-max/TRONX_PRO_MAX_MODULE_INVENTORY.md`, `docs/pro-max/TRONX_PRO_MAX_FINDINGS.md`, `docs/pro-max/TRONX_PRO_MAX_ARCHITECTURE.md`. Audit baseline: `main` @ `fcc89586190e2dd40673c7cb04f6baa358dd7969`. Task detail: `TRONX_PRO_MAX_TASK_BOARD.md`.
 
 ## 1. Goal
 
@@ -28,7 +28,7 @@ Take the existing Restaurant OS to production-grade ("Pro Max") by **evolving th
 |---|---|---|---|
 | ROS-E00 | Wave 0 | Split `lib/validations/index.ts` into domain modules (no feature change) | Backend, CTO review |
 | ROS-E01 | A – Authz matrix | Per-handler contracts. No blanket customer or connector class. Login, register, and reset must not require an existing customer session. Pair is a pairing code. Heartbeat, jobs, and ack use the connector secret (F-01, F-07) | Backend |
-| ROS-E02 | B – Order aggregate | Frozen line tax and settings snapshots; compare-and-swap; atomic cancel marker; cancellation crash-retry stays separate from payment-recording retry; QR variants; QR idempotency returns the existing order (F-02, F-04, F-11, F-12, F-15) | Backend |
+| ROS-E02 | B – Order aggregate | Frozen line tax and settings snapshots; compare-and-swap; atomic cancel marker; cancellation crash-retry stays separate from payment-recording retry (ROS-E12-T015); QR variants; QR idempotency returns the existing order (F-02, F-04, F-11, F-12, F-15) | Backend |
 | ROS-E03 | C – Bill UI | POS and captain previews consume B's billing contract and do not edit `lib/billing/**` or `lib/order-pricing.ts`. The billing parity test file is B's (F-03) | Frontend, after B |
 | ROS-E04 | D – Identities | Fix credential test; demo passwords out of git; memberships; audited/no password reveal (F-06, F-09, F-13, F-16) | Backend, UI by Frontend |
 | ROS-E05 | E – Floor UI | Table statuses tsc-clean; captain/KDS intact (F-05, F-17) | Frontend, QA writes cases |
@@ -43,7 +43,7 @@ Take the existing Restaurant OS to production-grade ("Pro Max") by **evolving th
 | ROS-E15 | O – WhatsApp Billing + Dynamic UPI + Billing Policies + Tips | Provider abstraction, per-outlet merchant mapping, dynamic QR, verified webhooks, ledger states, partial/refunds, policy engine, tips, WhatsApp Cloud API, admin/captain/POS/customer payment UI, 12 docs in `docs/whatsapp-payments/` | CTO, Finance, Backend, Frontend, UI/UX, QA (Founder order 2026-11-07, UX_SPEC.md) |
 | ROS-E14 | N – UI shell | Shell/sidebar owner; POS & kitchen full-width | UI/UX, implemented by Frontend |
 
-File ownership: `docs/pro-max/PATH_OWNERS.md` governs from Wave 2 on; changes outside a stream's paths are queued patches landed by the owner, one at a time. `lib/services/order.service.ts`, `lib/billing/**`, and `lib/order-pricing.ts` → B only. `lib/db/models.ts` and `types/index.ts` → H only. `proxy.ts` and `lib/api-authz.ts` → A only. `next.config.ts` and the root `package.json` → L only. Sidebar → N only. `lib/demo/seed-demo-kitchen.ts` and the legacy seed route → D. M never edits those paths. `app/admin/menu/**`, `app/admin/media/**`, and `app/admin/availability/**` → F. `app/admin/profile/**`, `app/admin/[slug]/profile/**`, and `RestaurantProfileForm.tsx` are FROZEN until an owner is assigned. Restaurant APIs stay with D.
+File ownership: `docs/pro-max/PATH_OWNERS.md` governs from Wave 2 on; changes outside a stream's paths are queued patches landed by the owner, one at a time. `lib/services/order.service.ts`, `lib/billing/**`, and `lib/order-pricing.ts` → B only. `lib/db/models.ts` and `types/index.ts` → H only. `proxy.ts` and `lib/api-authz.ts` → A only. `next.config.ts` and the root `package.json` → L only. Sidebar → N only. `lib/demo/seed-demo-kitchen.ts` and the legacy seed route → D. M never edits those paths. `app/admin/menu/**`, `app/admin/media/**`, and `app/admin/availability/**` → F. `app/admin/profile/**`, `app/admin/[slug]/profile/**`, and `RestaurantProfileForm.tsx` are FROZEN until an owner is assigned. Restaurant APIs stay with D. Stream O is the CTO section in PATH_OWNERS.md: Backend owns `lib/payments/**` and `lib/messaging/whatsapp/**`; Frontend owns `components/payments/**`, `components/messaging/whatsapp/**`, and `app/admin/[slug]/settings/payments-whatsapp/**`. B still owns the billing contract and the policy resolver. There is no blanket `app/api/webhooks/**` owner.
 
 Handler contracts for Stream A:
 
@@ -75,6 +75,14 @@ All implementation PRs target the integration branch `pro-max/release`. That bra
   5. D + H before M full-role QA
   6. L final gates (required CI, typecheck on, `ignoreBuildErrors` removed) last
 - **Production deploy needs:** Wave 0, H (for collections written), A and B merged. Founder approval is required before merges/deploys to `main`, going live, or any payments.
+
+## 4a. Founder gates
+
+Founder approval (via CEO) is an extra gate, on top of normal review, for:
+- the payment provider choice (ROS-E15-T001)
+- the first real-money test (ROS-E15-T048)
+- going live (ROS-E15-T047)
+- any merge or deploy of `pro-max/release` to `main` (ROS-E12-T014)
 
 ## 5. Dependencies between workstreams
 
@@ -126,7 +134,7 @@ All implementation PRs target the integration branch `pro-max/release`. That bra
 - In Review = CTO review. QA = handed to QA with acceptance criteria, preview/staging link and engineer name.
 - **No task is done until QA marks it Verified.** Test evidence must be attached on the board.
 - **Release branch.** Every implementation PR targets `pro-max/release`, which exists at `fcc89586190e2dd40673c7cb04f6baa358dd7969`. This audit PR is docs-only and is not merged to `main` until the Founder approves.
-- **Merge and deploy to `main`.** Required order: CTO review, then QA sign-off, then green CI on `pro-max/release`, then explicit Founder approval. A merge or deploy to `main` without that approval does not happen.
+- **Merge and deploy to `main`.** Required order: CTO review, then QA sign-off, then green CI on `pro-max/release`, then explicit Founder approval. The gate task is ROS-E12-T014. A merge or deploy to `main` without that approval does not happen.
 
 ## 9. Decisions and open items
 
@@ -138,7 +146,7 @@ See "Open questions" in `TRONX_PRO_MAX_TASK_BOARD.md`. All dates, budget and cli
 
 ## 11. Unmapped items (pending CTO confirmation)
 
-These proposals are not approved. They fill gaps the v2 board left open. Each line is **pending CTO confirmation**.
+These proposals are not approved. They fill gaps the board left open. Each line is **pending CTO confirmation**.
 
 | Item | Proposed owner | Proposed path | Notes |
 |---|---|---|---|
@@ -149,6 +157,16 @@ These proposals are not approved. They fill gaps the v2 board left open. Each li
 | `PRODUCTION_DEPLOYMENT_CHECKLIST.md` | L | repo root, existing file | Deploy checklist. No secret values. |
 | Legacy `/admin` pages | Already assigned, not a new proposal | `app/admin/menu/**`, `app/admin/media/**`, `app/admin/availability/**` → F. Profile paths FROZEN | APIs stay with their domain owners. See PATH_OWNERS.md. |
 
-ADR authors, also **pending CTO confirmation**: TRONX BACKEND ENGINEER for `docs/adr/0001-tenancy.md` through `docs/adr/0005-polling.md`. ADR 0005 already covers KOT failure alerts and retries (outlet-visible alert, existing attempt counter and dedupe key, order write still commits). The v2 board did not request a separate KOT ADR numbered 0006, so nothing was renumbered to 0012. ADRs 0006–0011 are now in `docs/adr/` as Proposed. Finance and UX drafts are in `docs/whatsapp-payments/`.
+ADR authors, also **pending CTO confirmation**: TRONX BACKEND ENGINEER for `docs/adr/0001-tenancy.md` through `docs/adr/0005-polling.md`. ADR 0005 already covers KOT failure alerts and retries. ADRs 0006–0011 are in `docs/adr/` as Proposed. Nothing was renumbered to 0012.
 
-Billing policy precedence, for the resolver B owns: **order override, then table or session, then channel or order type, then outlet, then organization, then default.** Kitchen release is a separate policy and is not forced by the payment policy.
+Billing policy precedence, for the resolver B owns: **order override, then table or session, then channel or order type, then outlet, then organization, then default.** Kitchen release is a separate policy and is not forced by the payment policy. The prepay kitchen gate is the bill total excluding tip.
+
+## 12. CTO fixes re-applied on this v2.2 copy
+
+v2.2 is the board and plan. These approved rules were put back where v2.2 dropped them:
+
+- Per-handler auth contracts replace the blanket customer and connector classes.
+- M never edits D's legacy seed. PATH_OWNERS Stream O stays the CTO patch.
+- Profile paths stay FROZEN. Menu, media, and availability stay with F.
+- Payment-recording retry and concurrency is ROS-E12-T015. v2.2 reused ROS-E12-T014 for the release gate, and that gate is kept.
+- Razorpay stays the conditional primary. Cashfree stays a capability proof with no exception to credential isolation.

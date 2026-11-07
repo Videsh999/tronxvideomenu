@@ -1,5 +1,3 @@
-**Draft.**
-
 # CUSTOMER_TIP_CONFIGURATION.md
 
 **Task:** ROS-E15-T018 · **Owner:** TRONX UI UX DESIGNER · **Reviewers:** TRONX CTO + TRONX FINANCE MANAGER
