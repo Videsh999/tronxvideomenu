@@ -450,7 +450,7 @@ export default function PosTerminal({
   }
 
   return (
-    <div className="flex h-[calc(100dvh-4rem)] min-h-[32rem] w-full min-w-0 max-w-full flex-col gap-3 overflow-x-hidden overflow-y-auto bg-[linear-gradient(160deg,#f7f4ef_0%,#ebe4d8_45%,#f3eee6_100%)] p-2 sm:gap-4 sm:p-3 md:p-4 lg:overflow-hidden">
+    <div className="flex min-h-[32rem] w-full min-w-0 max-w-full flex-col gap-3 overflow-x-hidden overflow-y-auto bg-[linear-gradient(160deg,#f7f4ef_0%,#ebe4d8_45%,#f3eee6_100%)] p-2 sm:gap-4 sm:p-3 md:p-4 lg:h-[calc(100dvh-6rem)] lg:overflow-hidden">
       <header className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#d9cfc0] bg-[#fffaf3]/90 px-3 py-3 sm:px-4">
         <div className="flex items-center gap-3">
           <MonitorSmartphone className="h-6 w-6 text-[#5c4634]" />
@@ -530,7 +530,7 @@ export default function PosTerminal({
         </section>
       )}
 
-      <div className="grid min-h-0 min-w-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(19rem,26rem)] lg:gap-4">
+      <div className="grid min-h-0 min-w-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(22rem,30rem)] lg:gap-4">
         <section className="flex min-h-[22rem] min-w-0 flex-col gap-3 overflow-hidden rounded-2xl border border-[#d9cfc0] bg-white/85 p-3 lg:min-h-0">
           <div className="flex min-w-0 shrink-0 flex-wrap gap-2">
             {channel === "POS_DINE_IN" ? (
@@ -549,7 +549,7 @@ export default function PosTerminal({
                 <option value="">Select table (required)</option>
                 {tables.map((table) => (
                   <option key={table.id} value={table.tableNumber}>
-                    Table {table.tableNumber}
+                    {table.locationType === "ROOM" ? "Room" : "Table"} {table.tableNumber}
                     {table.label ? ` · ${table.label}` : ""}
                   </option>
                 ))}
@@ -691,7 +691,7 @@ export default function PosTerminal({
                       Remove
                     </button>
                   </div>
-                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                  <div className="mt-2 grid grid-cols-[auto_minmax(5.5rem,1fr)_auto] items-center gap-2">
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
@@ -727,9 +727,9 @@ export default function PosTerminal({
                           ),
                         );
                       }}
-                      className="w-24 rounded-lg border border-white/20 bg-transparent px-2 py-1 text-sm"
+                      className="min-h-9 w-full min-w-0 rounded-lg border border-white/20 bg-transparent px-2 py-1 text-sm"
                     />
-                    <span className="font-semibold">
+                    <span className="min-w-[5rem] text-right font-semibold tabular-nums">
                       {money(
                         lineItemTotal({
                           unitPrice: line.unitPrice,
@@ -759,8 +759,8 @@ export default function PosTerminal({
             )}
           </ul>
 
-          <div className="shrink-0 border-t border-white/10 bg-[#241c16] px-3 py-2.5 sm:px-4">
-            <div className="flex items-center gap-2">
+          <div className="shrink-0 border-t border-white/10 bg-[#241c16] px-3 py-3 sm:px-4">
+            <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2">
               <span className="shrink-0 rounded-lg border border-white/15 px-2 py-1.5 text-[11px] font-semibold text-[#d9cfc0]">
                 ₹ off
               </span>
@@ -775,7 +775,7 @@ export default function PosTerminal({
               <button
                 type="button"
                 onClick={() => setExtrasOpen((open) => !open)}
-                className="shrink-0 rounded-lg border border-white/15 px-2.5 py-1.5 text-[11px] font-semibold text-[#d9cfc0]"
+                className="min-h-9 shrink-0 rounded-lg border border-white/15 px-2.5 py-1.5 text-[11px] font-semibold text-[#d9cfc0]"
               >
                 {extrasOpen ? "Hide" : "Coupon · note · phone"}
               </button>
@@ -805,23 +805,23 @@ export default function PosTerminal({
             ) : null}
 
             <div className="mt-2 space-y-0.5 text-sm">
-              <div className="flex justify-between text-[#d9cfc0]">
+              <div className="grid grid-cols-[1fr_auto] gap-3 text-[#d9cfc0]">
                 <span>Subtotal</span>
                 <span>{money(totals.itemsSubtotal, currency)}</span>
               </div>
               {billDiscount > 0 ? (
-                <div className="flex justify-between text-emerald-200">
+                <div className="grid grid-cols-[1fr_auto] gap-3 text-emerald-200">
                   <span>Discount</span>
                   <span>−{money(billDiscount, currency)}</span>
                 </div>
               ) : null}
-              <div className="flex justify-between text-[#d9cfc0]">
+              <div className="grid grid-cols-[1fr_auto] gap-3 text-[#d9cfc0]">
                 <span>
                   {taxLabel} ({taxRatePercent}%)
                 </span>
                 <span>{money(totals.taxAmount, currency)}</span>
               </div>
-              <div className="flex justify-between text-lg font-bold">
+              <div className="grid grid-cols-[1fr_auto] gap-3 text-lg font-bold">
                 <span>Total</span>
                 <span>{money(totals.total, currency)}</span>
               </div>
@@ -849,13 +849,13 @@ export default function PosTerminal({
               >
                 Bill &amp; pay ({payMethod})
               </button>
-              <div className="flex items-center gap-1.5">
+              <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-[repeat(3,minmax(0,1fr))_minmax(5.5rem,1.1fr)_auto]">
                 {(["CASH", "UPI", "CARD"] as PaymentMethod[]).map((method) => (
                   <button
                     key={method}
                     type="button"
                     onClick={() => setPayMethod(method)}
-                    className={`min-h-8 flex-1 rounded-lg text-[11px] font-semibold ${
+                    className={`min-h-10 min-w-0 rounded-lg px-2 text-[11px] font-semibold ${
                       payMethod === method ? "bg-[#f59e0b] text-[#1a120c]" : "bg-white/10"
                     }`}
                   >
@@ -871,13 +871,13 @@ export default function PosTerminal({
                   onChange={(event) =>
                     setPayAmount(event.target.value === "" ? "" : Number(event.target.value))
                   }
-                  className="min-h-8 w-20 rounded-lg border border-white/20 bg-transparent px-1.5 text-[11px]"
+                  className="col-span-2 min-h-10 w-full min-w-0 rounded-lg border border-white/20 bg-transparent px-2 text-xs tabular-nums sm:col-span-1"
                 />
                 <button
                   type="button"
                   disabled={pending || !lastOrderId}
                   onClick={recordPay}
-                  className="min-h-8 shrink-0 rounded-lg bg-white/15 px-2.5 text-[11px] disabled:opacity-40"
+                  className="min-h-10 rounded-lg bg-white/15 px-3 text-[11px] font-semibold disabled:opacity-40"
                 >
                   Record
                 </button>
