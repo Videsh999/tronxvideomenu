@@ -80,7 +80,8 @@ export default function MenuImportWizard() {
   }, []);
 
   useEffect(() => {
-    void loadHistory();
+    const timer = window.setTimeout(() => void loadHistory(), 0);
+    return () => window.clearTimeout(timer);
   }, [loadHistory]);
 
   const validationSummary = useMemo(() => {
@@ -296,6 +297,7 @@ export default function MenuImportWizard() {
               >
                 <Download className="h-4 w-4" /> Export current menu
               </a>
+              {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- file download, not an app page */}
               <a
                 href="/api/admin/menu-import/template"
                 className="inline-flex h-10 items-center gap-2 rounded-xl border border-neutral-300 px-4 text-sm font-semibold text-neutral-800 hover:bg-neutral-50"
@@ -323,10 +325,10 @@ export default function MenuImportWizard() {
           >
             <Upload className="h-8 w-8 text-neutral-500" />
             <span className="mt-3 text-sm font-semibold text-neutral-900">Drop file here or browse</span>
-            <span className="mt-1 text-xs text-neutral-500">.xlsx, .xls, or .csv · max 8 MB</span>
+            <span className="mt-1 text-xs text-neutral-500">.xlsx or .csv · max 8 MB</span>
             <input
               type="file"
-              accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
+              accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
               className="hidden"
               disabled={busy}
               onChange={(event) => {

@@ -447,6 +447,7 @@ export default function CaptainManagement({
                 )}
               </div>
               <CaptainPermissionsEditor
+                key={captain.id}
                 captain={captain}
                 busy={pendingId === captain.id}
                 onSave={(permissions) => void savePermissions(captain, permissions)}
@@ -610,10 +611,6 @@ function CaptainPermissionsEditor({
 }) {
   const resolved = resolveCaptainPermissions(captain);
   const [draft, setDraft] = useState<CaptainPermissions>(resolved);
-
-  useEffect(() => {
-    setDraft(resolveCaptainPermissions(captain));
-  }, [captain]);
 
   const flags: { key: keyof CaptainPermissions; label: string }[] = [
     { key: "viewBill", label: "View bill" },

@@ -18,6 +18,10 @@ import { serviceRequestService } from "@/lib/services/service-request.service";
 import { enrichCaptainTables } from "@/lib/captain-floor";
 import { isPendingCaptainApproval } from "@/lib/order-authorization";
 
+function olderThan(iso: string, milliseconds: number) {
+  return Date.now() - new Date(iso).getTime() > milliseconds;
+}
+
 export const dynamic = "force-dynamic";
 
 export default async function CaptainDashboardPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -47,7 +51,7 @@ export default async function CaptainDashboardPage({ params }: { params: Promise
   const ready = myOrders.filter((order) => order.status === "READY").length;
   const delayed = myOrders.filter((order) => {
     if (["READY", "SERVED", "COMPLETED"].includes(order.status)) return false;
-    return Date.now() - new Date(order.createdAt).getTime() > 25 * 60 * 1000;
+    return olderThan(order.createdAt, 25 * 60 * 1000);
   }).length;
   const billRequests = myTables.filter((row) =>
     ["BILL_REQUESTED", "PAYMENT_PENDING"].includes(row.table.status),

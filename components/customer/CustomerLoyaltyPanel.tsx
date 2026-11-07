@@ -47,7 +47,8 @@ export default function CustomerLoyaltyPanel({ restaurantSlug, restaurantName }:
   };
 
   useEffect(() => {
-    void refresh();
+    const timer = window.setTimeout(() => void refresh(), 0);
+    return () => window.clearTimeout(timer);
   }, [restaurantSlug]);
 
   const resetForm = () => {

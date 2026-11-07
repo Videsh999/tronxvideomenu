@@ -28,12 +28,26 @@ export default function RecipeEditor({ restaurantName, dishes }: Props) {
       ]);
       const [ingJson, recipeJson] = await Promise.all([ingRes.json(), recipeRes.json()]);
       if (ingJson.success) setIngredients(ingJson.data);
-      if (recipeJson.success) setRecipes(recipeJson.data);
+      if (recipeJson.success) {
+        const loaded = recipeJson.data as Recipe[];
+        setRecipes(loaded);
+        const existing = loaded.find((recipe) => recipe.dishId === (dishes[0]?.id ?? ""));
+        if (existing) {
+          setName(existing.name);
+          setYieldPortions(existing.yieldPortions);
+          setLines(existing.lines.map((line) => ({
+            ingredientId: line.ingredientId,
+            quantity: line.quantity,
+            unit: line.unit,
+          })));
+        }
+      }
     })();
   }, []);
 
-  useEffect(() => {
-    const existing = recipes.find((recipe) => recipe.dishId === dishId);
+  function applyDish(nextDishId: string, recipeList: Recipe[]) {
+    const existing = recipeList.find((recipe) => recipe.dishId === nextDishId);
+    setDishId(nextDishId);
     if (existing) {
       setName(existing.name);
       setYieldPortions(existing.yieldPortions);
@@ -44,12 +58,12 @@ export default function RecipeEditor({ restaurantName, dishes }: Props) {
           unit: line.unit,
         })),
       );
-    } else {
-      setName(`${dishes.find((dish) => dish.id === dishId)?.name ?? "Dish"} recipe`);
-      setLines([]);
-      setYieldPortions(1);
+      return;
     }
-  }, [dishId, recipes, dishes]);
+    setName(`${dishes.find((dish) => dish.id === nextDishId)?.name ?? "Dish"} recipe`);
+    setLines([]);
+    setYieldPortions(1);
+  }
 
   const byId = useMemo(
     () => new Map(ingredients.map((ingredient) => [ingredient.id, ingredient])),
@@ -123,7 +137,7 @@ export default function RecipeEditor({ restaurantName, dishes }: Props) {
             Dish
             <select
               value={dishId}
-              onChange={(e) => setDishId(e.target.value)}
+              onChange={(e) => applyDish(e.target.value, recipes)}
               className="mt-1 min-h-11 w-full rounded-xl border border-neutral-200 px-3"
             >
               {dishes.map((entry) => (

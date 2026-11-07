@@ -100,7 +100,8 @@ export default function InventoryManager({ restaurantName, restaurantSlug }: Pro
   }
 
   useEffect(() => {
-    void refresh();
+    const timer = window.setTimeout(() => void refresh(), 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   function resetEditor() {

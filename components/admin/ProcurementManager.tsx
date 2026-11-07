@@ -49,7 +49,8 @@ export default function ProcurementManager({ restaurantName }: Props) {
   }
 
   useEffect(() => {
-    void refresh();
+    const timer = window.setTimeout(() => void refresh(), 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   async function addSupplier(event: FormEvent) {
