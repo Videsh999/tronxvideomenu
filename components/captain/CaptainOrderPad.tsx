@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { ArrowLeft, Minus, Plus, Search, Trash2 } from "lucide-react";
-import type { CaptainPermissions, Category, Dish, PaymentMethod, RestaurantTable } from "@/types";
-import { computeBillTotals, lineItemTotal, roundMoney } from "@/lib/order-pricing";
+import type { CaptainPermissions, Category, Dish, PaymentMethod, RestaurantBillingSettings, RestaurantTable } from "@/types";
+import { previewStaffCartBill } from "@/lib/billing/preview-cart";
+import { resolveLineTaxRate } from "@/lib/billing/resolve-tax-rate";
+import { lineItemTotal, roundMoney } from "@/lib/order-pricing";
 import { resolveCaptainPermissions } from "@/lib/captain-permissions";
 
 type CartLine = {
@@ -34,6 +36,7 @@ type TableCartState = {
 type Props = {
   slug: string;
   currency: string;
+  billing?: RestaurantBillingSettings | null;
   taxRatePercent: number;
   taxLabel: string;
   categories: Category[];
@@ -49,6 +52,11 @@ function money(value: number, currency: string) {
     currency: currency || "INR",
     maximumFractionDigits: 2,
   }).format(value);
+}
+
+function nextLineKey(dishId: string, variantId?: string) {
+  const suffix = typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `${dishId}-${variantId ?? "base"}`;
+  return `${dishId}-${variantId ?? "base"}-${suffix}`;
 }
 
 function emptyCartState(): TableCartState {
@@ -67,6 +75,7 @@ function emptyCartState(): TableCartState {
 export default function CaptainOrderPad({
   slug,
   currency,
+  billing,
   taxRatePercent,
   taxLabel,
   categories,
@@ -81,7 +90,10 @@ export default function CaptainOrderPad({
       ? initialTableNumber
       : "",
   );
-  const [cartsByTable, setCartsByTable] = useState<Record<string, TableCartState>>({});
+  const [cartsByTable, setCartsByTable] = useState<Record<string, TableCartState>>(() => {
+    if (!initialTableNumber) return {};
+    return { [String(initialTableNumber)]: emptyCartState() };
+  });
   const [categoryId, setCategoryId] = useState("ALL");
   const [query, setQuery] = useState("");
   const [message, setMessage] = useState<string | null>(null);
@@ -105,13 +117,12 @@ export default function CaptainOrderPad({
     }));
   }
 
-  useEffect(() => {
-    if (!tableKey) return;
-    setCartsByTable((prev) => {
-      if (prev[tableKey]) return prev;
-      return { ...prev, [tableKey]: emptyCartState() };
-    });
-  }, [tableKey]);
+  function selectTable(next: number | "") {
+    setTableNumber(next);
+    if (next === "") return;
+    const key = String(next);
+    setCartsByTable((prev) => (prev[key] ? prev : { ...prev, [key]: emptyCartState() }));
+  }
 
   const availableDishes = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -124,20 +135,22 @@ export default function CaptainOrderPad({
   }, [dishes, categoryId, query]);
 
   const totals = useMemo(() => {
-    const lineTotals = session.cart.map((line) =>
-      lineItemTotal({
-        unitPrice: line.unitPrice,
-        quantity: line.quantity,
-        addonTotals: line.addons.map((addon) => addon.price),
-        itemDiscountAmount: line.itemDiscountAmount,
+    return previewStaffCartBill({
+      lines: session.cart.map((line) => {
+        const dish = dishes.find((entry) => entry.id === line.dishId);
+        const category = categories.find((entry) => entry.id === dish?.categoryId);
+        return {
+          unitPrice: line.unitPrice,
+          quantity: line.quantity,
+          addonUnitPrices: line.addons.map((addon) => addon.price),
+          itemDiscountAmount: line.itemDiscountAmount,
+          gstRatePercent: resolveLineTaxRate({ dish, category, billing }).rate,
+        };
       }),
-    );
-    return computeBillTotals({
-      lineTotals,
       billDiscountAmount: session.billDiscount,
-      taxRatePercent,
+      billing,
     });
-  }, [session.cart, session.billDiscount, taxRatePercent]);
+  }, [billing, categories, dishes, session.billDiscount, session.cart]);
 
   function dishNeedsCustomize(dish: Dish) {
     const variants = (dish.variants ?? []).filter((variant) => variant.isAvailable !== false);
@@ -163,7 +176,7 @@ export default function CaptainOrderPad({
   function addSimple(dish: Dish) {
     if (!tableKey) return;
     const next: CartLine = {
-      key: `${dish.id}-${Date.now()}`,
+      key: nextLineKey(dish.id),
       dishId: dish.id,
       name: dish.name,
       unitPrice: dish.price,
@@ -194,7 +207,7 @@ export default function CaptainOrderPad({
       });
     });
     const next: CartLine = {
-      key: `${customizing.id}-${selectedVariantId}-${Date.now()}`,
+      key: nextLineKey(customizing.id, selectedVariantId),
       dishId: customizing.id,
       name: customizing.name,
       variantId: variant?.id,
@@ -375,7 +388,7 @@ export default function CaptainOrderPad({
           <select
             value={tableNumber}
             onChange={(event) => {
-              setTableNumber(event.target.value ? Number(event.target.value) : "");
+              selectTable(event.target.value ? Number(event.target.value) : "");
               setMessage(null);
               setLastOrderId(null);
             }}
@@ -676,12 +689,43 @@ export default function CaptainOrderPad({
                   <span>−{money(totals.billDiscount, currency)}</span>
                 </div>
               ) : null}
-              <div className="flex justify-between text-white/65">
-                <span>
-                  {taxLabel} ({taxRatePercent}%)
-                </span>
-                <span>{money(totals.taxAmount, currency)}</span>
-              </div>
+              {totals.packagingCharge > 0 ? (
+                <div className="flex justify-between text-white/65">
+                  <span>Packaging</span>
+                  <span>{money(totals.packagingCharge, currency)}</span>
+                </div>
+              ) : null}
+              {totals.serviceCharge > 0 ? (
+                <div className="flex justify-between text-white/65">
+                  <span>Service charge</span>
+                  <span>{money(totals.serviceCharge, currency)}</span>
+                </div>
+              ) : null}
+              {totals.igstAmount > 0 ? (
+                <div className="flex justify-between text-white/65">
+                  <span>IGST</span>
+                  <span>{money(totals.igstAmount, currency)}</span>
+                </div>
+              ) : totals.cgstAmount > 0 || totals.sgstAmount > 0 ? (
+                <>
+                  <div className="flex justify-between text-white/65">
+                    <span>CGST</span>
+                    <span>{money(totals.cgstAmount, currency)}</span>
+                  </div>
+                  <div className="flex justify-between text-white/65">
+                    <span>SGST</span>
+                    <span>{money(totals.sgstAmount, currency)}</span>
+                  </div>
+                </>
+              ) : (
+                <div className="flex justify-between text-white/65">
+                  <span>
+                    {totals.taxLabel || taxLabel}
+                    {taxRatePercent ? ` (${taxRatePercent}%)` : ""}
+                  </span>
+                  <span>{money(totals.taxAmount, currency)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-lg font-bold">
                 <span>Total</span>
                 <span>{money(totals.total, currency)}</span>

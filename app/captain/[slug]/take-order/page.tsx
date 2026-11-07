@@ -35,6 +35,7 @@ export default async function CaptainTakeOrderPage({
     <CaptainOrderPad
       slug={slug}
       currency={menu.restaurant.currency ?? "INR"}
+      billing={menu.restaurant.billing}
       taxRatePercent={
         menu.restaurant.billing?.gstRatePercent ??
         menu.restaurant.billing?.taxRatePercent ??

@@ -19,7 +19,8 @@ export default async function PosPage({ params }: { params: Promise<{ slug: stri
     <PosTerminal
       restaurantName={menu.restaurant.name}
       currency={menu.restaurant.currency ?? "INR"}
-      taxRatePercent={menu.restaurant.billing?.taxRatePercent ?? 0}
+      billing={menu.restaurant.billing}
+      taxRatePercent={menu.restaurant.billing?.gstRatePercent ?? menu.restaurant.billing?.taxRatePercent ?? 0}
       taxLabel={menu.restaurant.billing?.taxLabel ?? "Tax"}
       categories={menu.categories.filter((category) => category.isActive)}
       dishes={menu.dishes}
