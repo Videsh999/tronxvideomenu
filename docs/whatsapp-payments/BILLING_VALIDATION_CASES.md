@@ -1,5 +1,12 @@
 **Draft.**
 
+> **ADR alignment.** Where this draft disagreed with ADR 0009 or ADR 0010, the ADR wording is kept. Conflicts:
+> 1. Finance D1 ordered policy as outlet+order-type, then outlet default, then org+order-type, then org default. ADR 0009 precedence is order override, then table or session, then channel, then outlet, then organization, then default. Kitchen release stays a separate policy.
+> 2. The drafts omitted the ADR 0009 channel defaults: dine-in is PAY_AFTER_MEAL; takeaway and delivery are PAY_BEFORE_PREPARATION. Kitchen release: dine-in on order; prepay channels on verified payment of the bill total excluding tip. A tip never blocks the kitchen.
+> 3. The drafts omitted who may create a partial instalment. ADR 0009: Cashier, Manager, or Admin. A captain can only display or share an existing request. Refunds and MANUAL_REVIEW stay Manager or Admin only.
+> 4. ADR 0010 sets a default tip cap of 25% of the post-discount, pre-tax subtotal. It is configurable. The drafts did not state that cap.
+> 5. BILL_GENERATION_WORKFLOW said a tip change keeps the same bill version. ADR 0010: adding, changing, or removing a tip increments billVersion.
+
 # Billing Validation Cases (taxes, discounts, totals, tips)
 > **DRAFT — Finance Manager, 2026-11-07, pending Founder/CEO review.**
 > Sources: `FOUNDER_ORDER_2026-11-07.md` (this folder); `../TRONX_PRO_MAX_TASK_BOARD.md`; `/workspace/tronx-hq/projects/tasks.csv`. `PROVIDER_CAPABILITY_RESEARCH.md` did **not exist** at time of writing, so every provider fee, settlement timeline, capability, and report format below is **TBD**. The amounts are INR. Arithmetic belongs to `calculateRestaurantBill` (`lib/billing/calculate-bill.ts` in the ROS repo, which is not on the box), and this doc defines no tax or rounding rules of its own.
@@ -7,7 +14,7 @@
 ## Status
 `calculateRestaurantBill` exists in the ROS repo (`lib/billing/calculate-bill.ts`; refs: `../TRONX_PRO_MAX_TASK_BOARD.md` lines 182, 283–318; `tasks.csv` ROS-E02-T001, E03-T001..3, E13-T004) but is not on the box. **Backend will run these cases and supply the outputs** (e.g. via `tests/billing-calculator.test.ts`, ROS-E03-T003). Until then, all bill-side expected values are **TBD**. Tip amounts marked **(rule D6)** are derived by hand from CEO default D6 on a *stated* subtotal, **not** from the calculator. Provider behaviour is TBD until PROVIDER_CAPABILITY_RESEARCH.md arrives from the CEO.
 
-Defaults exercised: D1–D7 **[CEO product default (2026-11-07), configurable per restaurant, Founder may override; not yet Founder-confirmed]** (see the decision log below). Tip is outside the calculator (D5).
+Defaults exercised: D1–D9 (D8 = CEO product default, Founder may override; D9 = Finance proposal pending Founder). D1–D7 are **[CEO product default (2026-11-07), configurable per restaurant, Founder may override; not yet Founder-confirmed]** (see the decision log below). Tip is outside the calculator (D5).
 
 | # | Inputs | Expected bill (subtotal / discount / packaging / service / CGST / SGST / IGST / total) | Tip | Expected QR / outcome | Notes |
 |---|---|---|---|---|---|
@@ -42,22 +49,39 @@ Defaults exercised: D1–D7 **[CEO product default (2026-11-07), configurable pe
 | V29 | Overpayment on a PR with a tip: 600 on 550 (500 + 50) | 500 | 50 | apply 550, refund 50; tip stays 50, not 100 | D3 |
 | V30 | Items added after QR | v2 TBD | | v1 superseded | |
 | V31 | Client-altered amount | server amount wins | | server | |
+| V33 | **D9** Stated item subtotal ₹1,000, discount ₹100, packaging ₹40, service charge ₹90; tip 10% | TBD (Backend) | **₹90** (base ₹900 = items − discount; packaging and service excluded, rule D6/D9) | total + 90 | not ₹103 |
+| V34 | **D9** Item subtotal ₹517 (UX_SPEC §5 example), packaging ₹20, tip 5% / 10% / 15% | TBD | **₹26 / ₹52 / ₹78** (25.85 / 51.70 / 77.55, rule D6/D9) | total + tip | matches UX_SPEC |
+| V35 | **D9** Item subtotal ₹250 + service charge ₹25, tip 5% | TBD | **₹13** (12.50 → 13; service excluded, rule D6/D9) | total + 13 | |
+| V36 | **D9** Packaging/service only (item subtotal ₹0 after full discount), tip 10% | TBD | **none**: tip prompt hidden entirely, no %/fixed/custom (D12) | = total | no tip line; client-sent tip rejected |
+| V37 | **D8** Bill 500 v1 → v2 550 (PR2 live). A late 500 arrives on PR1 | v2 TBD (550 stated) | 0 | PR1 payment → MANUAL_REVIEW; **PR2 stays live**; "payment pending review" warning; bill not Paid | no auto-cancel |
+| V38 | **D8** V37, Manager applies the 500 (partials ON) | 550 | 0 | balance from ledger = 50; PR2 (550) superseded by a 50 PR where the provider allows (TBD) | |
+| V39 | **D8** V37, partials OFF, Manager applies | 550 | 0 | balance 50 → Manager either refunds the 500 or applies it and the remaining 50 is collected via a new PR. Exact path with partials OFF **open** | |
+| V40 | **D8** Bill v2 = 500 (dropped item), late 550 on v1 PR | 500 | 0 | MANUAL_REVIEW → apply 500, balance 0 → PR2 cancelled/expired where the provider allows (TBD); excess 50 → D3 refund | |
+| V41 | **D8** Late payment and current PR both paid | 500 | 0 | first verified settles; the other → MANUAL_REVIEW → full refund (D3); bill Paid once | T007 AC |
+| V42 | **D8** Captain/Cashier attempts to resolve review | — | — | denied; only Manager/Admin | audit entry of the attempt (proposal) |
+| V43 | **D10** Bill with one payment in MANUAL_REVIEW; Manager/Admin clicks Close bill | — | — | **blocked**, with message to resolve the review first; no override; bill stays open | after resolve, close allowed if balance 0 |
 | V32 | Demo amounts Rs 1/20/149/520/1250 | build via calc (Backend) | 0 | same | |
 
-## Decision log: CEO product defaults (2026-11-07)
-Each is a CEO product default (2026-11-07), configurable per restaurant, Founder may override; not yet Founder-confirmed.
+## Decision log: D1–D12 (2026-11-07)
+D1–D7 are CEO product defaults (2026-11-07), configurable per restaurant, Founder may override; not yet Founder-confirmed. D8 is a CEO product default (2026-11-07), Founder may override. D9 is a Finance proposal pending Founder confirmation. D10: PD proposal, pending CTO confirmation. D11: PD interim, pending CTO decision. D12: PD default, Founder may override.
 | # | Decision |
 |---|---|
-| D1 | FLEXIBLE precedence: outlet+order-type rule > outlet default > org+order-type rule > org default. Effective policy is always shown to managers. |
+| D1 | Precedence, highest first, per ADR 0009 (CEO default, configurable, pending Founder confirmation): order override, then table or session, then channel, then outlet, then organization, then default. Kitchen release is a separate policy. The Finance D1 order (outlet+order-type > outlet default > org+order-type > org default) is not used. Managers still see the effective policy and its source. |
 | D2 | Partial payments are OFF by default and enabled per outlet. |
 | D3 | Overpayment is never auto-accepted. It goes to MANUAL_REVIEW, and the only outcome is a provider refund of the excess. It is never converted to a tip. |
 | D4 | In partial payments, bill components are paid first and the tip last. |
 | D5 | The tip is outside `calculateRestaurantBill`. It is added after the bill total as its own ledger component, with no in-system tax, pending CA. |
-| D6 | Percentage tip base = post-discount, pre-tax subtotal (the base is configurable). Rounded half-up to the whole rupee and shown before the customer confirms. |
+| D6 | Percentage tip base = post-discount, pre-tax subtotal (the base is configurable). Rounded half-up to the whole rupee and shown before the customer confirms. Default cap is 25% of that subtotal and is configurable (ADR 0010). A tip is never preselected. |
 | D7 | A discount is clamped to the subtotal (total ≥ 0). A discount above the subtotal is a validation error unless a manager overrides it, and every override is audited. |
+| D8 | Late payment on a superseded/cancelled/expired request: **never auto-cancel.** → MANUAL_REVIEW. The current open request stays live, and the UI warns "payment pending review". Only Manager/Admin resolves. On apply, the balance is recalculated from the ledger. If it is now covered, the current request is cancelled/expired **where the provider allows** (TBD, PROVIDER_CAPABILITY_RESEARCH.md), and any excess follows D3 (refund). *CEO product default 2026-11-07, Founder may override.* |
+| D9 | Tip base = **post-discount, pre-tax item subtotal**. Packaging and any service charge are **excluded** (a tip on service charge double-charges for service, and packaging is not service). Confirms the Designer's worked example (UX_SPEC §5). *Finance proposal, pending Founder confirmation.* |
+| D10 | A bill **cannot be closed** while any payment on it is in MANUAL_REVIEW. The review must be resolved first, and there is no override. *PD proposal 2026-11-07, pending CTO confirmation.* |
+| D11 | "Superseded" is a **flag on the old payment request** (e.g. `supersededBy` + reason), **not** a ledger or bill status. *PD interim, pending CTO decision.* |
+| D12 | When the tip base is ₹0, the tip prompt is **hidden entirely**, with no %, fixed or custom tip. *PD default, Founder may override.* |
 
 ## Still open
-- Founder confirmation of D1–D7.
+- Founder confirmation of D1–D9 and D12; CTO confirmation of D10–D11.
+- V39: the D8 apply path when partials are OFF.
 - CA tax treatment of tips (TIP_ACCOUNTING_AND_RECONCILIATION.md §5).
 - Provider refund, partial and exact-amount support (PROVIDER_CAPABILITY_RESEARCH.md).
 - Unit of the calculator (paise vs rupees), confirmed by Backend.
