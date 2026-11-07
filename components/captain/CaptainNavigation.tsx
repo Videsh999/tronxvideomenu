@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -8,6 +9,7 @@ import {
   Flame,
   LayoutDashboard,
   LogOut,
+  Menu,
   ShieldCheck,
   Table2,
   UtensilsCrossed,
@@ -27,6 +29,7 @@ export default function CaptainNavigation({
   pendingApprovals?: number;
 }) {
   const pathname = usePathname();
+  const [moreOpen, setMoreOpen] = useState(false);
   const root = `/captain/${slug}`;
   const links = [
     { href: root, label: "Dashboard", icon: LayoutDashboard, exact: true },
@@ -46,6 +49,8 @@ export default function CaptainNavigation({
   ] as const;
   const isActive = (href: string, exact: boolean) =>
     exact ? pathname === href : pathname.startsWith(href);
+  const primaryLinks = [links[0], links[1], links[2], links[4]];
+  const moreLinks = [links[3], links[5], links[6], links[7]];
   const logout = async () => {
     await fetch("/api/captain/logout", { method: "POST" });
     window.location.replace(`/menu/${slug}/captain`);
@@ -126,8 +131,24 @@ export default function CaptainNavigation({
         aria-label="Captain navigation"
         className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-neutral-200 bg-white/95 px-1 pt-1.5 backdrop-blur-xl lg:hidden"
       >
-        <ul className="mx-auto grid max-w-3xl grid-cols-8 gap-0.5">
-          {links.map((link) => {
+        {moreOpen ? (
+          <div className="absolute inset-x-3 bottom-[calc(100%+0.5rem)] rounded-2xl border border-neutral-200 bg-white p-2 shadow-xl">
+            <p className="px-3 pb-2 pt-1 text-xs font-bold uppercase tracking-wider text-neutral-400">More</p>
+            <div className="grid grid-cols-2 gap-1">
+              {moreLinks.map((link) => {
+                const active = isActive(link.href, link.exact);
+                const Icon = link.icon;
+                return (
+                  <Link key={link.href} href={link.href} onClick={() => setMoreOpen(false)} className={`flex min-h-12 items-center gap-3 rounded-xl px-3 text-sm font-semibold ${active ? "bg-neutral-900 text-white" : "bg-neutral-50 text-neutral-700"}`}>
+                    <Icon className="h-4 w-4" />{link.label}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+        <ul className="mx-auto grid max-w-xl grid-cols-5 gap-1">
+          {primaryLinks.map((link) => {
             const active = isActive(link.href, link.exact);
             const badge = "badge" in link ? link.badge : 0;
             const Icon = link.icon;
@@ -155,6 +176,13 @@ export default function CaptainNavigation({
               </li>
             );
           })}
+          <li>
+            <button type="button" onClick={() => setMoreOpen((open) => !open)} aria-expanded={moreOpen} className={`relative flex w-full flex-col items-center gap-0.5 rounded-xl py-1 text-[10px] font-semibold ${moreOpen || moreLinks.some((link) => isActive(link.href, link.exact)) ? "text-neutral-900" : "text-neutral-500"}`}>
+              <span className={`grid h-7 w-9 place-items-center rounded-full ${moreOpen ? "bg-neutral-900 text-white" : ""}`}><Menu className="h-4 w-4" /></span>
+              More
+              {pendingApprovals > 0 ? <span className="absolute right-2 top-0 rounded-full bg-amber-500 px-1 text-[8px] font-bold text-white">{pendingApprovals}</span> : null}
+            </button>
+          </li>
         </ul>
       </nav>
     </>

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { ArrowLeft, Minus, Plus, Search, Trash2 } from "lucide-react";
+import { ArrowLeft, Minus, Plus, Search, ShoppingBag, Trash2, X } from "lucide-react";
 import type { CaptainPermissions, Category, Dish, PaymentMethod, RestaurantTable } from "@/types";
 import { computeBillTotals, lineItemTotal, roundMoney } from "@/lib/order-pricing";
 import { resolveCaptainPermissions } from "@/lib/captain-permissions";
@@ -93,6 +93,8 @@ export default function CaptainOrderPad({
   const [payMethod, setPayMethod] = useState<PaymentMethod>("CASH");
   const [payAmount, setPayAmount] = useState<number | "">("");
   const [extrasOpen, setExtrasOpen] = useState(false);
+  const [cartOpen, setCartOpen] = useState(false);
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
 
   const tableKey = tableNumber === "" ? "" : String(tableNumber);
   const session = cartsByTable[tableKey] ?? emptyCartState();
@@ -138,6 +140,7 @@ export default function CaptainOrderPad({
       taxRatePercent,
     });
   }, [session.cart, session.billDiscount, taxRatePercent]);
+  const cartItemCount = session.cart.reduce((sum, line) => sum + line.quantity, 0);
 
   function dishNeedsCustomize(dish: Dish) {
     const variants = (dish.variants ?? []).filter((variant) => variant.isAvailable !== false);
@@ -356,7 +359,7 @@ export default function CaptainOrderPad({
     permissions.recordCashPayment || permissions.recordUpiPayment || permissions.recordCardPayment;
 
   return (
-    <div className="mx-auto flex h-[calc(100dvh-5.5rem)] w-full max-w-7xl flex-col gap-3 overflow-hidden pb-20 lg:pb-2">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 pb-24 lg:h-[calc(100dvh-4rem)] lg:overflow-hidden lg:pb-2">
       <header className="flex shrink-0 flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <Link
@@ -366,8 +369,8 @@ export default function CaptainOrderPad({
             <ArrowLeft className="h-4 w-4" /> My Tables
           </Link>
           <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Captain POS</h1>
-          <p className="text-sm text-neutral-500">
-            Walk-in ordering for your assigned tables — place order &amp; send to kitchen. No phone required.
+          <p className="hidden text-sm text-neutral-500 sm:block">
+            Select a table, add menu items, then review and submit the order.
           </p>
         </div>
         <label className="text-sm font-medium text-neutral-700">
@@ -379,7 +382,7 @@ export default function CaptainOrderPad({
               setMessage(null);
               setLastOrderId(null);
             }}
-            className={`mt-1 block min-h-12 min-w-[11rem] rounded-xl border px-3 ${
+            className={`mt-1 block min-h-12 w-full min-w-[11rem] rounded-xl border bg-white px-3 ${
               tableNumber === "" ? "border-rose-400 ring-2 ring-rose-200" : "border-neutral-200"
             }`}
           >
@@ -408,7 +411,7 @@ export default function CaptainOrderPad({
       ) : null}
 
       <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(19rem,26rem)]">
-        <section className="flex min-h-0 min-w-0 flex-col gap-3 overflow-hidden rounded-2xl border border-neutral-200 bg-white p-3 sm:p-4">
+        <section className="flex min-w-0 flex-col gap-3 rounded-2xl border border-neutral-200 bg-white p-3 sm:p-4 lg:min-h-0 lg:overflow-hidden">
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             <div className="inline-flex rounded-xl border border-neutral-200 bg-neutral-50 p-1">
               <span className="rounded-lg bg-neutral-900 px-3 py-2 text-xs font-bold text-white">Dine-in</span>
@@ -429,15 +432,15 @@ export default function CaptainOrderPad({
             </div>
           </div>
 
-          <div className="grid min-h-0 flex-1 gap-3 sm:grid-cols-[7.5rem_minmax(0,1fr)]">
+          <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[7.5rem_minmax(0,1fr)]">
             <nav
               aria-label="Menu categories"
-              className="flex shrink-0 gap-1.5 overflow-x-auto pb-1 sm:flex-col sm:overflow-y-auto sm:overflow-x-hidden sm:pb-0"
+              className="scrollbar-none flex shrink-0 gap-1.5 overflow-x-auto pb-1 lg:flex-col lg:overflow-y-auto lg:overflow-x-hidden lg:pb-0"
             >
               <button
                 type="button"
                 onClick={() => setCategoryId("ALL")}
-                className={`min-h-10 shrink-0 rounded-xl px-3 text-left text-xs font-semibold sm:w-full ${
+                className={`min-h-10 shrink-0 rounded-xl px-3 text-left text-xs font-semibold lg:w-full ${
                   categoryId === "ALL" ? "bg-neutral-900 text-white" : "bg-neutral-100 text-neutral-700"
                 }`}
               >
@@ -448,7 +451,7 @@ export default function CaptainOrderPad({
                   key={category.id}
                   type="button"
                   onClick={() => setCategoryId(category.id)}
-                  className={`min-h-10 shrink-0 rounded-xl px-3 text-left text-xs font-semibold sm:w-full ${
+                  className={`min-h-10 shrink-0 rounded-xl px-3 text-left text-xs font-semibold lg:w-full ${
                     categoryId === category.id
                       ? "bg-neutral-900 text-white"
                       : "bg-neutral-100 text-neutral-700"
@@ -459,13 +462,13 @@ export default function CaptainOrderPad({
               ))}
             </nav>
 
-            <div className="grid min-h-0 flex-1 auto-rows-min content-start grid-cols-2 gap-2 overflow-y-auto overscroll-contain sm:grid-cols-3 xl:grid-cols-4">
+            <div className="grid min-h-0 flex-1 auto-rows-min content-start grid-cols-2 gap-2 sm:grid-cols-3 lg:overflow-y-auto lg:overscroll-contain xl:grid-cols-4">
               {availableDishes.map((dish) => (
                 <button
                   key={dish.id}
                   type="button"
                   onClick={() => beginCustomize(dish)}
-                  className="min-h-[5.25rem] rounded-2xl border border-neutral-200 bg-[#fafafa] p-3 text-left transition hover:border-neutral-900 hover:shadow-sm"
+                  className="relative min-h-[7rem] rounded-2xl border border-neutral-200 bg-[#fafafa] p-3 text-left transition active:scale-[0.98] hover:border-neutral-900 hover:shadow-sm"
                 >
                   <span
                     className={`mb-2 inline-block h-2.5 w-2.5 rounded-full ${
@@ -479,6 +482,9 @@ export default function CaptainOrderPad({
                   <p className="mt-1 text-xs font-medium text-neutral-500">
                     {money((dish.variants?.[0]?.price ?? dish.price) as number, currency)}
                   </p>
+                  <span className="absolute bottom-2.5 right-2.5 grid h-7 w-7 place-items-center rounded-full bg-neutral-900 text-white">
+                    <Plus className="h-4 w-4" />
+                  </span>
                 </button>
               ))}
               {availableDishes.length === 0 ? (
@@ -488,8 +494,17 @@ export default function CaptainOrderPad({
           </div>
         </section>
 
-        <aside className="flex min-h-[22rem] min-w-0 flex-col overflow-hidden rounded-2xl border border-neutral-900 bg-neutral-900 text-white lg:min-h-0">
+        {cartOpen ? (
+          <button
+            type="button"
+            aria-label="Close cart"
+            onClick={() => setCartOpen(false)}
+            className="fixed inset-0 z-40 bg-black/45 lg:hidden"
+          />
+        ) : null}
+        <aside className={`${cartOpen ? "translate-y-0" : "translate-y-full"} safe-bottom fixed inset-x-0 bottom-0 z-50 flex max-h-[92dvh] min-w-0 flex-col overflow-hidden rounded-t-3xl border border-neutral-900 bg-neutral-900 text-white shadow-2xl transition-transform duration-200 lg:static lg:max-h-none lg:min-h-0 lg:translate-y-0 lg:rounded-2xl lg:shadow-none`}>
           <div className="shrink-0 border-b border-white/10 px-4 py-3">
+            <div className="flex items-center justify-between gap-3">
             <h2 className="text-lg font-semibold">
               Current bill
               {tableNumber !== "" ? (
@@ -499,6 +514,10 @@ export default function CaptainOrderPad({
                 ({session.cart.reduce((sum, line) => sum + line.quantity, 0)} items)
               </span>
             </h2>
+            <button type="button" onClick={() => setCartOpen(false)} className="grid h-10 w-10 place-items-center rounded-full bg-white/10 lg:hidden" aria-label="Close cart">
+              <X className="h-5 w-5" />
+            </button>
+            </div>
           </div>
 
           <ul className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain px-3 py-3">
@@ -695,15 +714,22 @@ export default function CaptainOrderPad({
                 onClick={() => placeOrder(false)}
                 className="min-h-11 w-full rounded-xl bg-[#f59e0b] text-sm font-bold text-neutral-950 disabled:opacity-40"
               >
-                {pending ? "Sending…" : "Save & send to kitchen"}
+                {pending ? "Sending…" : "Review & submit order"}
               </button>
-              {canRecordAny ? (
+              {canRecordAny && session.cart.length > 0 ? (
                 <>
                   <button
                     type="button"
-                    disabled={pending || session.cart.length === 0 || tableNumber === ""}
+                    onClick={() => setCheckoutOpen((open) => !open)}
+                    className="min-h-10 w-full rounded-xl border border-white/25 text-sm font-semibold text-white"
+                  >
+                    {checkoutOpen ? "Hide checkout" : "Checkout & payment options"}
+                  </button>
+                  {checkoutOpen ? <><button
+                    type="button"
+                    disabled={pending || tableNumber === ""}
                     onClick={() => placeOrder(true)}
-                    className="min-h-10 w-full rounded-xl border border-white/30 bg-white text-sm font-bold text-neutral-900 disabled:opacity-40"
+                    className="min-h-10 w-full rounded-xl bg-white text-sm font-bold text-neutral-900 disabled:opacity-40"
                   >
                     Bill &amp; pay ({payMethod})
                   </button>
@@ -747,6 +773,7 @@ export default function CaptainOrderPad({
                       Record
                     </button>
                   </div>
+                  </> : null}
                 </>
               ) : (
                 <p className="text-[11px] text-white/55">
@@ -757,6 +784,21 @@ export default function CaptainOrderPad({
           </div>
         </aside>
       </div>
+
+      <button
+        type="button"
+        onClick={() => setCartOpen(true)}
+        className="safe-bottom fixed inset-x-3 bottom-[4.55rem] z-30 flex min-h-16 items-center justify-between rounded-2xl bg-neutral-900 px-4 pt-3 text-left text-white shadow-[0_14px_35px_rgba(0,0,0,0.28)] lg:hidden"
+      >
+        <span className="flex items-center gap-3">
+          <span className="relative grid h-10 w-10 place-items-center rounded-xl bg-white/10">
+            <ShoppingBag className="h-5 w-5" />
+            {cartItemCount > 0 ? <span className="absolute -right-1.5 -top-1.5 grid h-5 min-w-5 place-items-center rounded-full bg-amber-500 px-1 text-[10px] font-bold text-neutral-950">{cartItemCount}</span> : null}
+          </span>
+          <span><span className="block text-sm font-bold">{cartItemCount ? "View current order" : "Cart is empty"}</span><span className="block text-xs text-white/60">Table {tableNumber || "not selected"}</span></span>
+        </span>
+        <span className="text-base font-bold">{money(totals.total, currency)}</span>
+      </button>
 
       {customizing ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
