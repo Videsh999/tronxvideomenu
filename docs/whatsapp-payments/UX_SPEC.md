@@ -78,7 +78,7 @@ Kept separate in UI, as the order requires: **Order → Bill (versioned) → Pay
 | Remaining balance | "Remaining ₹300" | Server value. |
 | Tip | "Tip (optional)" | Separate line; never "for your server". |
 
-Statuses (server enum → UI label): PENDING→"Waiting for payment", SUCCESS→"Paid · verified", FAILED→"Payment failed", EXPIRED→"Expired", CANCELLED→"Cancelled", PARTIALLY_PAID→"Partly paid", REFUND_PENDING→"Refund pending", REFUNDED→"Refunded", MANUAL_REVIEW→"Needs review". UI-only derived: SUPERSEDED (request replaced by newer bill version; backend may model as CANCELLED — Q6), "Checking…" (client awaiting status).
+Statuses (ADR 0007 server enum → UI label): CREATED→"Preparing payment", ACTIVE→"Waiting for payment", PAID→"Paid · verified", SUPERSEDED→"Replaced · bill changed", EXPIRED→"Expired · same bill", CANCELLED→"Cancelled", MANUAL_REVIEW→"Needs review", REFUNDED→"Refunded". PARTIALLY_PAID is a bill label, "Partly paid", not a request status. "Checking…" is UI-only while a status check is in flight. SUPERSEDED and EXPIRED must not share copy.
 
 ---
 
@@ -86,27 +86,23 @@ Statuses (server enum → UI label): PENDING→"Waiting for payment", SUCCESS→
 
 ```mermaid
 stateDiagram-v2
-    [*] --> PENDING: request created (server amount, expiry)
-    PENDING --> SUCCESS: verified amount == expected
-    PENDING --> PARTIALLY_PAID: verified amount < expected (if partial allowed)
-    PENDING --> MANUAL_REVIEW: wrong amount / duplicate / unverifiable
-    PENDING --> FAILED: provider reports failure
-    PENDING --> EXPIRED: expiry reached
-    PENDING --> CANCELLED: bill changed (superseded) or staff cancel
-    PARTIALLY_PAID --> PENDING: new request for remaining balance
-    FAILED --> PENDING: retry creates new request
-    EXPIRED --> PENDING: regenerate creates new request
-    EXPIRED --> MANUAL_REVIEW: late payment on expired request
-    CANCELLED --> MANUAL_REVIEW: late payment on superseded request
-    SUCCESS --> MANUAL_REVIEW: duplicate payment detected
-    MANUAL_REVIEW --> SUCCESS: authorized role resolves (accept)
-    MANUAL_REVIEW --> REFUND_PENDING: authorized role refunds
-    SUCCESS --> REFUND_PENDING: authorized refund
-    REFUND_PENDING --> REFUNDED: provider confirms
-    SUCCESS --> [*]
-    REFUNDED --> [*]
+    [*] --> CREATED: local row
+    CREATED --> ACTIVE: provider request known
+    ACTIVE --> PAID: verified amount == expected
+    ACTIVE --> MANUAL_REVIEW: wrong amount / duplicate / unverifiable
+    ACTIVE --> EXPIRED: time ran out, bill unchanged
+    ACTIVE --> SUPERSEDED: bill version changed
+    ACTIVE --> CANCELLED: staff cancel, bill unchanged
+    EXPIRED --> PAID: late payment, same bill version, exact amount
+    EXPIRED --> MANUAL_REVIEW: late payment otherwise
+    SUPERSEDED --> MANUAL_REVIEW: late payment always
+    PAID --> MANUAL_REVIEW: late webhook
+    CANCELLED --> MANUAL_REVIEW: late webhook
+    REFUNDED --> MANUAL_REVIEW: late webhook
+    MANUAL_REVIEW --> PAID: Manager or Admin accepts, with reason
+    MANUAL_REVIEW --> REFUNDED: Manager or Admin refunds, with reason
 ```
-Note: "new request" transitions create a **new** request ID; the old one stays terminal in the ledger. UI shows the latest active request and a history list.
+Note: a replacement request gets a new id. PAID, SUPERSEDED, EXPIRED, CANCELLED, and REFUNDED stay terminal except when a late webhook moves that request to MANUAL_REVIEW. UI shows the latest active request and a history list.
 
 ---
 
@@ -339,7 +335,7 @@ Tablet (768–1279): same two columns, bill collapsible. Phone not a target for 
 > **Default D2 — pending Founder confirmation.** Partial payments are **OFF by default**, enabled per outlet (§8C). When OFF, the Split control, amount field and "Remaining" partial UI are not rendered; one request for the full payable. **D4:** with a tip, bill components are paid first and the tip last.
 
 - **Split/partial (only when ON):** "Split" → enter amount or "Split equally n ways"; each part = its own request; amount input capped at Remaining (overpay guard, ROS-E15-T028).
-- **Close bill** enabled only when Remaining = ₹0 and all parts verified.
+- **Close bill** enabled only when Remaining = ₹0, no PaymentRequest is MANUAL_REVIEW, and none is ACTIVE and unexpired (ADR 0008).
 - **Manual review card** (in History, amber, icon ⚠):
   ```
   ⚠ Needs review — Received ₹520 for request ₹500 (prov ref …7c2)
@@ -350,7 +346,7 @@ Tablet (768–1279): same two columns, bill collapsible. Phone not a target for 
 
   Other review reasons (late payment on old request, duplicate, unverifiable): actions [Apply to bill] (only if it doesn't exceed Remaining) / [Refund] / [Add note]. Every action needs reason + confirm dialog; audit logged.
 
-  > **CEO default (unnumbered) — Manual review roles — pending Founder confirmation.** MANUAL_REVIEW is resolvable by **Manager/Admin only — never Captain or Cashier**. Captain and Cashier see the card read-only with "Ask a manager".
+  > **ADR 0008.** MANUAL_REVIEW is resolvable by **Manager or Admin only**, by accepting, refunding, or rejecting it with a reason. Captain and Cashier see the card read-only with "Ask a manager".
 - **Test mode:** persistent striped "TEST MODE — no real money" banner + [TEST] badge.
 
 **AC-3**
@@ -359,7 +355,7 @@ Tablet (768–1279): same two columns, bill collapsible. Phone not a target for 
 - AC-3.3 [ROS-E15-T041] Given a MANUAL_REVIEW item, When a Captain or Cashier views it, Then resolve actions are absent; a Manager/Admin sees them and must enter a reason.
 - AC-3.6 [ROS-E15-T041, ROS-E15-T029] Given an overpayment of ₹20, Then the item is MANUAL_REVIEW, the only resolution is "Refund excess ₹20", and no tip line is created.
 - AC-3.7 [ROS-E15-T041] Given partial payments OFF for the outlet, Then no Split/partial control is rendered.
-- AC-3.4 Given request PENDING, Then Close bill is disabled with tooltip "Waiting for verified payment".
+- AC-3.4 Given a request is ACTIVE and unexpired, or any request is MANUAL_REVIEW, Then Close bill is disabled.
 - AC-3.5 [ROS-E08-T003] Payments never shown as recorded if the server write failed; UI shows error + retry.
 
 ---
@@ -490,7 +486,7 @@ Every state = icon + label + short explanation + next action. Colour never alone
 | Superseded | ↻ "Your bill was updated (v3). This QR no longer works." [Open latest bill] | ↻ "Old v2 replaced" | ↻ v2 row struck, v3 active |
 | Manual review | ⚠ "We received a payment that needs a quick check. Staff will help you. Please don't pay again." | ⚠ "Needs review — ask manager" | ⚠ review card, manager actions |
 | Failed | ✕ "Payment didn't go through. If money left your account, it's usually returned by your bank (verify timelines with provider)." [Try again] | ✕ [New request] | ✕ [New request] / other method |
-| Paid | ✓ "Paid · ₹564 · verified" + receipt — only after server SUCCESS | ✓ | ✓ Close bill enabled |
+| Paid | ✓ "Paid · ₹564 · verified" + receipt — only after server PAID | ✓ | ✓ Close bill enabled only if no MANUAL_REVIEW and no ACTIVE unexpired request |
 | WhatsApp failed / invalid no. | n/a | ✕ "Not delivered: invalid number" [Edit number][Show QR] "Bill is in POS" | same + log link |
 | QR generation failed | ✕ "Couldn't create QR. Please pay at the counter." | ✕ "QR unavailable" → Other method | same |
 | Provider down | ⏳ "Payments are slow right now. Please wait or pay staff." | ⚠ banner "Provider unreachable — use other methods" | same |
@@ -509,7 +505,7 @@ Wireframe pattern (mobile state block):
 └───────────────────────────────┘
 ```
 **AC-5**
-- AC-5.1 [ROS-E15-T027, ROS-E15-T044] Given a late payment on a superseded/expired request, Then status is Manual review on all surfaces, never Paid.
+- AC-5.1 [ROS-E15-T027, ROS-E15-T044] Given a late payment on a SUPERSEDED request, Then every surface says "Replaced · bill changed" and Manual review, never Paid. Given a late payment on an EXPIRED request, Then it shows Paid only when the bill version is unchanged and the amount matches exactly; otherwise "Expired · same bill" and Manual review.
 - AC-5.2 Given duplicate payment, Then the second payment shows Manual review; bill stays Paid once.
 - AC-5.3 Given the device is offline, Then no surface can transition to Paid and UPI request actions are disabled.
 - AC-5.4 Given WhatsApp fails, Then the bill remains accessible in POS and captain.
@@ -542,8 +538,8 @@ Tip line separated visually from food/tax (Finance treatment TBD, no tax claim o
 | status.paid | #047857 on #D1FAE5 | ✓ check-circle | Paid · verified |
 | status.review | #9A3412 on #FFEDD5 | ⚠ triangle | Needs review |
 | status.failed | #B91C1C on #FEE2E2 | ✕ x-circle | Failed |
-| status.expired | #4B5563 on #F3F4F6 | ⌛ timer-off | Expired |
-| status.superseded | #4B5563 on #F3F4F6 | ↻ refresh | Replaced |
+| status.expired | #4B5563 on #F3F4F6 | ⌛ timer-off | Expired · same bill |
+| status.superseded | #4B5563 on #F3F4F6 | ↻ refresh | Replaced · bill changed |
 | status.offline | #374151 on #E5E7EB | ⚡ wifi-off | Offline |
 | mode.test | #92400E stripes #FDE68A | flask | TEST MODE |
 | mode.live | #047857 | dot | LIVE |
@@ -582,12 +578,12 @@ Board numbering in brackets. Status: **Open**, **Resolved**, **Awaiting Founder*
 | Q3 [board 14] | Template constraints: itemized list in template vs summary + link/PDF; QR as media header; BSP vs Cloud API | CTO (ROS-E15-T002, T013) | Open — CEO default: summary + secure link (§4), pending Founder |
 | Q4 [board 15] | Policy precedence | PD proposes, Founder confirms | Default D1 applied, **Awaiting Founder** |
 | Q5 [board 16] | Can the public payment page show the itemized bill? | PD with CTO security review | Open — spec assumes yes (needed by §4 default) |
-| Q6 [board 17] | "Superseded" own status or CANCELLED + reason | CTO | Open |
+| Q6 [board 17] | "Superseded" own status or CANCELLED + reason | CTO | **Resolved** — ADR 0007: SUPERSEDED is its own status |
 | Q7 [board 18] | Customer-facing tip wording | Finance; **Founder for wording** (ROS-E15-T008) | Neutral-copy default applied, **Awaiting Founder** |
 | Q7b [board 18] | Tip % base | Finance | Default D6 applied, Awaiting Founder |
 | Q8 [board 18] | Tip tax treatment and receipt presentation | Finance + CA (ROS-E15-T008, T019) | Open (CA questions in TIP_ACCOUNTING_AND_RECONCILIATION.md §5) |
 | Q9 [board 19] | Captain-device tip entry for guests without phones | PD (product), Founder if policy | Open |
-| Q10 [board 20] | Who edits vs views Payments settings; who resolves Manual review | PD with CTO | Manual review: CEO default Manager/Admin only, Awaiting Founder; settings edit/view still Open |
+| Q10 [board 20] | Who edits vs views Payments settings; who resolves Manual review | PD with CTO | Manual review resolution **Resolved** in ADR 0008 (Manager or Admin only). Settings edit/view still Open |
 | Q11 [board 21] | Customer self-regenerate of expired link | PD | Open |
 | Q12 [board 22] | Status polling interval (ADR 0005 polling) | CTO | Open |
 | Q13 [board 23] | Brand assets and launch languages | Founder via CEO | **Awaiting Founder** |

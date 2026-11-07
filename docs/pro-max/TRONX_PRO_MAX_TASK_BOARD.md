@@ -132,7 +132,7 @@ Sources: audit PR https://github.com/Videsh999/tronxvideomenu/pull/1 (branch `pr
 | ROS-E15-T024 | Payment request model bound to org/outlet/order/bill version; supersede on change | TRONX BACKEND ENGINEER | Backlog | TRONX CTO |
 | ROS-E15-T025 | Dynamic exact-amount QR / payment link per request | TRONX BACKEND ENGINEER | Blocked | TRONX CTO |
 | ROS-E15-T026 | Signature-verified webhook + authenticated status check (idempotent) | TRONX BACKEND ENGINEER | Blocked | TRONX CTO |
-| ROS-E15-T027 | Ledger integration and 9-status payment state machine | TRONX BACKEND ENGINEER | Backlog | TRONX CTO |
+| ROS-E15-T027 | Ledger integration and ADR 0007 payment-request statuses | TRONX BACKEND ENGINEER | Backlog | TRONX CTO |
 | ROS-E15-T028 | Partial payments with remainder request; overpay guard | TRONX BACKEND ENGINEER | Backlog | TRONX CTO |
 | ROS-E15-T029 | Provider refunds, role-gated | TRONX BACKEND ENGINEER | Blocked | TRONX CTO |
 | ROS-E15-T030 | Billing policy engine + bill timing (PAY_BEFORE_PREPARATION, PAY_AFTER_MEAL, FLEXIBLE) | TRONX BACKEND ENGINEER | Backlog | TRONX CTO + TRONX FINANCE MANAGER |
@@ -201,13 +201,13 @@ Sources: audit PR https://github.com/Videsh999/tronxvideomenu/pull/1 (branch `pr
 | AC-3.2 Amount above remaining → 'Max ₹300', no request created | §7 Screen 3 | ROS-E15-T041, ROS-E15-T028 |
 | AC-4.2 Saved secret shown only as masked last-4 in UI and API | §8 Screen 4 | ROS-E15-T023, ROS-E15-T042 |
 | AC-4b.1 New outlet has tips OFF | §9 Screen 4b | ROS-E15-T032, ROS-E15-T043 |
-| AC-5.1 Late payment on superseded/expired request → Manual review, never Paid | §10 Screen 5 | ROS-E15-T027, ROS-E15-T044 |
+| AC-5.1 Late payment on SUPERSEDED always Manual review; EXPIRED auto-matches only if the bill version is unchanged and the amount matches exactly | §10 Screen 5 | ROS-E15-T027, ROS-E15-T044 |
 
 Other spec ACs already tagged with existing IDs (ROS-E04-T007, E03-T001/T002, E04-T005, E08-T003) also map to the E15 Frontend tasks named in their acceptance criteria.
 
 ## PD decisions (2026-11-07)
 
-- **PD-1:** a Manager or Admin cannot close a bill while a payment is in Manual review; the review must be resolved first. PD proposal; the CTO confirms it under ROS-E15-T030/T027.
+- **PD-1 (confirmed in ADR 0008):** a bill cannot close while any of its PaymentRequests is MANUAL_REVIEW, or ACTIVE and unexpired. Only a Manager or Admin resolves MANUAL_REVIEW, by accepting, refunding, or rejecting it with a reason, and every resolution is audit-logged. A payment after close leaves the bill closed and goes to MANUAL_REVIEW as a post-close exception. A closed bill is never silently reopened.
 - **PD-2:** when the tip base is ₹0, the tip prompt is hidden, so no fixed or custom tip can be added (Finance case V36). The Founder may override this.
 
 ## Open questions
@@ -228,14 +228,14 @@ UX_SPEC §15 questions not answered by the Founder brief:
 11. Template constraints: can a variable-length itemized list fit an approved template, or summary + link/PDF? Can the QR be a media header? Which BSP or Cloud API? (Q3) — CTO
 12. Policy precedence is recorded in ADR 0009, pending Founder confirmation of the CEO defaults: order override, then table or session, then channel, then outlet, then organization, then default. Kitchen release is separate. The shorter Finance D1 order is not used. (Q4) — Founder confirms the ADR default
 13. Can the public payment page show the itemized bill (privacy review)? (Q5) — PD with CTO security review
-14. Is "superseded" its own status or CANCELLED with a reason? (UX Q6) — **CTO decides.** Interim position: a flag on the old request, not a ledger status.
+14. UX Q6 is decided in ADR 0007. SUPERSEDED is its own PaymentRequest status. It means the bill version changed, and supersededBy points to the replacement request. EXPIRED means time ran out on an unchanged bill. Store reason and supersededBy on the request. Copy must distinguish the two.
 15. Customer-facing tip wording and tip % base (pre- or post-tax) (Q7), tip tax and receipt presentation (Q8). The brief only says "no assumed tax treatment". — Finance; Founder for wording
 16. Captain-device tip entry for guests without phones? (Q9) — PD (product), Founder if policy
-17. Which roles edit vs view Payments settings, and who resolves Manual review (depends on ROS-E04-T005)? (Q10) — PD with CTO
+17. Which roles edit vs view Payments settings? (Q10) Who resolves MANUAL_REVIEW is decided in ADR 0008: Manager or Admin only, by accepting, refunding, or rejecting with a reason. Settings edit vs view stays open. — PD with CTO
 18. Can customers regenerate an expired link themselves, or only staff? (Q11) — PD
 19. Status polling interval (no SSE; ADR 0005 polling). (Q12) — CTO
 20. Brand assets and launch languages. (Q13) — Founder via CEO
-21. **Unnumbered CEO defaults** that need the Founder's confirmation: Manual review roles, the WhatsApp summary template, and the neutral tip copy. — Founder via CEO
+21. **Unnumbered CEO defaults** that still need the Founder's confirmation: the WhatsApp summary template and the neutral tip copy. Manual review resolution is confirmed in ADR 0008. — Founder via CEO
 22. **Tip base (Finance answer D9, pending Founder confirmation):** the tip base is the item subtotal after discount and before tax, so it excludes packaging and service charge. This matches CEO default D6. Finance proposal D9 (ROS-E15-T008) awaits the Founder's confirmation via CEO.
 24. **T008 tip tax:** waiting on written guidance from the CA. — Finance (ROS-E15-T008)
 25. **Receipt tip label:** Finance proposes 'Tip (voluntary)'; UX_SPEC uses 'Tip'. — Founder approves (via CEO)
@@ -1689,7 +1689,7 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Dependencies:** —
 - **Affected files:** — (not named in source docs)
 - **Acceptance criteria:**
-  - [ ] Late payment on superseded/expired request → Manual review, never Paid
+  - [ ] Late payment on SUPERSEDED → MANUAL_REVIEW, never Paid. Late payment on EXPIRED auto-matches only if the bill version is unchanged and the amount matches exactly; otherwise MANUAL_REVIEW
   - [ ] Wrong amount/duplicate → MANUAL_REVIEW; bill Paid once
   - [ ] Ledger stays source of truth
 - **Status:** In Review
@@ -1998,7 +1998,7 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
   - [ ] Invalid signature rejected
   - [ ] Checks merchant, payment ref, order ref, amount, currency, status
   - [ ] Duplicate/delayed webhooks idempotent; wrong amount → MANUAL_REVIEW
-  - [ ] §9 payment expires: a webhook arriving for an EXPIRED or superseded request never marks it SUCCESS; it goes to MANUAL_REVIEW
+  - [ ] A webhook for a SUPERSEDED request never marks it PAID; it goes to MANUAL_REVIEW. A webhook for an EXPIRED request auto-matches only if the bill version is unchanged and the amount matches exactly; otherwise MANUAL_REVIEW
   - [ ] §11 payment failure: a verified failure event sets FAILED and the bill stays unpaid
 - **Status:** Blocked
 - **Test evidence:** —
@@ -2006,7 +2006,7 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Completion date:** —
 - **Notes:** Blocked: merchant sandbox keys.
 
-#### ROS-E15-T027 — Ledger integration and 9-status payment state machine
+#### ROS-E15-T027 — Ledger integration and ADR 0007 payment-request statuses
 
 - **Source:** FOUNDER_ORDER Order 1; UX_SPEC §3, AC-5.1
 - **Owner:** TRONX BACKEND ENGINEER
@@ -2014,8 +2014,8 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Dependencies:** ROS-E02-T001, ROS-E02-T007, ROS-E02-T008, ROS-E02-T009, ROS-E15-T001, ROS-E15-T024
 - **Affected files:** `lib/services/order.service.ts`
 - **Acceptance criteria:**
-  - [ ] PENDING, SUCCESS, FAILED, EXPIRED, CANCELLED, PARTIALLY_PAID, REFUND_PENDING, REFUNDED, MANUAL_REVIEW
-  - [ ] Late payment on superseded/expired request → MANUAL_REVIEW, never SUCCESS
+  - [ ] PaymentRequest statuses are CREATED, ACTIVE, PAID, SUPERSEDED, EXPIRED, CANCELLED, MANUAL_REVIEW, and REFUNDED. PARTIALLY_PAID is a bill aggregate, not a request status
+  - [ ] Late payment on SUPERSEDED → MANUAL_REVIEW, never PAID. Late payment on EXPIRED auto-matches only if the bill version is unchanged and the amount matches exactly
   - [ ] Uncertain → Pending/Manual review
   - [ ] §9 customer pays twice: a second distinct verified payment for an already-paid bill is recorded once in the ledger, bill stays Paid once, payment flagged MANUAL_REVIEW for refund
   - [ ] §9 webhook duplicated: same provider event id never creates a second ledger entry
@@ -2023,7 +2023,7 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
 - **Completion date:** —
-- **Notes:** Build gated on Wave 1 merging into pro-max/release. order.service.ts changes are queued to B. PD-1 (proposal, CTO to confirm): bill cannot be closed while a payment is in Manual review.
+- **Notes:** Build gated on Wave 1 merging into pro-max/release. order.service.ts changes are queued to B. PD-1 is confirmed in ADR 0008: the bill cannot close while a PaymentRequest is MANUAL_REVIEW, or ACTIVE and unexpired.
 
 #### ROS-E15-T028 — Partial payments with remainder request; overpay guard
 
@@ -2075,7 +2075,7 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO + TRONX FINANCE MANAGER
 - **Completion date:** —
-- **Notes:** Build gated on Wave 1 merging into pro-max/release. PD-1 (proposal, CTO to confirm): bill cannot be closed while a payment is in Manual review.
+- **Notes:** Build gated on Wave 1 merging into pro-max/release. PD-1 is confirmed in ADR 0008: the bill cannot close while a PaymentRequest is MANUAL_REVIEW, or ACTIVE and unexpired.
 
 #### ROS-E15-T031 — Bill versioning: finalized-only send, new version on item add, no duplicate per version
 
@@ -2311,7 +2311,7 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Dependencies:** ROS-E15-T003, ROS-E15-T004, ROS-E15-T027
 - **Affected files:** — (not named in source docs)
 - **Acceptance criteria:**
-  - [ ] Late payment on superseded/expired → Manual review everywhere (AC-5.1)
+  - [ ] SUPERSEDED and EXPIRED use different copy. A late SUPERSEDED payment is Manual review everywhere. An EXPIRED payment shows Paid only when the bill version is unchanged and the amount matches exactly (AC-5.1)
   - [ ] Duplicate → Manual review, bill Paid once (AC-5.2)
   - [ ] Offline → no transition to Paid, UPI actions disabled (AC-5.3)
 - **Status:** Backlog
