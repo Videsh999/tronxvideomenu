@@ -271,7 +271,7 @@ export class OrderService {
     const captainAuthorization = authorizationForCustomerQr(requiresCaptainApproval);
     const createdEvent = makeEvent("CREATED", requiresCaptainApproval
       ? "Order placed via QR menu — awaiting captain approval"
-      : "Order placed via QR menu — direct kitchen routing enabled", undefined, {
+      : "Order placed via QR menu — ready for staff acceptance", undefined, {
       billSnapshot: bill,
       captainAuthorization,
     });
@@ -308,10 +308,7 @@ export class OrderService {
       },
       events: [createdEvent],
     });
-    const routed = requiresCaptainApproval
-      ? created
-      : await this.acceptToKitchen(menu.restaurant.id, created.id, created);
-    return { order: customerOrderView(routed as RestaurantOrder), customerToken };
+    return { order: customerOrderView(created), customerToken };
   }
 
   async createPosOrder(

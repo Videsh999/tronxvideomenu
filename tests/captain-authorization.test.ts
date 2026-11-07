@@ -30,12 +30,18 @@ describe("captain authorization gate", () => {
     );
   });
 
-  it("restaurant policy can route valid QR orders without captain approval", () => {
+  it("restaurant policy can leave a QR order pending for staff without captain approval", () => {
     assert.equal(authorizationForCustomerQr(true).status, "PENDING_CAPTAIN_APPROVAL");
-    assert.deepEqual(authorizationForCustomerQr(false), {
+    const authorization = authorizationForCustomerQr(false);
+    assert.deepEqual(authorization, {
       status: "NOT_REQUIRED",
       entrySource: "CUSTOMER_QR",
     });
+    assert.equal(isCaptainKitchenEligible({
+      status: "PENDING",
+      source: "QR",
+      captainAuthorization: authorization,
+    }), true);
   });
 
   it("legacy pending QR without field requires approval", () => {

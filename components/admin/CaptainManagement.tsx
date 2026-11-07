@@ -55,7 +55,7 @@ export default function CaptainManagement({
       setQrRequiresCaptainApproval(required);
       setMessage(required
         ? "QR orders now wait for captain approval before reaching the kitchen."
-        : "Direct QR ordering enabled. New customer orders will go straight to the kitchen.");
+        : "Captain approval disabled. New QR orders will wait in Orders for staff acceptance.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to update QR approval policy");
     } finally {
@@ -298,9 +298,9 @@ export default function CaptainManagement({
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="max-w-2xl">
             <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-neutral-400">Customer QR order policy</p>
-            <h2 className="mt-1 text-lg font-bold text-neutral-900">Send QR orders directly to kitchen</h2>
+            <h2 className="mt-1 text-lg font-bold text-neutral-900">Skip captain approval for QR orders</h2>
             <p className="mt-1 text-sm text-neutral-500">
-              In direct mode, valid customer orders skip captain approval, enter preparation, and generate KOT immediately. Captain permissions and table assignments remain unchanged.
+              When enabled, valid customer orders skip captain approval and appear in Orders. Staff must still accept the order before KOT is generated and it reaches Kitchen.
             </p>
           </div>
           <button
@@ -313,7 +313,7 @@ export default function CaptainManagement({
               !qrRequiresCaptainApproval ? "bg-emerald-600 text-white" : "bg-neutral-100 text-neutral-700"
             }`}
           >
-            <span>{savingApprovalPolicy ? "Saving…" : !qrRequiresCaptainApproval ? "Direct to kitchen: ON" : "Captain approval: ON"}</span>
+            <span>{savingApprovalPolicy ? "Saving…" : !qrRequiresCaptainApproval ? "Skip captain: ON" : "Captain approval: ON"}</span>
             <span className={`relative h-6 w-11 rounded-full ${!qrRequiresCaptainApproval ? "bg-white/30" : "bg-neutral-300"}`}>
               <span className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow transition-all ${!qrRequiresCaptainApproval ? "left-6" : "left-1"}`} />
             </span>
@@ -324,7 +324,7 @@ export default function CaptainManagement({
         }`}>
           {qrRequiresCaptainApproval
             ? "Current workflow: customer → captain approval → KOT → kitchen"
-            : "Current workflow: customer → KOT → kitchen (no captain approval)"}
+            : "Current workflow: customer → Orders → staff accepts → KOT → kitchen"}
         </p>
       </section>
 

@@ -276,7 +276,7 @@ export type Restaurant = {
 };
 
 export type RestaurantOrderSettings = {
-  /** Defaults to true for legacy restaurants. False sends valid QR orders directly to kitchen. */
+  /** Defaults to true. False skips captain approval but still requires staff acceptance in Orders. */
   qrRequiresCaptainApproval?: boolean;
 };
 
