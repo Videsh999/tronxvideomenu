@@ -14,13 +14,14 @@ This manifest is the file-ownership list for the Pro Max workstreams. The narrat
 - L merges the required CI gates and the root lockfile last.
 - F and M do not edit the root `package.json` or `package-lock.json`. They file a dependency request to L.
 - K owns the connector package manifests and does not edit the root manifests.
+- A and L do not edit another stream's files to carry out a security or CI duty. They queue a patch. The path owner lands it alone. The duties and the owners are listed under "Queued security and CI patches".
 
 ## Wave 0 — validation contracts
 
 Role: Backend. Reviewer: CTO.
 
-- New domain modules under `lib/validations/` except the barrel.
-- After the split, `lib/validations/index.ts` is H's.
+- Wave 0 creates the domain modules listed under "Validation modules after Wave 0" and leaves `lib/validations/index.ts` as a re-export barrel.
+- After Wave 0 merges, each domain module belongs to the stream named there. H keeps only the barrel. Wave 0 does not keep those modules.
 
 ## A — Authz matrix
 
@@ -68,7 +69,10 @@ Role: Frontend. Starts after B's contract is merged.
 - `components/admin/BillingSettingsForm.tsx`
 - `app/admin/[slug]/settings/billing/**`
 - `app/api/admin/billing/**`
+- `lib/repositories/billing-audit.repository.ts`
 - `app/api/pos/shifts/**`
+- `lib/services/pos-shift.service.ts`
+- `lib/repositories/pos-shift.repository.ts`
 
 Handoff from E, integrated by C after B, one file at a time:
 
@@ -88,7 +92,12 @@ Role: Backend.
 - `lib/services/captain.service.ts`
 - `lib/services/restaurant-admin.service.ts`
 - `lib/repositories/captain.repository.ts`
+- `lib/repositories/captain-assignment.repository.ts`
 - `lib/repositories/restaurant-admin.repository.ts`
+- `lib/repositories/restaurant.repository.ts`
+- `lib/services/restaurant.service.ts`
+- `lib/restaurant-normalize.ts`
+- `app/api/restaurants/**`
 - `app/api/auth/**`
 - `app/api/captain/login/**`
 - `app/api/captain/logout/**`
@@ -132,8 +141,12 @@ Role: Frontend.
 - `app/api/reservations/**`
 - `app/api/public/reservations/**`
 - `lib/services/table.service.ts`
+- `lib/repositories/table.repository.ts`
 - `lib/services/reservation.service.ts`
+- `lib/repositories/reservation.repository.ts`
 - `lib/services/service-request.service.ts`
+- `lib/repositories/service-request.repository.ts`
+- `lib/validations/captain-authorize.ts`
 - `lib/captain-floor.ts`
 - `lib/captain-permissions.ts`
 - `lib/kitchen-board.ts`
@@ -165,10 +178,15 @@ Role: Frontend, with Backend on the import engine.
 - `lib/menu-import/**`
 - `lib/menu-export/**`
 - `lib/services/dish.service.ts`
+- `lib/repositories/dish.repository.ts`
 - `lib/services/category.service.ts`
+- `lib/repositories/category.repository.ts`
 - `lib/services/addon.service.ts`
+- `lib/repositories/addon.repository.ts`
+- `lib/repositories/import-job.repository.ts`
 - `lib/services/menu-import.service.ts`
 - `lib/services/media.service.ts`
+- `lib/repositories/media.repository.ts`
 - `lib/dish-addons.ts`
 - `lib/dish-media.ts`
 - `tests/menu-import.test.ts`
@@ -204,6 +222,8 @@ Role: Backend. Reviewer: CTO.
 - `lib/db/import-job-model.ts`
 - `lib/db/rate-limit-model.ts`
 - `lib/db/translation-model.ts`
+- `lib/db/mongodb.ts`
+- `lib/db/mongo-tx.ts`
 - `lib/repositories/types.ts`
 - `types/**`
 - `lib/repositories/index.ts`
@@ -218,6 +238,10 @@ Role: Backend. Own queue.
 
 - `lib/inventory/**`
 - `lib/services/inventory.service.ts`
+- `lib/repositories/inventory.repository.ts`
+- `tests/integration/mongo-concurrency.test.ts`
+
+I1 owns that integration file. Coupon and loyalty cases are a queued patch from I3. Purchase-receipt cases are a queued patch from I2. I1 lands them one at a time.
 - `components/admin/InventoryManager.tsx`
 - `components/admin/RecipeEditor.tsx`
 - `app/admin/[slug]/inventory/**`
@@ -230,6 +254,7 @@ Role: Backend. Own queue.
 Role: Backend. Own queue.
 
 - `lib/services/procurement.service.ts`
+- `lib/repositories/procurement.repository.ts`
 - `components/admin/ProcurementManager.tsx`
 - `app/admin/[slug]/procurement/**`
 - `app/api/procurement/**`
@@ -240,6 +265,7 @@ Role: Backend. Own queue.
 
 - `lib/crm/**`
 - `lib/services/crm.service.ts`
+- `lib/repositories/crm.repository.ts`
 - `components/admin/CrmManager.tsx`
 - `app/admin/[slug]/crm/**`
 - `app/api/crm/**`
@@ -252,6 +278,7 @@ Role: Backend. Own queue.
 
 - `lib/org-rbac.ts`
 - `lib/services/organization.service.ts`
+- `lib/repositories/organization.repository.ts`
 - `lib/services/menu-sync.service.ts`
 - `lib/services/access-assignment.service.ts`
 - `components/admin/OrganizationDashboard.tsx`
@@ -298,6 +325,8 @@ Role: Backend.
 - `lib/services/device-fleet.service.ts`
 - `lib/services/device-diagnostics.service.ts`
 - `lib/services/connector.service.ts`
+- `lib/repositories/connector.repository.ts`
+- `lib/repositories/device.repository.ts`
 - `lib/services/hardware-pilot.service.ts`
 - `lib/connector-auth.ts`
 - `device-connector/**` including `device-connector/package.json` and `device-connector/package-lock.json`
@@ -356,3 +385,47 @@ Role: UI/UX, implemented by Frontend.
 - `lib/theme.ts`
 
 Nav entries from other streams are queued patches, one link per integration.
+
+## Validation modules after Wave 0
+
+Wave 0 creates these files. After that merge, the named stream is the only editor. H edits `lib/validations/index.ts` only, and only to re-export.
+
+| Module | Owner after Wave 0 |
+| --- | --- |
+| `lib/validations/index.ts` | H |
+| `lib/validations/auth.ts` | D |
+| `lib/validations/orders.ts` | B |
+| `lib/validations/billing.ts` | B |
+| `lib/validations/captain-authorize.ts` (already in the tree) | E |
+| `lib/validations/captain.ts` | E |
+| `lib/validations/tables.ts` | E |
+| `lib/validations/reservations.ts` | E |
+| `lib/validations/catalog.ts` | F |
+| `lib/validations/loyalty.ts` | G |
+| `lib/validations/inventory.ts` | I1 |
+| `lib/validations/procurement.ts` | I2 |
+| `lib/validations/crm.ts` | I3 |
+| `lib/validations/organization.ts` | I4 |
+| `lib/validations/devices.ts` | K |
+
+## Queued security and CI patches
+
+A and L specify the check. The path owner writes the code.
+
+| Duty | Spec owner | Path owner who lands the patch |
+| --- | --- | --- |
+| Rate limit on `POST /api/public/orders` | A | B |
+| Rate limit on loyalty login, register, and reset | A | G |
+| Rate limit on public Wi-Fi reveal | A | G (`app/api/public/restaurants/**`) |
+| Rate limit on pairing-code claims | A | K (`app/api/connector/pair`) |
+| Origin / CSRF on a cookie-authenticated mutation | A | The stream that owns that route |
+| IDOR case for a route | A (matrix test in `tests/api-proxy-authz.test.ts` only) | The stream that owns the route's test file |
+| Fail-closed login limiter | A | D (`lib/security/**`) |
+| CI fails if integration tests are skipped | L (`.github/**`) | L |
+| Payment crash-retry and concurrency tests | L's gate | B |
+| Malformed workbook and import/export compatibility tests | L's gate | F |
+| UI vs server parity matrix, screen half | L's gate | C |
+| UI vs server parity matrix, server half | L's gate | B (`tests/billing-calculator.test.ts`) |
+| Migration-safety note when `lib/db/**` changes | L's gate | H |
+| Rotation assessment for previously seeded credentials | L's gate | D (`lib/demo/**`, `scripts/verify-demo-reupload-import.mjs`) |
+| Dependency add or bump in the root manifests | requesting stream | L |

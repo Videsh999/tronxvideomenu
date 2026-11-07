@@ -7,7 +7,7 @@ Source: audit PR https://github.com/Videsh999/tronxvideomenu/pull/1 (branch `pro
 | Epic | Workstream | Name | Tasks |
 |---|---|---|---|
 | ROS-E00 | Wave 0 | Validation split (serial prerequisite) | 1 |
-| ROS-E01 | A | Authz matrix | 4 |
+| ROS-E01 | A | Authz matrix (per handler, no blanket class) | 4 |
 | ROS-E02 | B | Order aggregate | 6 |
 | ROS-E03 | C | Bill UI | 3 |
 | ROS-E04 | D | Identities | 8 |
@@ -18,7 +18,7 @@ Source: audit PR https://github.com/Videsh999/tronxvideomenu/pull/1 (branch `pro
 | ROS-E09 | I | Inventory, procurement, CRM, reports, multi-outlet | 1 |
 | ROS-E10 | J | AI | 1 |
 | ROS-E11 | K | Hardware | 1 |
-| ROS-E12 | L | DevOps | 8 |
+| ROS-E12 | L | DevOps | 14 |
 | ROS-E13 | M | Demo and QA | 7 |
 | ROS-E14 | N | UI shell | 1 |
 
@@ -27,8 +27,8 @@ Source: audit PR https://github.com/Videsh999/tronxvideomenu/pull/1 (branch `pro
 | ID | Title | Owner | Status | Reviewer |
 |---|---|---|---|---|
 | ROS-E00-T001 | Split lib/validations/index.ts into domain modules + re-export barrel | TRONX BACKEND ENGINEER | In Progress | TRONX CTO |
-| ROS-E01-T001 | Classify customer loyalty routes as `customer` (or public + handler customer session) | TRONX BACKEND ENGINEER | In Progress | TRONX CTO |
-| ROS-E01-T002 | Add `connector` proxy class for /api/connector/* so requireConnectorAuth runs | TRONX BACKEND ENGINEER | In Progress | TRONX CTO |
+| ROS-E01-T001 | Loyalty login, register, and reset stay anonymous (no existing customer session) | TRONX BACKEND ENGINEER | In Progress | TRONX CTO |
+| ROS-E01-T002 | Pair accepts a pairing code; heartbeat, jobs, and ack use the connector secret | TRONX BACKEND ENGINEER | In Progress | TRONX CTO |
 | ROS-E01-T003 | Route-enumeration authz test covering every app/api/**/route.ts method (173 handlers) | TRONX BACKEND ENGINEER | In Progress | TRONX CTO |
 | ROS-E01-T004 | Remove `public` classification of POST /api/dev/seed-demo-kitchen | TRONX BACKEND ENGINEER | In Progress | TRONX CTO |
 | ROS-E02-T001 | Line cancel uses calculateRestaurantBill and persists all money fields | TRONX BACKEND ENGINEER | In Progress | TRONX CTO |
@@ -39,7 +39,7 @@ Source: audit PR https://github.com/Videsh999/tronxvideomenu/pull/1 (branch `pro
 | ROS-E02-T006 | Surface KOT print failures instead of swallowing them | TRONX BACKEND ENGINEER | In Progress | TRONX CTO |
 | ROS-E03-T001 | POS terminal preview uses calculateRestaurantBill | TRONX FRONTEND ENGINEER | In Progress | TRONX CTO |
 | ROS-E03-T002 | Captain order pad preview uses calculateRestaurantBill | TRONX FRONTEND ENGINEER | In Progress | TRONX CTO |
-| ROS-E03-T003 | Screen-vs-server bill parity unit test | TRONX FRONTEND ENGINEER | In Progress | TRONX CTO |
+| ROS-E03-T003 | Billing parity unit test (owned by Stream B) | TRONX BACKEND ENGINEER | In Progress | TRONX CTO |
 | ROS-E04-T001 | Fix stale captain credential test double (touchLastActiveAt) | TRONX BACKEND ENGINEER | In Progress | TRONX CTO |
 | ROS-E04-T002 | Remove committed demo password literals; seed reads from environment | TRONX BACKEND ENGINEER | In Progress | TRONX CTO |
 | ROS-E04-T003 | Remove recoverable staff passwords or gate behind an audited reveal with reason | TRONX BACKEND ENGINEER | Backlog | TRONX CTO |
@@ -62,7 +62,7 @@ Source: audit PR https://github.com/Videsh999/tronxvideomenu/pull/1 (branch `pro
 | ROS-E08-T003 | Require Mongo replica set; fail startup if transaction probe fails | TRONX BACKEND ENGINEER | Backlog | TRONX CTO |
 | ROS-E09-T001 | Inventory/procurement/CRM/org-reports regression guard | TRONX BACKEND ENGINEER | Backlog | TRONX CTO |
 | ROS-E10-T001 | AI safety invariants preserved | TRONX BACKEND ENGINEER | Backlog | TRONX CTO |
-| ROS-E11-T001 | Connector handlers and client work with new connector class | TRONX BACKEND ENGINEER | Backlog | TRONX CTO |
+| ROS-E11-T001 | Pair uses a pairing code; heartbeat, jobs, and ack use the connector secret | TRONX BACKEND ENGINEER | Backlog | TRONX CTO |
 | ROS-E12-T001 | GitHub Actions PR workflow: lint, typecheck, unit tests | TRONX DEVOPS ENGINEER | In Progress | TRONX CTO |
 | ROS-E12-T002 | CI integration job on Mongo replica-set service container | TRONX DEVOPS ENGINEER | In Progress | TRONX CTO |
 | ROS-E12-T003 | Remove typescript.ignoreBuildErrors once tsc is clean | TRONX DEVOPS ENGINEER | In Progress | TRONX CTO |
@@ -71,6 +71,12 @@ Source: audit PR https://github.com/Videsh999/tronxvideomenu/pull/1 (branch `pro
 | ROS-E12-T006 | CI npm audit and secret scan | TRONX DEVOPS ENGINEER | In Progress | TRONX CTO |
 | ROS-E12-T007 | Remove hardcoded dev LAN origin | TRONX DEVOPS ENGINEER | In Progress | TRONX CTO |
 | ROS-E12-T008 | Assess next@16.3.6 critical and zod/source-map-js high advisories | TRONX DEVOPS ENGINEER | Backlog | TRONX CTO |
+| ROS-E12-T009 | CI fails when integration tests are skipped | TRONX DEVOPS ENGINEER | In Progress | TRONX CTO |
+| ROS-E12-T010 | Payment retry tests are a Wave 1 gate | TRONX DEVOPS ENGINEER | In Progress | TRONX CTO |
+| ROS-E12-T011 | Malformed-workbook and import/export compatibility tests | TRONX DEVOPS ENGINEER | In Progress | TRONX CTO |
+| ROS-E12-T012 | Full UI vs server bill parity matrix | TRONX DEVOPS ENGINEER | In Progress | TRONX CTO |
+| ROS-E12-T013 | Migration-safety or no-data-changes declaration | TRONX DEVOPS ENGINEER | In Progress | TRONX CTO |
+| ROS-E12-T014 | Rotation assessment for previously seeded credentials | TRONX DEVOPS ENGINEER | In Progress | TRONX CTO |
 | ROS-E13-T001 | scripts/seed-pro-max-demo.ts (Phase A, loopback only) | TRONX QA ENGINEER | Backlog | TRONX CTO |
 | ROS-E13-T002 | scripts/cleanup-pro-max-demo.ts | TRONX QA ENGINEER | Backlog | TRONX CTO |
 | ROS-E13-T003 | Demo seed Phase B: 2 managers, 2 cashiers, 3 kitchen users | TRONX QA ENGINEER | Backlog | TRONX CTO |
@@ -105,33 +111,36 @@ Source: audit PR https://github.com/Videsh999/tronxvideomenu/pull/1 (branch `pro
 
 ### ROS-E01 — A: Authz matrix
 
-#### ROS-E01-T001 — Classify customer loyalty routes as `customer` (or public + handler customer session)
+#### ROS-E01-T001 — Loyalty login, register, and reset stay anonymous (no existing customer session)
 
 - **Source:** F-01; Stream A
 - **Owner:** TRONX BACKEND ENGINEER
-- **Objective:** Let guests reach the existing loyalty handlers, which the proxy currently rejects as `staff`.
+- **Objective:** Let guests reach the existing loyalty handlers, which the proxy currently rejects as `staff`. Do not add a proxy class that requires a customer cookie.
 - **Dependencies:** —
 - **Affected files:** `proxy.ts`, `lib/api-authz.ts`, `tests/api-proxy-authz.test.ts`
 - **Acceptance criteria:**
-  - [ ] POST /api/public/loyalty/{login,register,forgot-password,reset-password,logout} and GET /api/public/loyalty/me no longer classify as `staff`
-  - [ ] Requests with no staff cookie reach the handler (no proxy 401)
+  - [ ] POST /api/public/loyalty/login, register, forgot-password, and reset-password are reachable with no customer cookie and no staff cookie
+  - [ ] The proxy must not require an existing customer session for login, register, or reset. A test fails if it does
+  - [ ] POST logout and GET /me are reachable with no staff cookie. `me` may return `data: null` when the customer cookie is absent
+  - [ ] There is no blanket `customer` class on `/api/public/loyalty/*`
   - [ ] Existing captain-vs-admin proxy tests still pass
 - **Status:** In Progress
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
 - **Completion date:** —
 
-#### ROS-E01-T002 — Add `connector` proxy class for /api/connector/* so requireConnectorAuth runs
+#### ROS-E01-T002 — Pair accepts a pairing code; heartbeat, jobs, and ack use the connector secret
 
 - **Source:** F-01; Stream A; Stream K
 - **Owner:** TRONX BACKEND ENGINEER
-- **Objective:** Let the Windows connector authenticate with x-connector-id / x-connector-secret instead of being blocked as `staff`.
+- **Objective:** Stop the proxy treating pairing and the secret channel as one staff route.
 - **Dependencies:** —
 - **Affected files:** `proxy.ts`, `lib/api-authz.ts`, `tests/api-proxy-authz.test.ts`
 - **Acceptance criteria:**
-  - [ ] POST /api/connector/pair, POST /api/connector/heartbeat, GET /api/connector/jobs, POST /api/connector/jobs/[jobId]/ack classify as `connector`
-  - [ ] With no staff cookie, the request reaches `requireConnectorAuth`
-  - [ ] Handlers still reject a request without a valid connector secret
+  - [ ] POST /api/connector/pair accepts a pairing code and does not call `requireConnectorAuth`. A connector secret is not required. No staff cookie is required
+  - [ ] POST /api/connector/heartbeat, GET /api/connector/jobs, and POST /api/connector/jobs/[jobId]/ack reach `requireConnectorAuth` with no staff cookie
+  - [ ] Those three reject a request that has no valid connector secret. A pairing code is not a substitute for that secret
+  - [ ] There is no single `connector` class that applies one credential to all four routes
 - **Status:** In Progress
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
@@ -183,7 +192,12 @@ Source: audit PR https://github.com/Videsh999/tronxvideomenu/pull/1 (branch `pro
 - **Acceptance criteria:**
   - [ ] Line cancel (lib/services/order.service.ts:1530-1550) calls `calculateRestaurantBill`, not `computeBillTotals`
   - [ ] Cancel persists cgstAmount, sgstAmount, igstAmount, packagingCharge, serviceCharge and billSnapshot together with total
-  - [ ] New unit test: after a partial cancel, stored CGST, SGST, IGST, packaging and total equal `calculateRestaurantBill` for the remaining lines
+  - [ ] Existing lines keep frozen unit prices, line totals, and the GST rate stored when the line was created. Append does not re-resolve those rates from the live menu (order.service.ts:750-770). Order-level packaging, service charge, and supply type come from the frozen billSnapshot settings
+  - [ ] `replaceItemsAndTotals` compare-and-swaps on a version or `updatedAt`. A second writer that read the old version does not overwrite the first
+  - [ ] The cancellation idempotency marker commits in the same transaction as the money write. A crash between them is not observable
+  - [ ] Crash-retry test: fail after the total write and before the marker; the retry does not cancel the quantity again
+  - [ ] Concurrency test: two appends or an append and a cancel on one order; exactly one wins the version; the loser reapplies on the new snapshot
+  - [ ] New unit test: after a partial cancel, stored CGST, SGST, IGST, packaging and total equal `calculateRestaurantBill` for the remaining lines at the frozen rates
 - **Status:** In Progress
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
@@ -278,9 +292,9 @@ Source: audit PR https://github.com/Videsh999/tronxvideomenu/pull/1 (branch `pro
 
 - **Source:** F-03; Stream C
 - **Owner:** TRONX FRONTEND ENGINEER
-- **Objective:** Make the amount the cashier sees equal what the server stores.
-- **Dependencies:** —
-- **Affected files:** `components/admin/PosTerminal.tsx`, `lib/billing/calculate-bill.ts`
+- **Objective:** Make the amount the cashier sees equal what the server stores. Consume B's billing contract. Do not edit it.
+- **Dependencies:** ROS-E02-T001
+- **Affected files:** `components/admin/PosTerminal.tsx`, `app/admin/[slug]/pos/page.tsx`
 - **Acceptance criteria:**
   - [ ] PosTerminal no longer imports `computeBillTotals` or a single `taxRatePercent`
   - [ ] On-screen total equals `calculateRestaurantBill` for packaging, service charge, inclusive mode, mixed dish rates and IGST
@@ -288,15 +302,15 @@ Source: audit PR https://github.com/Videsh999/tronxvideomenu/pull/1 (branch `pro
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
 - **Completion date:** —
-- **Notes:** Stream C also names TRONX BACKEND ENGINEER as reviewer for the calculator import.
+- **Notes:** Depends on B's billing contract (ROS-E02-T001). Must not include `lib/billing/**` or `lib/order-pricing.ts`. Backend reviews the import only.
 
 #### ROS-E03-T002 — Captain order pad preview uses calculateRestaurantBill
 
 - **Source:** F-03; Stream C
 - **Owner:** TRONX FRONTEND ENGINEER
-- **Objective:** Make the captain's bill preview match the server.
-- **Dependencies:** —
-- **Affected files:** `components/captain/CaptainOrderPad.tsx`, `lib/billing/calculate-bill.ts`
+- **Objective:** Make the captain's bill preview match the server. Consume B's billing contract. Do not edit it.
+- **Dependencies:** ROS-E02-T001
+- **Affected files:** `components/captain/CaptainOrderPad.tsx`, `app/captain/[slug]/take-order/page.tsx`
 - **Acceptance criteria:**
   - [ ] CaptainOrderPad no longer imports `computeBillTotals`
   - [ ] On-screen total equals `calculateRestaurantBill` for packaging, service charge, inclusive mode and IGST
@@ -304,18 +318,19 @@ Source: audit PR https://github.com/Videsh999/tronxvideomenu/pull/1 (branch `pro
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
 - **Completion date:** —
-- **Notes:** Backend also reviews the calculator import (Stream C).
+- **Notes:** Depends on B's billing contract (ROS-E02-T001). Must not include `lib/billing/**` or `lib/order-pricing.ts`. `take-order/page.tsx` is E's handoff to C.
 
-#### ROS-E03-T003 — Screen-vs-server bill parity unit test
+#### ROS-E03-T003 — Billing parity unit test (owned by Stream B)
 
-- **Source:** Stream C acceptance
-- **Owner:** TRONX FRONTEND ENGINEER
-- **Objective:** Lock in parity between UI helper and server helper.
-- **Dependencies:** ROS-E03-T001, ROS-E03-T002
+- **Source:** Stream B billing contract; F-02; F-03
+- **Owner:** TRONX BACKEND ENGINEER
+- **Objective:** Lock the server calculator. This test is B's. C does not edit it.
+- **Dependencies:** ROS-E02-T001
 - **Affected files:** `tests/billing-calculator.test.ts`
 - **Acceptance criteria:**
-  - [ ] A unit test feeds the same lines to the screen helper and to `calculateRestaurantBill` and asserts equal totals and tax split
-  - [ ] Covers packaging, service charge, inclusive and IGST cases
+  - [ ] Owned and edited by Stream B (Backend), in `tests/billing-calculator.test.ts` only
+  - [ ] Asserts `calculateRestaurantBill` totals and tax split for mixed rates, inclusive tax, IGST, discounts, packaging, and service charge
+  - [ ] C's screens are covered by ROS-E12-T011, not by editing this file
 - **Status:** In Progress
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
@@ -528,7 +543,8 @@ Source: audit PR https://github.com/Videsh999/tronxvideomenu/pull/1 (branch `pro
 - **Owner:** TRONX BACKEND ENGINEER
 - **Objective:** Stop the vulnerable parser handling uploaded workbooks on the server.
 - **Dependencies:** —
-- **Affected files:** `package.json`, `lib/menu-import/`, `lib/menu-export/`, `tests/menu-import.test.ts`, `tests/menu-export.test.ts`
+- **Affected files:** `lib/menu-import/`, `lib/menu-export/`, `tests/menu-import.test.ts`, `tests/menu-export.test.ts`
+- **Notes:** Any root `package.json` or lockfile change is a queued patch to L. F does not edit those files.
 - **Acceptance criteria:**
   - [ ] Uploaded workbooks are not parsed by xlsx@0.18.5
   - [ ] `npm audit` no longer reports the xlsx high advisories (or the parser is isolated, documented)
@@ -693,7 +709,7 @@ Source: audit PR https://github.com/Videsh999/tronxvideomenu/pull/1 (branch `pro
 
 ### ROS-E11 — K: Hardware
 
-#### ROS-E11-T001 — Connector handlers and client work with new connector class
+#### ROS-E11-T001 — Pair uses a pairing code; heartbeat, jobs, and ack use the connector secret
 
 - **Source:** F-01 (connector); Stream K
 - **Owner:** TRONX BACKEND ENGINEER
@@ -701,8 +717,8 @@ Source: audit PR https://github.com/Videsh999/tronxvideomenu/pull/1 (branch `pro
 - **Dependencies:** ROS-E01-T002
 - **Affected files:** `app/api/connector/`, `lib/connector-auth.ts`, `device-connector/`, `tests/connector-pairing.test.ts`
 - **Acceptance criteria:**
-  - [ ] Connector can pair, heartbeat, poll jobs and ack with no staff cookie
-  - [ ] Handlers still require the connector secret
+  - [ ] Pair accepts a pairing code and does not require a connector secret or `requireConnectorAuth`
+  - [ ] Heartbeat, job poll, and ack require the connector secret and no staff cookie
   - [ ] device-connector tests pass (8/8 baseline); USB stays labeled unsupported
 - **Status:** Backlog
 - **Test evidence:** —
@@ -737,6 +753,7 @@ Source: audit PR https://github.com/Videsh999/tronxvideomenu/pull/1 (branch `pro
 - **Acceptance criteria:**
   - [ ] Job starts a replica-set service container and sets RUN_INTEGRATION=1 and MONGODB_URI
   - [ ] 8 integration tests execute (not skipped) and results are recorded
+  - [ ] CI fails if any integration test is skipped or if RUN_INTEGRATION is unset
 - **Status:** In Progress
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
@@ -833,7 +850,100 @@ Source: audit PR https://github.com/Videsh999/tronxvideomenu/pull/1 (branch `pro
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
 - **Completion date:** —
-- **Notes:** Audit says the next critical is not confirmed reachable; not assigned to any stream.
+- **Notes:** Audit says the next critical is not confirmed reachable. `package.json` is L's. Domain code changes are queued patches to the path owner.
+
+#### ROS-E12-T009 — CI fails when integration tests are skipped
+
+- **Source:** CTO re-review 2026-11-07; F-10
+- **Owner:** TRONX DEVOPS ENGINEER
+- **Objective:** A green CI run must have executed the integration suite.
+- **Dependencies:** ROS-E12-T002
+- **Affected files:** `.github/workflows/`
+- **Acceptance criteria:**
+  - [ ] The workflow exits non-zero when `tests/integration` reports a skip, or when `RUN_INTEGRATION` is not `1`
+  - [ ] A run that skips all 8 tests cannot be Ready for Release
+- **Status:** In Progress
+- **Test evidence:** —
+- **Reviewer:** TRONX CTO
+- **Completion date:** —
+
+#### ROS-E12-T010 — Payment retry tests are a Wave 1 gate
+
+- **Source:** CTO re-review 2026-11-07; F-02
+- **Owner:** TRONX DEVOPS ENGINEER
+- **Objective:** CI requires the payment crash-retry and concurrency tests. B writes them on B's files.
+- **Dependencies:** ROS-E02-T001, ROS-E12-T001
+- **Affected files:** `.github/workflows/`
+- **Acceptance criteria:**
+  - [ ] CI fails if the crash-retry and concurrency tests named on ROS-E02-T001 are missing or failing
+  - [ ] The test code is a queued patch to B (`lib/services/order.service.ts`, `lib/repositories/order.repository.ts`, `tests/order-*.ts`). L does not edit those files
+- **Status:** In Progress
+- **Test evidence:** —
+- **Reviewer:** TRONX CTO
+- **Completion date:** —
+
+#### ROS-E12-T011 — Malformed-workbook and import/export compatibility tests
+
+- **Source:** CTO re-review 2026-11-07; F-08
+- **Owner:** TRONX DEVOPS ENGINEER
+- **Objective:** CI requires workbook rejection and round-trip compatibility. F writes the tests.
+- **Dependencies:** ROS-E06-T001, ROS-E12-T001
+- **Affected files:** `.github/workflows/`
+- **Acceptance criteria:**
+  - [ ] CI fails if a malformed-workbook test and an import/export compatibility test are missing or failing
+  - [ ] Test code is a queued patch to F (`lib/menu-import/`, `lib/menu-export/`, `tests/menu-import.test.ts`, `tests/menu-export.test.ts`). L does not edit those files
+- **Status:** In Progress
+- **Test evidence:** —
+- **Reviewer:** TRONX CTO
+- **Completion date:** —
+
+#### ROS-E12-T012 — Full UI vs server bill parity matrix
+
+- **Source:** CTO re-review 2026-11-07; F-02; F-03
+- **Owner:** TRONX DEVOPS ENGINEER
+- **Objective:** CI requires the parity matrix. B owns the server expected values. C owns the screen assertions.
+- **Dependencies:** ROS-E02-T001, ROS-E03-T001, ROS-E03-T002, ROS-E03-T003
+- **Affected files:** `.github/workflows/`
+- **Acceptance criteria:**
+  - [ ] The matrix covers mixed rates, inclusive tax, IGST, discounts, packaging, service charge, and cancelled quantities
+  - [ ] CI fails if that matrix is missing or failing
+  - [ ] Server cases are a queued patch to B (`tests/billing-calculator.test.ts`). Screen cases are a queued patch to C (`components/admin/PosTerminal.tsx`, `components/captain/CaptainOrderPad.tsx`). L does not edit those files
+- **Status:** In Progress
+- **Test evidence:** —
+- **Reviewer:** TRONX CTO
+- **Completion date:** —
+
+#### ROS-E12-T013 — Migration-safety or no-data-changes declaration
+
+- **Source:** CTO re-review 2026-11-07; schema section of the architecture doc
+- **Owner:** TRONX DEVOPS ENGINEER
+- **Objective:** Every Wave 1 PR states whether it changes stored documents.
+- **Dependencies:** ROS-E12-T001
+- **Affected files:** `.github/workflows/`
+- **Acceptance criteria:**
+  - [ ] CI or the PR template requires either a migration-safety note (versioned backfill, staged index, rollback, restore) or an explicit "no data changes" declaration
+  - [ ] A PR that edits `lib/db/models.ts` cannot declare "no data changes"
+  - [ ] Schema edits stay a queued patch to H
+- **Status:** In Progress
+- **Test evidence:** —
+- **Reviewer:** TRONX CTO
+- **Completion date:** —
+
+#### ROS-E12-T014 — Rotation assessment for previously seeded credentials
+
+- **Source:** CTO re-review 2026-11-07; F-06
+- **Owner:** TRONX DEVOPS ENGINEER
+- **Objective:** Record whether databases that already ran the legacy seed must rotate staff credentials. Do not print secret values.
+- **Dependencies:** ROS-E04-T002
+- **Affected files:** `.github/workflows/`
+- **Acceptance criteria:**
+  - [ ] A written assessment, with no credential values, says which seeded accounts need rotation after the literals leave git
+  - [ ] The assessment is a queued patch to D for `lib/demo/**` and `scripts/verify-demo-reupload-import.mjs`. L does not edit those files
+  - [ ] CI does not echo env values
+- **Status:** In Progress
+- **Test evidence:** —
+- **Reviewer:** TRONX CTO
+- **Completion date:** —
 
 
 ### ROS-E13 — M: Demo and QA
@@ -843,7 +953,7 @@ Source: audit PR https://github.com/Videsh999/tronxvideomenu/pull/1 (branch `pro
 - **Source:** Stream M; Demo plan
 - **Owner:** TRONX QA ENGINEER
 - **Objective:** Build the TRONX PRO MAX DEMO RESTAURANT seed with today's roles.
-- **Dependencies:** ROS-E12-T002, ROS-E04-T002
+- **Dependencies:** ROS-E12-T002
 - **Affected files:** `scripts/seed-pro-max-demo.ts`, `fixtures/pro-max/`
 - **Acceptance criteria:**
   - [ ] Refuses unless MONGODB_URI contains localhost/127.0.0.1 and when NODE_ENV=production; ignores ALLOW_PRODUCTION_SEED
@@ -858,7 +968,7 @@ Source: audit PR https://github.com/Videsh999/tronxvideomenu/pull/1 (branch `pro
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
 - **Completion date:** —
-- **Notes:** DevOps supplies the database (Stream M). CEO 2026-11-07: M builds this new seed separately and does not edit `lib/demo/seed-demo-kitchen.ts` until ROS-E04-T002 has merged. Passwords come from env names only; never commit a password value.
+- **Notes:** DevOps supplies the database (Stream M). M never edits `lib/demo/seed-demo-kitchen.ts`, `lib/demo/**`, the legacy seed route, or `scripts/verify-demo-reupload-import.mjs`. Those stay with D (PATH_OWNERS.md). Passwords come from env names only; never commit a password value.
 
 #### ROS-E13-T002 — scripts/cleanup-pro-max-demo.ts
 
@@ -981,10 +1091,10 @@ Source: audit PR https://github.com/Videsh999/tronxvideomenu/pull/1 (branch `pro
 
 1. **Wave 0 (validation split, ROS-E00-T001)** – Decided 2026-11-07: it runs first, status In Progress, and lands in `pro-max/release` ahead of the Wave 2 streams. ROS-E02-T002 still depends on it.
 2. **"Part of D" in Wave 1** – Decided 2026-11-07: ROS-E04-T001 (F-16), ROS-E04-T002 (demo password literals and the credential verification script), and the public seed lockdown (ROS-E01-T004). Memberships (ROS-E04-T004 and later identity work) stay Backlog.
-3. **Seed file conflict** – Decided 2026-11-07: D owns `lib/demo/seed-demo-kitchen.ts` and the legacy seed route. In Wave 1, D may only remove credential literals. M builds the new demo seed separately and does not touch that file until ROS-E04-T002 has merged.
+3. **Seed file conflict** – Decided 2026-11-07, aligned with PATH_OWNERS.md: D owns `lib/demo/seed-demo-kitchen.ts` and the legacy seed route. In Wave 1, D may only remove credential literals. M never edits those paths. M builds `scripts/seed-pro-max-demo.ts` only.
 4. **Typecheck item vs stream ownership** – Decided 2026-11-07 for Wave 1: the single Wave 1 implementer makes the TablesManager typecheck fix serially. The E stream lead reviews that diff in the Wave 1 PR. From Wave 2, PATH_OWNERS.md governs. `ignoreBuildErrors` still comes off only after E and B leave tsc clean (L's final gate).
 5. **Lint fixes cross streams** – Decided 2026-11-07 for Wave 1: the single Wave 1 implementer makes lint fixes in C, E, or F files serially. The owning stream lead reviews those diffs in the Wave 1 PR. From Wave 2, PATH_OWNERS.md governs. `CaptainOrderPad.tsx` still coordinates with ROS-E03-T002.
-6. **Files in no stream** – `app/api/pos/shifts/**`, `app/api/pos/orders/[orderId]/refund/**`, `lib/services/pos-shift.service.ts`, `lib/db/mongo-tx.ts`, `app/api/restaurants/**`, `lib/restaurant-normalize.ts`, `package.json` (non-xlsx deps), legacy unscoped admin pages (`app/admin/menu/`, `app/admin/media/`, `app/admin/profile/`, `app/admin/availability/`). `app/api/dev/seed-demo-kitchen/route.ts` is decided: D owns it. The rest are still open. PATH_OWNERS.md is the Wave 2 rule.
+6. **Remaining unassigned pages** – legacy unscoped admin pages (`app/admin/menu/`, `app/admin/media/`, `app/admin/profile/`, `app/admin/availability/`). Shifts, refunds, `package.json`, `lib/db/mongo-tx.ts`, `lib/db/mongodb.ts`, the pos-shift service and repository, domain repositories, `app/api/restaurants/**`, and `lib/restaurant-normalize.ts` now have owners in PATH_OWNERS.md. `package.json` is L. Refunds are B (`app/api/pos/orders/**`). The legacy seed route is D.
 7. **Payment gateway** – Decided 2026-11-07: stays parked under D (ROS-E04-T007) as Backlog. Founder decision pending. No provider is chosen here.
 8. **Remediation details not specified by audit** – target proxy class for the demo seed route (F-07), rate-limit thresholds (F-12, F-14), whether to keep fail-open limiter (F-13), whether non-Kolkata timezones are in scope (F-18), new marketing copy (F-19), password recovery remove vs audited reveal (F-06).
 9. **Realtime/SSE** (target architecture #7, "later") and live Vercel config (NOT TESTED) – no task created; confirm scope.
