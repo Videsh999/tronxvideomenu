@@ -401,30 +401,62 @@ Role: UI/UX, implemented by Frontend.
 
 Nav entries from other streams are queued patches, one link per integration.
 
-## O — Payments and WhatsApp
+## O — Payment requests, providers and WhatsApp
 
-Role: Backend for the provider abstraction and ledger. Frontend for the settings and tender UI. B keeps `lib/billing/**` and `lib/order-pricing.ts`. O does not edit those files. It calls B's contract for the payable amount.
+This section replaces the earlier proposed Stream O. Source: CTO patch `PATH_OWNERS_STREAM_O_PATCH`, 2026-11-07. Status: Proposed.
 
-Pending CTO confirmation of the paths below. Until then, do not start the build on other streams' files.
+O integration depends on Wave 1's single billing writer and ledger and on the crash-retry gates, on Wave 0 validation contracts, and on B's finalized bill, version, and outstanding-balance contract. H's approved staged schema and index changes precede O consumers. A's exact per-handler auth contract precedes route acceptance. D and H capabilities precede full-role acceptance. O is not merge-independent.
 
-Backend:
+Sequence: capability and ADR approval, then B, H, and A queued contract, schema, and auth prerequisites, then O backend and the dedicated Frontend UI, then C, E, G, I5, and K queued caller, report, and kitchen integrations, then M actual-app sandbox QA, then L's final required checks and lockfile. Dependency additions needed earlier still land only through L. Final required-check integration stays last. Each shared file has one owner, one queued patch, one integration at a time. Implementation PRs target `pro-max/release`. No merge or deploy to `main`, no real payment, and no go-live without Founder approval.
 
-- `lib/payments/**` — provider abstraction, payment requests, billing policy engine, tips
-- `lib/whatsapp/**` — WhatsApp module
-- `app/api/payments/**`
-- `app/api/webhooks/**`
-- Ledger writes that touch `lib/services/order.service.ts` or `lib/repositories/order.repository.ts` are a queued patch to B
+Role: Backend Engineer. Reviewer: CTO. The Frontend Engineer alone edits the dedicated UI paths below. Backend is not a second editor of those files.
 
-Frontend:
+### Backend Engineer-owned new paths
 
-- `app/admin/[slug]/settings/payments/**`
-- `app/admin/[slug]/settings/whatsapp/**`
-- `components/admin/PaymentsSettings.tsx`
-- `components/admin/WhatsAppSettings.tsx`
-- `components/admin/BillingPreferencesForm.tsx`
-- Captain and POS payment controls that are not the bill calculator: queued patches to C for `components/admin/PosTerminal.tsx` and `components/captain/CaptainOrderPad.tsx`, one file at a time, after B's contract
+- `lib/payments/**`: provider interface and adapters, connection and request orchestration, verified-event inbox and outbox, reconciliation, and payment-specific repositories. Dedicated Mongoose files may be `lib/payments/models/**`. H reviews schema, index, and backfill safety. No second ledger, pricing calculator, payment-policy resolver, or direct order writer.
+- `lib/messaging/whatsapp/**`: account connections, consent, versioned templates, message outbox and dispatch, delivery verification, and dedicated models and repositories under this namespace. H-reviewed.
+- `app/api/payments/**`: role- and capability-gated connection, settings, request, status, refund, and review handlers. A reviews any exact public narrow-token status handler. No blanket anonymous prefix.
+- `app/api/messaging/whatsapp/**`: consent, config, template, send, and status handlers with role and outlet checks.
+- `app/api/webhooks/payments/**` and `app/api/webhooks/whatsapp/**`: narrowly scoped callbacks with product-specific verification. Do not claim all of `app/api/webhooks/**`.
+- `lib/validations/payments.ts` and `lib/validations/whatsapp.ts`: new O modules after Wave 0. H alone re-exports them in the barrel.
+- `scripts/payments/**` and `scripts/whatsapp/**`: bounded reconciliation and dispatch entrypoints. Scheduling and deploy configuration remain L.
+- `tests/payments/**` and `tests/whatsapp/**`: unit, adapter, signature, tenancy, Mongo integration, and concurrency tests. Do not claim B's order-test glob, I1's integration file, or M's E2E namespace.
+- `docs/pro-max/whatsapp-payments/**`: feature architecture, capability, implementation, security, reconciliation, and template docs. The Founder brief and provider research already live at `docs/whatsapp-payments/FOUNDER_BRIEF.md` and `docs/whatsapp-payments/PROVIDER_CAPABILITY_RESEARCH.md`.
 
-Docs for this stream live under `docs/whatsapp-payments/`. They are not application code.
+ADR numbers 0006–0011 are reserved by this patch for payments and WhatsApp. The ADR files themselves were not in the attachments for this commit, so they were not added. ADR 0005 remains the KOT failure-alert record. No KOT ADR was numbered 0006, so nothing was moved to 0012.
+
+### Frontend Engineer-owned dedicated UI paths
+
+- `components/payments/**`
+- `components/messaging/whatsapp/**`
+- `app/admin/[slug]/settings/payments-whatsapp/**`
+
+Frontend is the sole editor. These hold Payments and WhatsApp configuration, merchant and WABA status, consent, template and delivery logs, and request-status UI. Existing Billing Preferences remain C's `app/admin/[slug]/settings/billing/**` and `components/admin/BillingSettingsForm.tsx`. No duplicate bill math or settings engine in the new UI. Current POS, captain, and customer tip or bill screens require queued patches to their current owners. Navigation queues to N.
+
+### Queued patches — no ownership transfers
+
+| Change | Existing owner who integrates alone |
+| --- | --- |
+| Final bill and version, remaining balance, atomic request invalidation and outbox fence, ledger collection and refund component allocation, pure policy resolver, kitchen-release command, tip and GST math | B: `lib/billing/**`, `lib/order-pricing.ts`, `lib/services/order.service.ts`, order repository, transitions, routes, and B-owned tests |
+| Existing aggregate schemas, bill and tip fields, org backfill, common types, transaction helper, barrel exports, and migrations | H: `lib/db/models.ts`, `lib/db/mongo-mappers.ts`, `lib/db/mongo-tx.ts`, `lib/repositories/types.ts`, `types/**`, `lib/services/index.ts`, `lib/repositories/index.ts`, `lib/validations/index.ts` |
+| New dedicated O Mongoose schema and index rollout | O edits only its namespace. H reviews migration, backup, staged index, rollback, and restore. Existing H files remain H-only |
+| Changes to existing billing or order validation | B: `lib/validations/billing.ts`, `lib/validations/orders.ts`. O's new modules do not replace these |
+| Exact callback edge exceptions and the auth matrix | A: `proxy.ts`, `lib/api-authz.ts`, `tests/api-proxy-authz.test.ts`. O verifies inside O handlers |
+| Shared credential and crypto primitives and role or session consumers | D: `lib/security/**` and auth consumers. H integrates membership schema and types |
+| POS and captain billing and tips, Billing Preferences, shift and cash-close guards | C's assigned billing components, pages, settings, and shifts. E's handoff follows the existing C boundary |
+| Existing customer bill and tip surfaces | G: `components/customer/**` except E's ReservationPanel, plus `app/menu/**`. Narrow queued patches only |
+| Floor and kitchen behavior and release presentation | E's assigned callers, via B's order transitions. Never a direct O aggregate edit |
+| Device and print delivery and retry | K's assigned devices and connectors. B owns `lib/kot-print.ts` |
+| Financial, tip, and reconciliation report integration | I5: `lib/services/reporting.service.ts`, `lib/analytics/**`, report APIs and UI, and `tests/financial-reconciliation.test.ts` |
+| Admin navigation and shell | N |
+| Root dependencies, lockfile, toolchain, CI, worker scheduling, and deployment | L |
+| Synthetic A, B, and C restaurants, demo cleanup, and actual-app E2E | M: `fixtures/pro-max/**`, `tests/e2e/**`, and M's seed and cleanup scripts. D's existing demo and seed paths remain D |
+
+Do not allocate broad `models/**`, `lib/db/**`, `components/admin/**`, `components/customer/**`, `app/captain/**`, `app/api/admin/billing/**`, `tests/e2e/**`, or `app/api/webhooks/**` to O. `lib/db/models.ts` stays H's. It is not a new O namespace.
+
+Billing policy precedence, recorded for the resolver B owns: order override, then table or session, then channel or order type, then outlet, then organization, then default. Kitchen release is a separate policy and is not forced by the payment policy.
+
+The patch's effort range is an estimate, not a commitment: 35–55 engineering person-days (Backend 23–36, Frontend 12–19), plus 10–15 QA and security person-days, after prerequisite contracts and sandbox accounts. Provider, Meta, merchant, counsel, and Finance waiting time is excluded.
 
 ## Observability and release files (pending CTO confirmation)
 
@@ -436,7 +468,7 @@ Docs for this stream live under `docs/whatsapp-payments/`. They are not applicat
 | `docs/ops/BACKUP_RESTORE_DRILL.md` | L |
 | `PRODUCTION_DEPLOYMENT_CHECKLIST.md` | L |
 
-ADR 0005 (`docs/adr/0005-polling.md`) covers KOT failure alerts and retries. Proposed author of ADR 0001 through ADR 0005: TRONX BACKEND ENGINEER. Pending CTO confirmation. No ADR 0006.
+ADR 0005 (`docs/adr/0005-polling.md`) covers KOT failure alerts and retries. The v2 board did not create a KOT ADR numbered 0006, so nothing was renumbered to 0012. The CTO patch reserves numbers 0006–0011 for payments and WhatsApp. Those six ADR files were not attached and were not committed. Proposed author of ADR 0001 through ADR 0005: TRONX BACKEND ENGINEER. Pending CTO confirmation.
 
 ## Validation modules after Wave 0
 
@@ -459,6 +491,8 @@ Wave 0 creates these files. After that merge, the named stream is the only edito
 | `lib/validations/crm.ts` | I3 |
 | `lib/validations/organization.ts` | I4 |
 | `lib/validations/devices.ts` | K |
+| `lib/validations/payments.ts` | O, after Wave 0. H re-exports only |
+| `lib/validations/whatsapp.ts` | O, after Wave 0. H re-exports only |
 
 ## Queued security and CI patches
 

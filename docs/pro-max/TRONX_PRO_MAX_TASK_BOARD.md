@@ -206,7 +206,7 @@ Other spec ACs already tagged with existing IDs (ROS-E04-T007, E03-T001/T002, E0
 ## Open questions
 
 1. **Branch `pro-max/release`** now exists, created from `main` at `fcc89586190e2dd40673c7cb04f6baa358dd7969` (`fcc8958`). Implementation PRs target it.
-2. **ADR authors — pending CTO confirmation.** Proposed author for `docs/adr/0001` through `docs/adr/0005` is TRONX BACKEND ENGINEER. ADR 0005 covers KOT failure alerts and retries. No ADR 0006.
+2. **ADR authors — pending CTO confirmation.** Proposed author for `docs/adr/0001` through `docs/adr/0005` is TRONX BACKEND ENGINEER. ADR 0005 covers KOT failure alerts and retries. No KOT ADR was numbered 0006, so none was moved to 0012. ADR files 0006–0011 were not in the attachments and were not added.
 3. **Paths — pending CTO confirmation** except the legacy admin pages, which are already assigned. Logger: L, `lib/observability/logger.ts`. Request id: L proposes `lib/observability/request-id.ts`; A lands the `proxy.ts` patch. Rate-limit store: L, `lib/rate-limit/store.ts`. Backup drill: L, `docs/ops/BACKUP_RESTORE_DRILL.md`. `PRODUCTION_DEPLOYMENT_CHECKLIST.md`: L. Legacy `app/admin/menu/**`, `media/**`, and `availability/**`: F. Profile pages and `RestaurantProfileForm.tsx`: FROZEN. API-test folder for ROS-E13-T006 remains unnamed.
 4. **Stream O** is now a PATH_OWNERS.md section. Backend owns `lib/payments/**`, `lib/whatsapp/**`, `app/api/payments/**`, and `app/api/webhooks/**`. Frontend owns the payment and WhatsApp settings UI and the captain and POS payment UI. B's billing contract stays with B. Pending CTO confirmation of those proposed paths.
 5. **RPO 15 min / RTO 1 h** are stated in the audit as drill-design targets, not measurements. The board records them only as targets. — CTO
@@ -222,7 +222,7 @@ Other spec ACs already tagged with existing IDs (ROS-E04-T007, E03-T001/T002, E0
 UX_SPEC §15 questions not answered by the Founder brief:
 
 14. Template constraints: can a variable-length itemized list fit an approved template, or summary + link/PDF? Can the QR be a media header? Which BSP or Cloud API? (Q3) — CTO
-15. Policy precedence: order type > outlet > org default? The brief requires "clear precedence" but doesn't define it. (Q4) — PD proposes, Founder confirms
+15. Policy precedence is recorded: order override, then table or session, then channel or order type, then outlet, then organization, then default. Kitchen release is a separate policy. (Q4)
 16. Can the public payment page show the itemized bill (privacy review)? (Q5) — PD with CTO security review
 17. Is "superseded" its own status or CANCELLED with a reason? The brief's 9 statuses don't include it. (Q6) — CTO
 18. Customer-facing tip wording and tip % base (pre- or post-tax) (Q7), tip tax and receipt presentation (Q8). The brief only says "no assumed tax treatment". — Finance; Founder for wording
@@ -2066,7 +2066,8 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Affected files:** — (not named in source docs)
 - **Acceptance criteria:**
   - [ ] Effective policy and its reason exposed to managers
-  - [ ] Kitchen release separate, not forced
+  - [ ] Precedence is order override, then table or session, then channel or order type, then outlet, then organization, then default
+  - [ ] Kitchen release is a separate policy and is not forced
   - [ ] Open orders keep their policy when policy changes
   - [ ] Order/bill/request/collection/verification/receipt kept separate
 - **Status:** Backlog
