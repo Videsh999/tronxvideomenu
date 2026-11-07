@@ -39,11 +39,14 @@ export class OrderRepository implements IOrderRepository {
 
   async findKitchenActive(restaurantId: string, station?: KitchenStation) {
     await connectToDatabase();
-    // PENDING stays on captain/admin New board until Accept — KDS only after kitchen entry.
-    const statuses = ["ACCEPTED", "PREPARING", "READY"];
+    // PENDING stays off KDS until Accept. SERVED stays briefly for the Served column.
+    const servedSince = new Date(Date.now() - 1000 * 60 * 90).toISOString();
     const orders = await OrderModel.find({
       restaurantId,
-      status: { $in: statuses },
+      $or: [
+        { status: { $in: ["ACCEPTED", "PREPARING", "READY"] } },
+        { status: "SERVED", updatedAt: { $gte: servedSince } },
+      ],
     })
       .sort({ createdAt: 1 })
       .lean();

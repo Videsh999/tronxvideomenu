@@ -529,7 +529,7 @@ export default function PosTerminal({
         </section>
       )}
 
-      <div className="grid min-h-0 min-w-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)] lg:gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(20rem,26rem)]">
+      <div className="grid min-h-0 min-w-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(19rem,26rem)] lg:gap-4">
         <section className="flex min-h-[22rem] min-w-0 flex-col gap-3 overflow-hidden rounded-2xl border border-[#d9cfc0] bg-white/85 p-3 lg:min-h-0">
           <div className="flex min-w-0 shrink-0 flex-wrap gap-2">
             {channel === "POS_DINE_IN" ? (
@@ -559,53 +559,65 @@ export default function PosTerminal({
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search dishes or SKU"
+                placeholder="Search menu"
                 className="min-h-11 w-full rounded-xl border border-[#d9cfc0] bg-[#fffaf3] pl-9 pr-3"
               />
             </div>
           </div>
-          <div className="flex shrink-0 gap-2 overflow-x-auto pb-1">
-            <button
-              type="button"
-              onClick={() => setCategoryId("ALL")}
-              className={`min-h-10 shrink-0 rounded-xl px-3 text-sm ${
-                categoryId === "ALL" ? "bg-[#2f241c] text-white" : "bg-[#efe6d8]"
-              }`}
+
+          <div className="grid min-h-0 flex-1 gap-3 sm:grid-cols-[8rem_minmax(0,1fr)]">
+            <nav
+              aria-label="Menu categories"
+              className="flex shrink-0 gap-1.5 overflow-x-auto pb-1 sm:flex-col sm:overflow-y-auto sm:overflow-x-hidden sm:pb-0"
             >
-              All
-            </button>
-            {categories.map((category) => (
               <button
-                key={category.id}
                 type="button"
-                onClick={() => setCategoryId(category.id)}
-                className={`min-h-10 shrink-0 rounded-xl px-3 text-sm ${
-                  categoryId === category.id ? "bg-[#2f241c] text-white" : "bg-[#efe6d8]"
+                onClick={() => setCategoryId("ALL")}
+                className={`min-h-10 shrink-0 rounded-xl px-3 text-left text-xs font-semibold sm:w-full ${
+                  categoryId === "ALL" ? "bg-[#2f241c] text-white" : "bg-[#efe6d8] text-[#2f241c]"
                 }`}
               >
-                {category.name}
+                All
               </button>
-            ))}
-          </div>
-          <div className="grid min-h-0 flex-1 auto-rows-min content-start grid-cols-2 gap-2 overflow-y-auto overscroll-contain sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-            {availableDishes.map((dish) => (
-              <button
-                key={dish.id}
-                type="button"
-                onClick={() => beginCustomize(dish)}
-                className="min-h-[5.5rem] min-w-0 self-start rounded-2xl border border-[#e4dacb] bg-[#fffaf3] p-3 text-left transition hover:border-[#2f241c]"
-              >
-                <p className="line-clamp-2 font-medium leading-snug text-[#2f241c]">
-                  {dish.name?.trim() || "Unnamed dish"}
-                </p>
-                <p className="mt-1 text-sm text-[#8a7460]">
-                  {money(
-                    (dish.variants?.[0]?.price ?? dish.price) as number,
-                    currency,
-                  )}
-                </p>
-              </button>
-            ))}
+              {categories.map((category) => (
+                <button
+                  key={category.id}
+                  type="button"
+                  onClick={() => setCategoryId(category.id)}
+                  className={`min-h-10 shrink-0 rounded-xl px-3 text-left text-xs font-semibold sm:w-full ${
+                    categoryId === category.id
+                      ? "bg-[#2f241c] text-white"
+                      : "bg-[#efe6d8] text-[#2f241c]"
+                  }`}
+                >
+                  {category.name}
+                </button>
+              ))}
+            </nav>
+
+            <div className="grid min-h-0 flex-1 auto-rows-min content-start grid-cols-2 gap-2 overflow-y-auto overscroll-contain sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+              {availableDishes.map((dish) => (
+                <button
+                  key={dish.id}
+                  type="button"
+                  onClick={() => beginCustomize(dish)}
+                  className="min-h-[5.5rem] min-w-0 self-start rounded-2xl border border-[#e4dacb] bg-[#fffaf3] p-3 text-left transition hover:border-[#2f241c] hover:shadow-sm"
+                >
+                  <span
+                    className={`mb-2 inline-block h-2.5 w-2.5 rounded-full ${
+                      dish.isVeg ? "bg-emerald-500" : "bg-rose-500"
+                    }`}
+                    aria-hidden
+                  />
+                  <p className="line-clamp-2 font-medium leading-snug text-[#2f241c]">
+                    {dish.name?.trim() || "Unnamed dish"}
+                  </p>
+                  <p className="mt-1 text-sm text-[#8a7460]">
+                    {money((dish.variants?.[0]?.price ?? dish.price) as number, currency)}
+                  </p>
+                </button>
+              ))}
+            </div>
           </div>
         </section>
 
@@ -733,142 +745,122 @@ export default function PosTerminal({
             )}
           </ul>
 
-          <div className="shrink-0 space-y-2 border-t border-white/10 bg-[#2f241c] p-3 sm:max-h-[min(46vh,24rem)] sm:overflow-y-auto sm:p-4">
-          <label className="block text-sm text-[#d9cfc0]">
-            Order note
-            <textarea
-              value={orderNote}
-              onChange={(event) => setOrderNote(event.target.value)}
-              className="mt-1 min-h-10 w-full rounded-xl border border-white/20 bg-transparent px-3 py-2 text-[#f7f1e8]"
-              rows={2}
-            />
-          </label>
-          <label className="block text-sm text-[#d9cfc0]">
-            Customer phone
-            <input
-              value={customerPhone}
-              onChange={(event) => setCustomerPhone(event.target.value)}
-              className="mt-1 min-h-10 w-full rounded-xl border border-white/20 bg-transparent px-3"
-              placeholder="Loyalty lookup"
-            />
-          </label>
-          <div className="grid grid-cols-2 gap-2">
-            <label className="block text-sm text-[#d9cfc0]">
-              Coupon
-              <input
-                value={couponCode}
-                onChange={(event) => setCouponCode(event.target.value)}
-                className="mt-1 min-h-10 w-full rounded-xl border border-white/20 bg-transparent px-3"
-              />
-            </label>
-            <label className="block text-sm text-[#d9cfc0]">
-              Redeem points
-              <input
-                type="number"
-                min={0}
-                value={redeemLoyaltyPoints || ""}
-                onChange={(event) => setRedeemLoyaltyPoints(Number(event.target.value) || 0)}
-                className="mt-1 min-h-10 w-full rounded-xl border border-white/20 bg-transparent px-3"
-              />
-            </label>
-          </div>
-          <label className="block text-sm text-[#d9cfc0]">
-            Bill discount
-            <input
-              type="number"
-              min={0}
-              value={billDiscount || ""}
-              onChange={(event) => setBillDiscount(Number(event.target.value) || 0)}
-              className="mt-1 min-h-10 w-full rounded-xl border border-white/20 bg-transparent px-3"
-            />
-          </label>
-
-          <div className="space-y-1 border-t border-white/15 pt-3 text-sm">
-            <div className="flex justify-between">
-              <span>Subtotal</span>
-              <span>{money(totals.itemsSubtotal, currency)}</span>
+          <div className="shrink-0 border-t border-white/10 bg-[#241c16]">
+            <div className="max-h-[26vh] space-y-2 overflow-y-auto px-3 pt-3 sm:px-4">
+              <div className="grid grid-cols-2 gap-2">
+                <label className="block text-[11px] text-[#d9cfc0]">
+                  Coupon
+                  <input
+                    value={couponCode}
+                    onChange={(event) => setCouponCode(event.target.value)}
+                    className="mt-1 min-h-9 w-full rounded-lg border border-white/20 bg-transparent px-2 text-sm"
+                  />
+                </label>
+                <label className="block text-[11px] text-[#d9cfc0]">
+                  ₹ off
+                  <input
+                    type="number"
+                    min={0}
+                    value={billDiscount || ""}
+                    onChange={(event) => setBillDiscount(Number(event.target.value) || 0)}
+                    className="mt-1 min-h-9 w-full rounded-lg border border-white/20 bg-transparent px-2 text-sm"
+                  />
+                </label>
+              </div>
+              <label className="block text-[11px] text-[#d9cfc0]">
+                Order note
+                <input
+                  value={orderNote}
+                  onChange={(event) => setOrderNote(event.target.value)}
+                  className="mt-1 min-h-9 w-full rounded-lg border border-white/20 bg-transparent px-2 text-sm"
+                  placeholder="Allergy / preference"
+                />
+              </label>
+              <label className="block text-[11px] text-[#d9cfc0]">
+                Phone (optional loyalty)
+                <input
+                  value={customerPhone}
+                  onChange={(event) => setCustomerPhone(event.target.value)}
+                  className="mt-1 min-h-9 w-full rounded-lg border border-white/20 bg-transparent px-2 text-sm"
+                />
+              </label>
             </div>
-            <div className="flex justify-between">
-              <span>
-                {taxLabel} ({taxRatePercent}%)
-              </span>
-              <span>{money(totals.taxAmount, currency)}</span>
-            </div>
-            <div className="flex justify-between text-lg font-semibold">
-              <span>Total</span>
-              <span>{money(totals.total, currency)}</span>
-            </div>
-          </div>
 
-          <div className="grid gap-2">
-            {placeBlocked ? (
-              <p className="rounded-lg bg-amber-500/20 px-3 py-2 text-xs font-medium text-amber-100">
-                {placeBlocked}
-              </p>
-            ) : null}
-            <button
-              type="button"
-              disabled={pending || Boolean(placeBlocked)}
-              onClick={placeAndPay}
-              className="min-h-12 rounded-xl bg-[#e7c27d] text-base font-semibold text-[#2f241c] disabled:opacity-50"
-            >
-              {pending ? "Working…" : `Place & pay (${payMethod})`}
-            </button>
-            <button
-              type="button"
-              disabled={pending || Boolean(placeBlocked)}
-              onClick={placeOrder}
-              className="min-h-11 rounded-xl border border-white/25 bg-white/10 text-sm font-semibold disabled:opacity-50"
-            >
-              Place order only
-            </button>
-          </div>
+            <div className="space-y-1 border-t border-white/10 px-3 py-2 text-sm sm:px-4">
+              <div className="flex justify-between text-[#d9cfc0]">
+                <span>Subtotal</span>
+                <span>{money(totals.itemsSubtotal, currency)}</span>
+              </div>
+              <div className="flex justify-between text-[#d9cfc0]">
+                <span>
+                  {taxLabel} ({taxRatePercent}%)
+                </span>
+                <span>{money(totals.taxAmount, currency)}</span>
+              </div>
+              <div className="flex justify-between text-xl font-bold">
+                <span>Total</span>
+                <span>{money(totals.total, currency)}</span>
+              </div>
+            </div>
 
-          <div className="mt-3 grid grid-cols-3 gap-1.5 sm:gap-2">
-            {(["CASH", "UPI", "CARD"] as PaymentMethod[]).map((method) => (
+            <div className="space-y-2 px-3 pb-3 sm:px-4">
+              {placeBlocked ? (
+                <p className="rounded-lg bg-amber-500/20 px-3 py-2 text-xs font-medium text-amber-100">
+                  {placeBlocked}
+                </p>
+              ) : null}
               <button
-                key={method}
                 type="button"
-                onClick={() => setPayMethod(method)}
-                className={`min-h-10 min-w-0 rounded-lg px-1 text-xs font-semibold sm:text-sm ${
-                  payMethod === method ? "bg-[#e7c27d] text-[#2f241c]" : "bg-white/10"
-                }`}
+                disabled={pending || Boolean(placeBlocked)}
+                onClick={placeOrder}
+                className="min-h-12 w-full rounded-xl bg-[#f59e0b] text-base font-bold text-[#1a120c] shadow-[0_8px_24px_-10px_rgba(245,158,11,0.75)] disabled:opacity-50"
               >
-                {method}
+                {pending ? "Sending…" : "Save & send to kitchen"}
               </button>
-            ))}
-          </div>
-          <div className="mt-2 flex min-w-0 flex-wrap gap-2">
-            <input
-              type="number"
-              min={0}
-              step="0.01"
-              placeholder={`Pay up to ${roundMoney(lastOrderId ? Number(payAmount) || totals.total : totals.total)}`}
-              value={payAmount}
-              onChange={(event) =>
-                setPayAmount(event.target.value === "" ? "" : Number(event.target.value))
-              }
-              className="min-h-11 min-w-0 flex-1 basis-[7rem] rounded-xl border border-white/20 bg-transparent px-3"
-            />
-            <button
-              type="button"
-              disabled={pending || !lastOrderId}
-              onClick={recordPay}
-              title={!lastOrderId ? "Place an order first" : "Record payment"}
-              className="min-h-11 shrink-0 rounded-xl bg-white/15 px-4 disabled:opacity-40"
-            >
-              Record
-            </button>
-          </div>
-          {!lastOrderId ? (
-            <p className="mt-2 text-[11px] text-[#d9cfc0]/80">
-              Record unlocks after an order is placed. Prefer <strong>Place &amp; pay</strong> for one step.
-            </p>
-          ) : (
-            <p className="mt-2 text-[11px] text-emerald-200/90">
-              Order ready for payment — choose method and tap Record.
-            </p>
-          )}
+              <button
+                type="button"
+                disabled={pending || Boolean(placeBlocked)}
+                onClick={placeAndPay}
+                className="min-h-11 w-full rounded-xl border border-white/30 bg-white text-sm font-bold text-[#2f241c] disabled:opacity-50"
+              >
+                Bill &amp; pay ({payMethod})
+              </button>
+              <div className="grid grid-cols-3 gap-1.5">
+                {(["CASH", "UPI", "CARD"] as PaymentMethod[]).map((method) => (
+                  <button
+                    key={method}
+                    type="button"
+                    onClick={() => setPayMethod(method)}
+                    className={`min-h-9 rounded-lg text-xs font-semibold ${
+                      payMethod === method ? "bg-[#f59e0b] text-[#1a120c]" : "bg-white/10"
+                    }`}
+                  >
+                    {method}
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  placeholder={String(roundMoney(totals.total))}
+                  value={payAmount}
+                  onChange={(event) =>
+                    setPayAmount(event.target.value === "" ? "" : Number(event.target.value))
+                  }
+                  className="min-h-10 min-w-0 flex-1 rounded-xl border border-white/20 bg-transparent px-3 text-sm"
+                />
+                <button
+                  type="button"
+                  disabled={pending || !lastOrderId}
+                  onClick={recordPay}
+                  className="min-h-10 shrink-0 rounded-xl bg-white/15 px-4 text-sm disabled:opacity-40"
+                >
+                  Record
+                </button>
+              </div>
+            </div>
           </div>
         </aside>
       </div>

@@ -406,54 +406,84 @@ export default function CaptainOrderPad({
         </p>
       ) : null}
 
-      <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)]">
+      <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(19rem,26rem)]">
         <section className="flex min-h-0 min-w-0 flex-col gap-3 overflow-hidden rounded-2xl border border-neutral-200 bg-white p-3 sm:p-4">
-          <div className="relative shrink-0">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search dishes or SKU"
-              className="min-h-12 w-full rounded-xl border border-neutral-200 bg-neutral-50 pl-9 pr-3"
-            />
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <div className="inline-flex rounded-xl border border-neutral-200 bg-neutral-50 p-1">
+              <span className="rounded-lg bg-neutral-900 px-3 py-2 text-xs font-bold text-white">Dine-in</span>
+              {tableNumber !== "" ? (
+                <span className="px-3 py-2 text-xs font-semibold text-neutral-700">Table {tableNumber}</span>
+              ) : (
+                <span className="px-3 py-2 text-xs font-semibold text-rose-600">Pick a table</span>
+              )}
+            </div>
+            <div className="relative min-w-0 flex-1 basis-[12rem]">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search menu"
+                className="min-h-11 w-full rounded-xl border border-neutral-200 bg-neutral-50 pl-9 pr-3 text-sm"
+              />
+            </div>
           </div>
-          <div className="flex shrink-0 gap-2 overflow-x-auto pb-1">
-            <button
-              type="button"
-              onClick={() => setCategoryId("ALL")}
-              className={`min-h-10 shrink-0 rounded-xl px-3 text-sm ${
-                categoryId === "ALL" ? "bg-neutral-900 text-white" : "bg-neutral-100"
-              }`}
+
+          <div className="grid min-h-0 flex-1 gap-3 sm:grid-cols-[7.5rem_minmax(0,1fr)]">
+            <nav
+              aria-label="Menu categories"
+              className="flex shrink-0 gap-1.5 overflow-x-auto pb-1 sm:flex-col sm:overflow-y-auto sm:overflow-x-hidden sm:pb-0"
             >
-              All
-            </button>
-            {categories.map((category) => (
               <button
-                key={category.id}
                 type="button"
-                onClick={() => setCategoryId(category.id)}
-                className={`min-h-10 shrink-0 rounded-xl px-3 text-sm ${
-                  categoryId === category.id ? "bg-neutral-900 text-white" : "bg-neutral-100"
+                onClick={() => setCategoryId("ALL")}
+                className={`min-h-10 shrink-0 rounded-xl px-3 text-left text-xs font-semibold sm:w-full ${
+                  categoryId === "ALL" ? "bg-neutral-900 text-white" : "bg-neutral-100 text-neutral-700"
                 }`}
               >
-                {category.name}
+                All
               </button>
-            ))}
-          </div>
-          <div className="grid min-h-0 flex-1 auto-rows-min content-start grid-cols-2 gap-2 overflow-y-auto overscroll-contain sm:grid-cols-3 xl:grid-cols-4">
-            {availableDishes.map((dish) => (
-              <button
-                key={dish.id}
-                type="button"
-                onClick={() => beginCustomize(dish)}
-                className="min-h-[4.75rem] rounded-2xl border border-neutral-200 bg-neutral-50 p-3 text-left hover:border-neutral-900"
-              >
-                <p className="line-clamp-2 text-sm font-semibold leading-snug">{dish.name}</p>
-                <p className="mt-1 text-xs text-neutral-500">
-                  {money((dish.variants?.[0]?.price ?? dish.price) as number, currency)}
-                </p>
-              </button>
-            ))}
+              {categories.map((category) => (
+                <button
+                  key={category.id}
+                  type="button"
+                  onClick={() => setCategoryId(category.id)}
+                  className={`min-h-10 shrink-0 rounded-xl px-3 text-left text-xs font-semibold sm:w-full ${
+                    categoryId === category.id
+                      ? "bg-neutral-900 text-white"
+                      : "bg-neutral-100 text-neutral-700"
+                  }`}
+                >
+                  {category.name}
+                </button>
+              ))}
+            </nav>
+
+            <div className="grid min-h-0 flex-1 auto-rows-min content-start grid-cols-2 gap-2 overflow-y-auto overscroll-contain sm:grid-cols-3 xl:grid-cols-4">
+              {availableDishes.map((dish) => (
+                <button
+                  key={dish.id}
+                  type="button"
+                  onClick={() => beginCustomize(dish)}
+                  className="min-h-[5.25rem] rounded-2xl border border-neutral-200 bg-[#fafafa] p-3 text-left transition hover:border-neutral-900 hover:shadow-sm"
+                >
+                  <span
+                    className={`mb-2 inline-block h-2.5 w-2.5 rounded-full ${
+                      dish.isVeg ? "bg-emerald-500" : "bg-rose-500"
+                    }`}
+                    aria-hidden
+                  />
+                  <p className="line-clamp-2 text-sm font-semibold leading-snug text-neutral-900">
+                    {dish.name}
+                  </p>
+                  <p className="mt-1 text-xs font-medium text-neutral-500">
+                    {money((dish.variants?.[0]?.price ?? dish.price) as number, currency)}
+                  </p>
+                </button>
+              ))}
+              {availableDishes.length === 0 ? (
+                <p className="col-span-full py-10 text-center text-sm text-neutral-400">No dishes in this filter.</p>
+              ) : null}
+            </div>
           </div>
         </section>
 
@@ -582,75 +612,59 @@ export default function CaptainOrderPad({
             )}
           </ul>
 
-          <div className="shrink-0 space-y-2 border-t border-white/10 bg-neutral-900 p-3 sm:max-h-[min(48vh,26rem)] sm:overflow-y-auto sm:p-4">
-            <label className="block text-xs text-white/70">
-              Guest name (optional)
-              <input
-                value={session.guestName}
-                onChange={(event) => patchSession({ guestName: event.target.value })}
-                disabled={!tableKey}
-                className="mt-1 min-h-10 w-full rounded-xl border border-white/20 bg-transparent px-3 text-sm text-white disabled:opacity-40"
-              />
-            </label>
-            <label className="block text-xs text-white/70">
-              Phone (optional — not required for walk-ins)
-              <input
-                value={session.customerPhone}
-                onChange={(event) => patchSession({ customerPhone: event.target.value })}
-                disabled={!tableKey}
-                className="mt-1 min-h-10 w-full rounded-xl border border-white/20 bg-transparent px-3 text-sm text-white disabled:opacity-40"
-              />
-            </label>
-            <label className="block text-xs text-white/70">
-              Order note
-              <textarea
-                value={session.orderNote}
-                onChange={(event) => patchSession({ orderNote: event.target.value })}
-                disabled={!tableKey}
-                rows={2}
-                className="mt-1 min-h-10 w-full rounded-xl border border-white/20 bg-transparent px-3 py-2 text-sm text-white disabled:opacity-40"
-              />
-            </label>
-
-            <div className="grid grid-cols-2 gap-2">
-              {permissions.applyCoupon ? (
-                <label className="block text-xs text-white/70">
-                  Coupon
-                  <input
-                    value={session.couponCode}
-                    onChange={(event) => patchSession({ couponCode: event.target.value })}
-                    disabled={!tableKey}
-                    className="mt-1 min-h-10 w-full rounded-xl border border-white/20 bg-transparent px-3 text-sm disabled:opacity-40"
-                  />
-                </label>
-              ) : (
-                <div className="rounded-xl border border-white/10 px-3 py-2 text-[11px] text-white/50">
-                  Coupons locked
-                </div>
-              )}
-              {permissions.applyDiscount ? (
-                <label className="block text-xs text-white/70">
-                  Bill discount
-                  <input
-                    type="number"
-                    min={0}
-                    value={session.billDiscount || ""}
-                    onChange={(event) =>
-                      patchSession({ billDiscount: Number(event.target.value) || 0 })
-                    }
-                    disabled={!tableKey}
-                    className="mt-1 min-h-10 w-full rounded-xl border border-white/20 bg-transparent px-3 text-sm disabled:opacity-40"
-                  />
-                </label>
-              ) : (
-                <div className="rounded-xl border border-white/10 px-3 py-2 text-[11px] text-white/50">
-                  Discounts locked
-                </div>
-              )}
+          {/* Sticky checkout dock — always visible; extras scroll above */}
+          <div className="shrink-0 border-t border-white/10 bg-neutral-950">
+            <div className="max-h-[28vh] space-y-2 overflow-y-auto px-3 pt-3 sm:px-4">
+              <div className="grid grid-cols-2 gap-2">
+                {permissions.applyCoupon ? (
+                  <label className="block text-[11px] text-white/70">
+                    Coupon
+                    <input
+                      value={session.couponCode}
+                      onChange={(event) => patchSession({ couponCode: event.target.value })}
+                      disabled={!tableKey}
+                      className="mt-1 min-h-9 w-full rounded-lg border border-white/20 bg-transparent px-2 text-sm disabled:opacity-40"
+                    />
+                  </label>
+                ) : (
+                  <div className="rounded-lg border border-white/10 px-2 py-2 text-[11px] text-white/40">
+                    Coupons locked
+                  </div>
+                )}
+                {permissions.applyDiscount ? (
+                  <label className="block text-[11px] text-white/70">
+                    ₹ off
+                    <input
+                      type="number"
+                      min={0}
+                      value={session.billDiscount || ""}
+                      onChange={(event) =>
+                        patchSession({ billDiscount: Number(event.target.value) || 0 })
+                      }
+                      disabled={!tableKey}
+                      className="mt-1 min-h-9 w-full rounded-lg border border-white/20 bg-transparent px-2 text-sm disabled:opacity-40"
+                    />
+                  </label>
+                ) : (
+                  <div className="rounded-lg border border-white/10 px-2 py-2 text-[11px] text-white/40">
+                    Discounts locked
+                  </div>
+                )}
+              </div>
+              <label className="block text-[11px] text-white/70">
+                Order note
+                <input
+                  value={session.orderNote}
+                  onChange={(event) => patchSession({ orderNote: event.target.value })}
+                  disabled={!tableKey}
+                  className="mt-1 min-h-9 w-full rounded-lg border border-white/20 bg-transparent px-2 text-sm disabled:opacity-40"
+                  placeholder="Allergy / preference"
+                />
+              </label>
             </div>
 
-            <div className="space-y-1 border-t border-white/15 pt-3 text-sm">
-              <div className="flex justify-between">
+            <div className="space-y-1 border-t border-white/10 px-3 py-2 text-sm sm:px-4">
+              <div className="flex justify-between text-white/70">
                 <span>Subtotal</span>
                 <span>{money(totals.itemsSubtotal, currency)}</span>
               </div>
@@ -660,85 +674,86 @@ export default function CaptainOrderPad({
                   <span>−{money(totals.billDiscount, currency)}</span>
                 </div>
               ) : null}
-              <div className="flex justify-between">
+              <div className="flex justify-between text-white/70">
                 <span>
                   {taxLabel} ({taxRatePercent}%)
                 </span>
                 <span>{money(totals.taxAmount, currency)}</span>
               </div>
-              <div className="flex justify-between text-lg font-semibold">
+              <div className="flex justify-between text-xl font-bold">
                 <span>Total</span>
                 <span>{money(totals.total, currency)}</span>
               </div>
             </div>
 
-            <button
-              type="button"
-              disabled={pending || session.cart.length === 0 || tableNumber === ""}
-              onClick={() => placeOrder(false)}
-              className="min-h-12 w-full rounded-xl bg-[#e7c27d] text-base font-bold text-neutral-900 disabled:opacity-40"
-            >
-              {pending ? "Sending…" : "Place order & send to kitchen"}
-            </button>
-
-            {canRecordAny ? (
-              <>
-                <button
-                  type="button"
-                  disabled={pending || session.cart.length === 0 || tableNumber === ""}
-                  onClick={() => placeOrder(true)}
-                  className="min-h-11 w-full rounded-xl border border-white/25 bg-white/10 text-sm font-semibold disabled:opacity-40"
-                >
-                  Place order &amp; pay ({payMethod})
-                </button>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {(["CASH", "UPI", "CARD"] as PaymentMethod[]).map((method) => {
-                    const allowed =
-                      (method === "CASH" && permissions.recordCashPayment) ||
-                      (method === "UPI" && permissions.recordUpiPayment) ||
-                      (method === "CARD" && permissions.recordCardPayment);
-                    return (
-                      <button
-                        key={method}
-                        type="button"
-                        disabled={!allowed}
-                        onClick={() => setPayMethod(method)}
-                        className={`min-h-10 rounded-lg text-xs font-semibold disabled:opacity-30 ${
-                          payMethod === method ? "bg-[#e7c27d] text-neutral-900" : "bg-white/10"
-                        }`}
-                      >
-                        {method}
-                      </button>
-                    );
-                  })}
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={payAmount}
-                    onChange={(event) =>
-                      setPayAmount(event.target.value === "" ? "" : Number(event.target.value))
-                    }
-                    placeholder={String(roundMoney(totals.total))}
-                    className="min-h-11 min-w-0 flex-1 rounded-xl border border-white/20 bg-transparent px-3 text-sm"
-                  />
+            <div className="space-y-2 px-3 pb-3 sm:px-4">
+              <button
+                type="button"
+                disabled={pending || session.cart.length === 0 || tableNumber === ""}
+                onClick={() => placeOrder(false)}
+                className="min-h-12 w-full rounded-xl bg-[#f59e0b] text-base font-bold text-neutral-950 shadow-[0_8px_24px_-10px_rgba(245,158,11,0.8)] disabled:opacity-40"
+              >
+                {pending ? "Sending…" : "Save & send to kitchen"}
+              </button>
+              {canRecordAny ? (
+                <>
                   <button
                     type="button"
-                    disabled={pending || !lastOrderId}
-                    onClick={recordPay}
-                    className="min-h-11 shrink-0 rounded-xl bg-white/15 px-4 text-sm disabled:opacity-40"
+                    disabled={pending || session.cart.length === 0 || tableNumber === ""}
+                    onClick={() => placeOrder(true)}
+                    className="min-h-11 w-full rounded-xl border border-white/30 bg-white text-sm font-bold text-neutral-900 disabled:opacity-40"
                   >
-                    Record
+                    Bill &amp; pay ({payMethod})
                   </button>
-                </div>
-              </>
-            ) : (
-              <p className="rounded-lg bg-white/5 px-3 py-2 text-[11px] text-white/60">
-                Payment recording is disabled for this captain — request bill / hand over to cashier.
-              </p>
-            )}
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {(["CASH", "UPI", "CARD"] as PaymentMethod[]).map((method) => {
+                      const allowed =
+                        (method === "CASH" && permissions.recordCashPayment) ||
+                        (method === "UPI" && permissions.recordUpiPayment) ||
+                        (method === "CARD" && permissions.recordCardPayment);
+                      return (
+                        <button
+                          key={method}
+                          type="button"
+                          disabled={!allowed}
+                          onClick={() => setPayMethod(method)}
+                          className={`min-h-9 rounded-lg text-xs font-semibold disabled:opacity-30 ${
+                            payMethod === method ? "bg-[#f59e0b] text-neutral-950" : "bg-white/10"
+                          }`}
+                        >
+                          {method}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={payAmount}
+                      onChange={(event) =>
+                        setPayAmount(event.target.value === "" ? "" : Number(event.target.value))
+                      }
+                      placeholder={String(roundMoney(totals.total))}
+                      className="min-h-10 min-w-0 flex-1 rounded-xl border border-white/20 bg-transparent px-3 text-sm"
+                    />
+                    <button
+                      type="button"
+                      disabled={pending || !lastOrderId}
+                      onClick={recordPay}
+                      className="min-h-10 shrink-0 rounded-xl bg-white/15 px-4 text-sm disabled:opacity-40"
+                    >
+                      Record
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <p className="rounded-lg bg-white/5 px-3 py-2 text-[11px] text-white/60">
+                  Payment locked for this captain — send to kitchen, then hand over to cashier.
+                </p>
+              )}
+            </div>
           </div>
         </aside>
       </div>

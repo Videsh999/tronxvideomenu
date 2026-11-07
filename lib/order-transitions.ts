@@ -4,9 +4,10 @@ import type { OrderStatus } from "@/types";
 export const ORDER_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   PENDING: ["ACCEPTED", "PREPARING", "CANCELLED", "REJECTED"],
   ACCEPTED: ["PREPARING", "CANCELLED", "REJECTED"],
-  PREPARING: ["READY", "CANCELLED"],
-  READY: ["SERVED", "COMPLETED"],
-  SERVED: ["COMPLETED"],
+  /** Kitchen can step back ACCEPTED ← PREPARING ← READY ← SERVED on the KDS board. */
+  PREPARING: ["READY", "ACCEPTED", "CANCELLED"],
+  READY: ["SERVED", "COMPLETED", "PREPARING"],
+  SERVED: ["COMPLETED", "READY"],
   COMPLETED: ["REFUNDED"],
   CANCELLED: [],
   REJECTED: [],

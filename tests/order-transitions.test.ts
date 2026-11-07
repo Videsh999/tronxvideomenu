@@ -8,6 +8,9 @@ test("happy path QR/POS kitchen flow is allowed", () => {
   assert.equal(canTransition("PREPARING", "READY"), true);
   assert.equal(canTransition("READY", "SERVED"), true);
   assert.equal(canTransition("SERVED", "COMPLETED"), true);
+  assert.equal(canTransition("PREPARING", "ACCEPTED"), true);
+  assert.equal(canTransition("READY", "PREPARING"), true);
+  assert.equal(canTransition("SERVED", "READY"), true);
 });
 
 test("invalid transitions are rejected", () => {
