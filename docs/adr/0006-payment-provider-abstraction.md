@@ -51,6 +51,18 @@ A pooled TRONX merchant violates the order. SDK calls throughout billing duplica
 
 Role-gated connection management, server-bound OAuth state/redirect validation, CSRF/origin protection, scoped callbacks, least privilege, encrypted refresh tokens, redacted structured logs, quotas and SSRF-resistant endpoint allowlists are mandatory. A callback merchant hint is untrusted until authenticated. Captains have no refund, settlement, cash-close or connection rights by default.
 
+## RELEASE_GATES
+
+None of these are completed by this ADR. Each is a gate, and none is a claim that a test passed.
+
+- Provider terms: written no-split, merchant-direct settlement, and the product entitlement for the outlet's own merchant account.
+- Counsel's review of TRONX's RBI classification. No public "RBI compliant" claim comes from this document.
+- Finance and the CA confirm whether GST applies to tips before tips are enabled for a live outlet.
+- Migration safety: index, backfill, rollback, and restore steps are recorded before any payment collection is written.
+- Sandbox evidence is not a live scan. Razorpay test QR codes cannot be scanned. A simulated or fixture result is labelled as such and is not a live-bank scan.
+- Cashfree is a capability proof only. There is no exception to credential isolation, and it is not an interchangeable exact-amount fallback.
+- Founder approval is required for the first real-money test, for go-live, and for any merge or deploy to `main`.
+
 ## Test/acceptance criteria
 
 - Cross-org/outlet/merchant and test/live isolation, encrypted credentials, refresh/rotation/revocation, redaction and authorization tests pass.

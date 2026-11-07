@@ -41,9 +41,18 @@ Snapshot policy at order/bill creation. New configuration does not silently chan
 
 Kitchen release is a separate server resolver with outlet default and audited manager/admin order override:
 
-- `ON_ACCEPTANCE` (proposed compatibility default): existing authorized order transitions may release without verified payment.
-- `AFTER_VERIFIED_PAYMENT`: requires B's ledger-derived bill total excluding tip to be satisfied. Partial, pending, and review are insufficient. A tip never blocks the kitchen. Zero-due final bills use B's explicit zero-balance rule, not a fictitious provider payment.
-- `MANUAL_AUTHORIZED_RELEASE`: explicitly authorized staff action with audit/reason; no default captain bypass.
+- `ON_ACCEPTANCE` (proposed compatibility default for dine-in): existing authorized order transitions may release without verified payment.
+- `AFTER_VERIFIED_PAYMENT`: prepay orders wait in an **awaiting payment** KDS lane. They release only when the ledger verifies payment of the bill total excluding tip. A partial base, a pending payment, a failed payment, or `MANUAL_REVIEW` does not release the lane. A paid base with an unpaid tip does release. Zero-due final bills use B's explicit zero-balance rule, not a fictitious provider payment.
+- `MANUAL_AUTHORIZED_RELEASE`: a Manager or Admin may release the awaiting-payment lane with an audited reason. A captain cannot. An aging alert fires when an order has been in that lane for 10 minutes.
+
+Permission matrix:
+
+| Action | Captain | Cashier | Manager | Admin |
+|---|---|---|---|---|
+| Display or share an existing request | Yes | Yes | Yes | Yes |
+| Create an instalment | No | Yes | Yes | Yes |
+| Refund | No | No | Yes | Yes |
+| Resolve `MANUAL_REVIEW` | No | No | Yes | Yes |
 
 Expose the effective policy pair. Odd combinations (pay-before plus acceptance release, pay-after plus payment gate) require clear configuration acknowledgement; never silently rewrite one from the other. Existing order transitions still apply. After paid/released items are appended, gate only the new/unreleased KOT batch against the new outstanding balance; never retract prepared batches or print them twice. E/K integrate through B's transitions. Print failure follows ADR 0005 alerts/retries, not a new money state machine. Payment verification schedules one idempotent release effect, not duplicate KOT commands.
 
@@ -65,6 +74,12 @@ Handler-level capabilities, outlet/org authorization, CSRF/origin checks, valida
 
 - Precedence matrix covers all levels, table-vs-channel conflict, FLEXIBLE expansion/fallback, invalid maps, historical snapshots, concurrent changes and POS/captain/WhatsApp parity.
 - Synthetic restaurant A: pay-before, tips OFF; B: pay-after, tips ON (5/10/15 percent/custom); C: flexible by order type. Cross payment modes with each independent release mode.
-- Partial/pending/failed/review cannot satisfy verified-payment release; full/zero-due and authorized manual paths release eligible batches once. Append-after-release and print failures preserve history.
-- Unauthorized captain/customer/cross-outlet overrides fail. Existing orders do not change on config edits.
-- M records demonstrations in the actual app and POS/Captain/QR/KDS/payment regressions in BILLING_POLICY_E2E_REPORT.md. The brief references “20 listed tests” without enumerating them: obtain/map the authoritative list before completion. Required RESTAURANT_BILLING_POLICIES.md and BILL_GENERATION_WORKFLOW.md are future implementation artifacts, not completed here.
+- A partial base, a pending payment, a failed payment, or review cannot satisfy verified-payment release. A paid base with an unpaid tip does release. Full and zero-due paths, and a Manager or Admin release with an audited reason, release the eligible batch once. Append-after-release and print failures preserve history and do not print a batch twice.
+- Unauthorized captain/customer/cross-outlet overrides fail. Existing orders do not change on config edits. The permission matrix above is the acceptance table: captains only display or share an existing request; Cashier, Manager, and Admin create instalments; only Manager and Admin refund or resolve `MANUAL_REVIEW`.
+- M records demonstrations in the actual app and POS/Captain/QR/KDS/payment regressions in BILLING_POLICY_E2E_REPORT.md. Part H tests 1–20 are enumerated in the Founder brief and in `docs/whatsapp-payments/TEST_TRACEABILITY.md`.
+- Order submission under pay-before finalizes exactly one bill version from the server calculator and uses that server total. A running snapshot does not issue a payable QR.
+- Pay-after-meal keeps the running bill through the meal. No payment request and no paid confirmation exist before finalisation at customer request, captain request, or checkout.
+- Appending to a running order updates the running total and keeps the prior lines' frozen prices and tax rates. The append does not issue a payable QR for the running state.
+- When the customer requests the bill, that authorized request finalizes the current server amount, retains the running snapshots, and only then may create a payment request.
+- Precedence cases walk order override, then table or session, then channel, then outlet, then organization, then default, including a case where the table or session wins over the channel.
+- Prepay KOT cases: the order is held in the awaiting-payment lane; it releases only on a ledger-verified payment of the bill total excluding tip; a paid base with an unpaid tip is released; a Manager or Admin release records the reason; the aging alert fires at 10 minutes; dine-in still releases on order; a released batch is not sent twice.

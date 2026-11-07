@@ -850,6 +850,30 @@ AC-1.1/1.2 → TC-038 · AC-1.3 → TC-003 · AC-1.4 → TC-036 · AC-1b.1 → T
 8. **Tip % base and rounding** (D6) and tax effects on ₹ amounts are CEO defaults pending Founder; calculator outputs (GST) are TBD from Backend, so expected totals for ₹1/20/149/520/1250 can't be pre-filled.
 9. **Exact-amount enforcement** depends on provider (T001 pending); wrong-amount tests may be unrunnable if the sandbox can't pay a different amount.
 
+## CTO-requested additions (QA to own)
+
+These cases are not executed. QA owns them. Each result needs the evidence in §6. A design note in an ADR is not a pass.
+
+- **Signatures, replay, and secret rotation.** Send a payment webhook and a WhatsApp delivery webhook with a valid signature, a missing signature, a bad signature, a replay of the same event ID, and a secret from the previous rotation. Expected: only the valid, unreplayed event is accepted. Replay is a no-op. The old secret is rejected after the overlap ends. Neither webhook marks a bill paid by itself.
+- **Credential protection.** Confirm merchant and WABA secrets are absent from the browser, from logs, and from the receipt. Expected: stored values are encrypted, and a cross-outlet read returns neither secret.
+- **Tenant isolation, including a shared-organisation WABA with outlet overrides.** Two outlets share one organisation WABA, and one outlet has its own number override. Expected: sends, consent, and webhooks are keyed by organisation and outlet. Outlet A cannot see outlet B's recipient or message.
+- **Late payment on a SUPERSEDED request.** Change the bill version, then pay the old request. Expected: the payment goes to MANUAL_REVIEW and does not settle the new bill.
+- **New bill version with the same total.** Replace the bill with a new version whose total equals the old total, then pay the old request. Expected: equal totals do not settle the new version. The old request stays SUPERSEDED and the money goes to review.
+- **Only one active request at a time.** Create two requests for the same order together. Expected: one request is ACTIVE. The other is rejected or superseded.
+- **Concurrency between request creation and balance updates.** Create a request while a cancel or append commits. Expected: the request matches the committed balance and bill version, or it is not issued.
+- **Duplicate payment and refund IDs.** Deliver the same provider payment ID twice, and the same refund ID twice. Expected: one ledger collection and one refund. The permanent unique index rejects the second row.
+- **Race between polling and the webhook.** Poll status and deliver the webhook together. Expected: one ledger effect and one receipt intent.
+- **Crash recovery.** Stop the worker after the webhook is stored and before the ledger commit, then retry. Expected: the retry completes one money effect and does not double the amount paid.
+- **Reconciliation of a missed webhook.** Leave a captured payment with no webhook, then run reconciliation. Expected: the status API supplies the payment once, and the bill is not marked paid before that check.
+- **WhatsApp consent revoked at send time.** Queue a bill, then receive STOP, UNSUBSCRIBE, or OPT OUT before dispatch. Expected: the send is suppressed. START re-subscribes that billing purpose only.
+- **WhatsApp send dedupe.** Retry the same bill version and recipient. Expected: one initial send. A second job does not send a second initial bill.
+- **WhatsApp sends whose outcome is UNKNOWN.** Time out after the provider may have accepted the send. Expected: the state is UNKNOWN. The worker does not blindly send again before reconciliation.
+- **Stale WhatsApp messages.** Queue a bill, then supersede it before send. Expected: the stale message is not sent.
+- **Tip refund and allocation.** Pay a bill with a tip, then refund the tip only, the base only, and both. Expected: each component moves by the refunded amount once, and the report matches the ledger.
+- **Tip rounding to the rupee.** Compute 5 percent of a base that ends in paise. Expected: half-up to the rupee, from the post-discount, pre-tax subtotal.
+- **Configurable tip cap.** Submit a custom tip above the configured cap, using the 25 percent default once. Expected: the server rejects the excess. The cap change applies to the next bill.
+- **Turning tips off affects new bills only.** Turn tips off after a bill already has a confirmed tip. Expected: that historical tip stays. The next bill has no tip step and no tip line.
+
 ## 10. Open questions
 | # | Question | Owner |
 |---|---|---|
