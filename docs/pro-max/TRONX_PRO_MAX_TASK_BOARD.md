@@ -213,7 +213,7 @@ Other spec ACs already tagged with existing IDs (ROS-E04-T007, E03-T001/T002, E0
 6. **Rate-limit thresholds** (public order, Wi-Fi, loyalty, pairing, payment) are not specified. — CTO
 7. **Product decisions not specified by the audit:** password recovery removed vs audited reveal (F-06), non-Kolkata reservation timezones (F-18), replacement marketing copy (F-19). — Founder via CEO
 8. **Payment gateway/provider:** Founder decision pending (ROS-E04-T007, ROS-E15-T001). This also covers UX_SPEC §15 Q2 on which capabilities are guaranteed. — Founder, then CTO verifies
-9. **Founder brief gaps:** "every Part H scenario" and "the 20 listed tests" are referenced but not in the condensed brief. Who decides: Founder via CEO (supply the text).
+9. **Founder brief:** the 20 listed tests and the WhatsApp demo cases are in `docs/whatsapp-payments/FOUNDER_BRIEF.md`. Product questions that the brief does not decide stay in items 14–23.
 10. **TRONX FINANCE MANAGER** is a new owner bot not in the original owner list. Confirm it exists. It is also the reviewer on CTO/Finance-pair tasks. — PD/CEO
 11. **Reviewer for CTO-owned E15 tasks** is set to "Founder (via CEO)". Confirm. — CEO
 12. **Local vs repo copies:** `pro-max/audit` now has `docs/pro-max/TRONX_PRO_MAX_MASTER_PLAN.md` and `TRONX_PRO_MAX_TASK_BOARD.md` committed. This local v2 diverges from them. — CEO (single source)
