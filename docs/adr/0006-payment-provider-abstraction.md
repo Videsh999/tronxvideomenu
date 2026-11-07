@@ -60,6 +60,8 @@ None of these are completed by this ADR. Each is a gate, and none is a claim tha
 - Finance and the CA confirm whether GST applies to tips before tips are enabled for a live outlet.
 - Migration safety: index, backfill, rollback, and restore steps are recorded before any payment collection is written.
 - Sandbox evidence is not a live scan. Razorpay test QR codes cannot be scanned. A simulated or fixture result is labelled as such and is not a live-bank scan.
+- Razorpay's docs do not confirm a ₹1 minimum. That minimum is verified only in the first real-money live test, and that test needs Founder approval.
+- Razorpay test mode cannot scan QR codes or simulate a wrong amount, an expiry, or a refund. QA covers those with signed mocked webhooks, and the evidence is labelled as mocked.
 - Cashfree is a capability proof only. There is no exception to credential isolation, and it is not an interchangeable exact-amount fallback.
 - Founder approval is required for the first real-money test, for go-live, and for any merge or deploy to `main`.
 
