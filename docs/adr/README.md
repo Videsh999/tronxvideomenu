@@ -1,6 +1,6 @@
 # ADR plan
 
-Status of every file in this directory is **Proposed**. The CTO accepts an ADR by changing its status in a later review. These documents record the decision the Pro Max wave is aiming at. They do not change application code.
+Status of every file in this directory is **Proposed**. Proposed author for 0001–0005: TRONX BACKEND ENGINEER. That author line is **pending CTO confirmation**. ADR 0005 covers KOT failure alerts and retries. There is no ADR 0006. The CTO accepts an ADR by changing its status in a later review. These documents record the decision the Pro Max wave is aiming at. They do not change application code.
 
 | ADR | Title |
 | --- | --- |

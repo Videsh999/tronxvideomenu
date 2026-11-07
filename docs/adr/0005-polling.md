@@ -2,6 +2,7 @@
 
 - Status: Proposed
 - Date: 2026-11-07
+- Author: TRONX BACKEND ENGINEER (pending CTO confirmation)
 
 ## Context
 

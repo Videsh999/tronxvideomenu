@@ -401,6 +401,43 @@ Role: UI/UX, implemented by Frontend.
 
 Nav entries from other streams are queued patches, one link per integration.
 
+## O — Payments and WhatsApp
+
+Role: Backend for the provider abstraction and ledger. Frontend for the settings and tender UI. B keeps `lib/billing/**` and `lib/order-pricing.ts`. O does not edit those files. It calls B's contract for the payable amount.
+
+Pending CTO confirmation of the paths below. Until then, do not start the build on other streams' files.
+
+Backend:
+
+- `lib/payments/**` — provider abstraction, payment requests, billing policy engine, tips
+- `lib/whatsapp/**` — WhatsApp module
+- `app/api/payments/**`
+- `app/api/webhooks/**`
+- Ledger writes that touch `lib/services/order.service.ts` or `lib/repositories/order.repository.ts` are a queued patch to B
+
+Frontend:
+
+- `app/admin/[slug]/settings/payments/**`
+- `app/admin/[slug]/settings/whatsapp/**`
+- `components/admin/PaymentsSettings.tsx`
+- `components/admin/WhatsAppSettings.tsx`
+- `components/admin/BillingPreferencesForm.tsx`
+- Captain and POS payment controls that are not the bill calculator: queued patches to C for `components/admin/PosTerminal.tsx` and `components/captain/CaptainOrderPad.tsx`, one file at a time, after B's contract
+
+Docs for this stream live under `docs/whatsapp-payments/`. They are not application code.
+
+## Observability and release files (pending CTO confirmation)
+
+| Path | Proposed owner |
+| --- | --- |
+| `lib/observability/logger.ts` | L |
+| `lib/observability/request-id.ts` | L proposes it. A lands any change to `proxy.ts`. |
+| `lib/rate-limit/store.ts` | L. Not under `lib/security/**`. |
+| `docs/ops/BACKUP_RESTORE_DRILL.md` | L |
+| `PRODUCTION_DEPLOYMENT_CHECKLIST.md` | L |
+
+ADR 0005 (`docs/adr/0005-polling.md`) covers KOT failure alerts and retries. Proposed author of ADR 0001 through ADR 0005: TRONX BACKEND ENGINEER. Pending CTO confirmation. No ADR 0006.
+
 ## Validation modules after Wave 0
 
 Wave 0 creates these files. After that merge, the named stream is the only editor. H edits `lib/validations/index.ts` only, and only to re-export.

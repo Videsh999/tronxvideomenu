@@ -1,6 +1,6 @@
 # TRONX PRO MAX Master Plan – Restaurant OS (ROS): Level 1 → Pro Max
 
-**Status:** Draft v0.1 (TRONX Project Director, 2026-11-07). Source of every fact: audit PR https://github.com/Videsh999/tronxvideomenu/pull/1, branch `pro-max/audit`, files `docs/pro-max/TRONX_PRO_MAX_MODULE_INVENTORY.md`, `docs/pro-max/TRONX_PRO_MAX_FINDINGS.md`, `docs/pro-max/TRONX_PRO_MAX_ARCHITECTURE.md`. Audit baseline: `main` @ `fcc89586190e2dd40673c7cb04f6baa358dd7969`. Task detail: `TRONX_PRO_MAX_TASK_BOARD.md`.
+**Status:** Draft v0.2 (v0.1 backed up as `.v1.bak`; adds CEO decisions, CTO review incl. `docs/pro-max/PATH_OWNERS.md`, Epic E15). Originally drafted (TRONX Project Director, 2026-11-07). Source of every fact: audit PR https://github.com/Videsh999/tronxvideomenu/pull/1, branch `pro-max/audit`, files `docs/pro-max/TRONX_PRO_MAX_MODULE_INVENTORY.md`, `docs/pro-max/TRONX_PRO_MAX_FINDINGS.md`, `docs/pro-max/TRONX_PRO_MAX_ARCHITECTURE.md`. Audit baseline: `main` @ `fcc89586190e2dd40673c7cb04f6baa358dd7969`. Task detail: `TRONX_PRO_MAX_TASK_BOARD.md`.
 
 ## 1. Goal
 
@@ -27,50 +27,71 @@ Take the existing Restaurant OS to production-grade ("Pro Max") by **evolving th
 | Epic | Stream | Delivers | Owner (audit) |
 |---|---|---|---|
 | ROS-E00 | Wave 0 | Split `lib/validations/index.ts` into domain modules (no feature change) | Backend, CTO review |
-| ROS-E01 | A – Authz matrix | Per-handler contracts below. No blanket customer or connector class (F-01, F-07) | Backend |
-| ROS-E02 | B – Order aggregate | Frozen line tax and settings snapshots; compare-and-swap updates; atomic cancel marker; crash-retry and concurrency tests; QR variants; QR idempotency returns the existing order (F-02, F-04, F-11, F-12, F-15) | Backend |
-| ROS-E03 | C – Bill UI | POS and captain previews call B's billing contract. C does not edit `lib/billing/**` or `lib/order-pricing.ts`. The billing parity test is B's (F-03) | Frontend, after B |
-| ROS-E04 | D – Identities | Wave 1: F-16 credential test, demo password literals out of git, public seed route lockdown, credential verification script. Memberships deferred (F-06, F-07, F-16) | Backend, UI by Frontend |
+| ROS-E01 | A – Authz matrix | Per-handler contracts. No blanket customer or connector class. Login, register, and reset must not require an existing customer session. Pair is a pairing code. Heartbeat, jobs, and ack use the connector secret (F-01, F-07) | Backend |
+| ROS-E02 | B – Order aggregate | Frozen line tax and settings snapshots; compare-and-swap; atomic cancel marker; cancellation crash-retry stays separate from payment-recording retry; QR variants; QR idempotency returns the existing order (F-02, F-04, F-11, F-12, F-15) | Backend |
+| ROS-E03 | C – Bill UI | POS and captain previews consume B's billing contract and do not edit `lib/billing/**` or `lib/order-pricing.ts`. The billing parity test file is B's (F-03) | Frontend, after B |
+| ROS-E04 | D – Identities | Fix credential test; demo passwords out of git; memberships; audited/no password reveal (F-06, F-09, F-13, F-16) | Backend, UI by Frontend |
 | ROS-E05 | E – Floor UI | Table statuses tsc-clean; captain/KDS intact (F-05, F-17) | Frontend, QA writes cases |
 | ROS-E06 | F – Menu & catalog | Replace/isolate `xlsx` (F-08); import/export tests pass | Frontend + Backend for import |
 | ROS-E07 | G – Customer menu & loyalty UX | Variant UI, working loyalty pages, honest marketing copy (F-04, F-01, F-19, F-14) | Frontend |
 | ROS-E08 | H – Schema steward | Sole editor of `lib/db/models.ts`, `types/index.ts`, `lib/db/mongo-mappers.ts`; membership collection (F-09, F-18) | Backend, CTO reviews every change |
-| ROS-E09 | I – Inventory/procurement/CRM/reports/multi-outlet | Tests still pass; idempotency kept | Backend + Frontend screens |
+| ROS-E09 | I1–I5 – Inventory / Procurement / CRM / Multi-outlet / Reports | Tests still pass; idempotency kept; separate owners and merge queues | Backend (one per sub-stream) |
 | ROS-E10 | J – AI | Heuristic still refuses unknown tools; no provider call in unit tests | Backend |
 | ROS-E11 | K – Hardware | Pair uses a pairing code. Heartbeat, job poll, and ack use the connector secret. No staff cookie (F-01) | Backend |
-| ROS-E12 | L – DevOps | PR workflow. CI fails if integration tests are skipped. Wave 1 gates: payment retry, workbook compatibility, UI-vs-server parity matrix, migration-safety declaration, seeded-credential rotation assessment. Final gates last (F-05, F-10, F-21, F-22) | DevOps |
+| ROS-E12 | L – DevOps | PR workflow (lint, typecheck, unit), integration on replica set, remove `ignoreBuildErrors`, env template (F-05, F-10, F-21, F-22) | DevOps |
 | ROS-E13 | M – Demo & QA | `seed-pro-max-demo.ts` / `cleanup-pro-max-demo.ts` (loopback only), E2E, API, load tests | QA; DevOps supplies DB |
+| ROS-E15 | O – WhatsApp Billing + Dynamic UPI + Billing Policies + Tips | Provider abstraction, per-outlet merchant mapping, dynamic QR, verified webhooks, ledger states, partial/refunds, policy engine, tips, WhatsApp Cloud API, admin/captain/POS/customer payment UI, 12 docs in `docs/whatsapp-payments/` | CTO, Finance, Backend, Frontend, UI/UX, QA (Founder order 2026-11-07, UX_SPEC.md) |
 | ROS-E14 | N – UI shell | Shell/sidebar owner; POS & kitchen full-width | UI/UX, implemented by Frontend |
 
-File ownership rule: from Wave 2, `docs/pro-max/PATH_OWNERS.md` governs. In Wave 1, typecheck and lint fixes in files owned by C, E, or F are made serially by the single Wave 1 implementer. The owning stream lead reviews those diffs in the Wave 1 PR. `lib/services/order.service.ts` → B only; `lib/billing/**` and `lib/order-pricing.ts` → B only; `lib/db/models.ts`/`types/index.ts` → H only; `proxy.ts`/`lib/api-authz.ts` → A only; `next.config.ts` and the root `package.json` → L only; sidebar → N only. `lib/demo/seed-demo-kitchen.ts` and the legacy seed route → D. In Wave 1, D may only remove credential literals there. M never edits those paths.
+File ownership: `docs/pro-max/PATH_OWNERS.md` governs from Wave 2 on; changes outside a stream's paths are queued patches landed by the owner, one at a time. `lib/services/order.service.ts`, `lib/billing/**`, and `lib/order-pricing.ts` → B only. `lib/db/models.ts` and `types/index.ts` → H only. `proxy.ts` and `lib/api-authz.ts` → A only. `next.config.ts` and the root `package.json` → L only. Sidebar → N only. `lib/demo/seed-demo-kitchen.ts` and the legacy seed route → D. M never edits those paths. `app/admin/menu/**`, `app/admin/media/**`, and `app/admin/availability/**` → F. `app/admin/profile/**`, `app/admin/[slug]/profile/**`, and `RestaurantProfileForm.tsx` are FROZEN until an owner is assigned. Restaurant APIs stay with D.
 
-Handler contracts for Stream A (no blanket class):
+Handler contracts for Stream A:
 
 | Handler | Contract |
 |---|---|
-| `POST /api/public/loyalty/login`, `register`, `forgot-password`, `reset-password` | Anonymous. The proxy must not require an existing customer session or a staff session. Login and register set the customer cookie on success. Reset uses the token in the body. |
-| `POST /api/public/loyalty/logout` | Anonymous. Clears the customer cookie even when it is missing. |
-| `GET /api/public/loyalty/me` | No staff cookie. The handler returns `data: null` when the customer cookie is absent. The proxy does not demand a customer session first. |
-| `POST /api/connector/pair` | Pairing code only. Not `requireConnectorAuth` and not a connector secret. The code record binds the outlet. |
-| `POST /api/connector/heartbeat`, `GET /api/connector/jobs`, `POST /api/connector/jobs/[jobId]/ack` | Connector id and secret. Not a pairing code. No staff cookie. |
+| Loyalty login, register, forgot-password, reset-password | Anonymous. The proxy must not require an existing customer session or a staff session. |
+| Loyalty logout | Anonymous. Clears the customer cookie even when it is missing. |
+| `GET /api/public/loyalty/me` | No staff cookie. Returns `data: null` when the customer cookie is absent. |
+| `POST /api/connector/pair` | Pairing code only. Not `requireConnectorAuth` and not a connector secret. |
+| Heartbeat, job poll, ack | Connector id and secret. Not a pairing code. |
 
-## 4. Waves
+## 4. Waves and merge order
 
-- **Wave 0 – In Progress:** validation split (ROS-E00-T001). Goes first, per the CTO merge order. Lands in the `pro-max/release` integration branch ahead of the Wave 2 streams. ROS-E02-T002 keeps its dependency on it.
-- **Wave 1 – In Progress:** A (all), B (all), C (all), D Wave 1 only (F-16 captain credential test, demo password literals out of git, public seed route lockdown, credential verification script). Memberships are deferred. L (CI, integration job, ignoreBuildErrors, env template, secret scan, dev origin), typecheck (TablesManager statuses), lint (F-21), xlsx (F-08). Typecheck and lint fixes in C, E, or F files are serial work by the single Wave 1 implementer; the owning stream lead reviews them in the Wave 1 PR.
-- **Wave 2 onward – Backlog:** PATH_OWNERS.md governs. Rest of D (memberships and later identity work), E, F (beyond xlsx), G, H, I, J, K, M, N, plus the payment adapter (Founder decision pending) and advisory follow-ups.
-- **CTO merge order:** validation contracts first; H's compatible schema before D's membership consumers; B's billing contract before C; A before connector and loyalty acceptance; D and H before full-role demo QA; L's final gates last. A and B must be merged before any production deploy (otherwise loyalty, printing and cancel math stay wrong). The earlier "C–N in any order" line does not apply.
+All implementation PRs target the integration branch `pro-max/release`. That branch now exists. It was created from `main` at `fcc89586190e2dd40673c7cb04f6baa358dd7969` (`fcc8958`). This audit PR stays on `pro-max/audit` and is not an implementation PR.
+
+- **Wave 0, In Progress, merges first:** validation contracts (ROS-E00-T001). ADRs 0001–0005 (ROS-E00-T002 to T006) are Ready.
+- **Wave 1, In Progress:**
+  - A, B and C (C starts after B's billing contract)
+  - D (F-16 + F-06 + seed-route lockdown)
+  - L
+  - Typecheck/lint, done serially by one implementer and reviewed by the C/E/F leads
+  - xlsx (F + L)
+- **Wave 2 and later, Backlog:** the rest of D, E, F, G, H, I1–I5, J, K, M and N. E15 build tasks are gated on Wave 1 merging into `pro-max/release`.
+- **CTO merge order:**
+  1. Wave 0
+  2. H schema
+  3. B billing contract before C
+  4. A before K/G acceptance
+  5. D + H before M full-role QA
+  6. L final gates (required CI, typecheck on, `ignoreBuildErrors` removed) last
+- **Production deploy needs:** Wave 0, H (for collections written), A and B merged. Founder approval is required before merges/deploys to `main`, going live, or any payments.
 
 ## 5. Dependencies between workstreams
 
 - G loyalty → A (per-handler allow-list, not a customer-session class). K connector → A (pair is a pairing code; heartbeat, jobs, and ack are the connector secret).
-- G variant UI → B (server accepts variantId). B variant schema (ROS-E02-T002) → Wave 0 (ROS-E00-T001). That dependency stays.
-- C (ROS-E03-T001 and T002) starts only after B's billing contract (ROS-E02-T001). C imports that contract and does not edit `lib/billing/**` or `lib/order-pricing.ts`. The billing parity test (ROS-E03-T003) is owned by B.
-- L `ignoreBuildErrors` removal → E (table statuses) and B leave `tsc` clean. L's final gates merge last. CI fails if the integration suite is skipped.
-- D memberships are deferred. When they start, they wait on H's membership collection. Phase B demo users (M) wait on that same collection.
-- M builds `scripts/seed-pro-max-demo.ts` and `scripts/cleanup-pro-max-demo.ts` only. M never edits `lib/demo/seed-demo-kitchen.ts`, `lib/demo/**`, `app/api/dev/seed-demo-kitchen/**`, or `scripts/verify-demo-reupload-import.mjs`. Those stay with D, matching PATH_OWNERS.md.
+- G variant UI → B (server accepts variantId). B variant schema → Wave 0 split.
+- C (ROS-E03-T001 and T002) starts only after B's billing contract. C imports that contract and does not edit `lib/billing/**` or `lib/order-pricing.ts`. The billing parity test file is B's.
+- L `ignoreBuildErrors` removal → E (table statuses) and B leave `tsc` clean. CI fails if integration tests are skipped.
+- D memberships, Phase B demo users (M) → H membership collection.
 - M → L/DevOps for a local replica-set database.
-- All streams → N for sidebar links; → H for schema patches. From Wave 2, shared-file edits are queued patches under PATH_OWNERS.md. A and L do not edit another stream's files to discharge a security duty; they queue a patch to that path owner.
+- All streams → N for sidebar links; → H for schema patches; → L for root dependency changes.
+- M never edits `lib/demo/seed-demo-kitchen.ts`, `lib/demo/**`, `app/api/dev/seed-demo-kitchen/**`, or `scripts/verify-demo-reupload-import.mjs`. Those stay with D.
+- E15 depends on:
+  - the Wave 1 billing writer and B's contract (ROS-E02-T001/T007/T008/T009)
+  - CTO provider approval (ROS-E15-T001)
+  - the Founder's provider choice
+  - merchant sandbox keys
+  - the WhatsApp test number
 
 ## 6. Key risks (from findings)
 
@@ -86,7 +107,7 @@ Handler contracts for Stream A (no blanket class):
 | `xlsx@0.18.5` high advisories on upload parser; `next` critical advisory (not confirmed reachable) | F-08 | S2 |
 | One admin per outlet; no cashier/kitchen login | F-09 | S3 |
 | No CI; Mongo concurrency suite never run; standalone Mongo silently drops transactions | F-10 | S3 |
-| Also: order number fallback collision (F-11), QR 409 on double-tap + no rate limit (F-12), login limiter fails open (F-13), Wi-Fi slug-only secret (F-14), swallowed KOT failures (F-15), lint failures (F-21), no payment gateway (F-20, parked, Founder decision pending) | | S3–S4 |
+| Also: order number fallback collision (F-11), QR 409 on double-tap + no rate limit (F-12), login limiter fails open (F-13), Wi-Fi slug-only secret (F-14), swallowed KOT failures (F-15), lint failures (F-21), no payment gateway (F-20) | | S3–S4 |
 | Shared hot files (`order.service.ts` 1655 lines, `models.ts`) → merge conflicts unless single owner | Architecture | — |
 
 ## 7. Roles
@@ -94,7 +115,8 @@ Handler contracts for Stream A (no blanket class):
 - **TRONX Project Director** – owns the task board and register; assigns, tracks status.
 - **TRONX CTO** – reviews all engineering work before it is eligible for release. A and B must be in the release candidate or loyalty, printing, and cancel math stay wrong.
 - **TRONX QA ENGINEER** – verifies against acceptance criteria; only QA sets **Verified**.
-- **Founder** – approves scope, deadline and budget changes, routed via **CEO**. Every merge to `main` and every production deploy needs explicit Founder approval. That approval comes after CTO review, QA sign-off, and green CI. No one else may merge or deploy to `main`.
+- **Founder** – approves scope, deadline and budget changes, routed via **CEO**. Every merge to `main` and every production deploy needs explicit Founder approval after CTO review, QA sign-off, and green CI. No one else may merge or deploy to `main`. Client, deadline, and budget stay TBD until the Founder sets them.
+- **TRONX FINANCE MANAGER:** E15 billing workflows, reconciliation and tip accounting. Finance-related tasks are reviewed by CTO + Finance.
 - Engineers: TRONX BACKEND / FRONTEND / DEVOPS ENGINEER, TRONX UI UX DESIGNER, TRONX OPERATIONS & SUPPORT – one accountable owner per task.
 
 ## 8. Status workflow
@@ -103,18 +125,28 @@ Handler contracts for Stream A (no blanket class):
 
 - In Review = CTO review. QA = handed to QA with acceptance criteria, preview/staging link and engineer name.
 - **No task is done until QA marks it Verified.** Test evidence must be attached on the board.
-- **Release branch.** Every implementation PR targets `pro-max/release`. This audit PR (`pro-max/audit`, PR #1) is docs-only. It is not an implementation PR and it is not merged to `main` until the Founder approves.
-- **Merge and deploy to `main`.** Required order: CTO review, then QA sign-off, then green CI on `pro-max/release`, then explicit Founder approval. A merge or deploy to `main` without that approval does not happen. Client, deadline, and budget stay TBD until the Founder sets them.
+- **Release branch.** Every implementation PR targets `pro-max/release`, which exists at `fcc89586190e2dd40673c7cb04f6baa358dd7969`. This audit PR is docs-only and is not merged to `main` until the Founder approves.
+- **Merge and deploy to `main`.** Required order: CTO review, then QA sign-off, then green CI on `pro-max/release`, then explicit Founder approval. A merge or deploy to `main` without that approval does not happen.
 
-## 9. Open items
+## 9. Decisions and open items
+
+CEO decisions (2026-11-07), the CTO review mapping, the UX_SPEC TBD-PD mapping and the open questions are all in `TRONX_PRO_MAX_TASK_BOARD.md`. F-20 payment adapter: Founder decision pending.
+
+## 10. Open items
 
 See "Open questions" in `TRONX_PRO_MAX_TASK_BOARD.md`. All dates, budget and client details: TBD – needs Founder approval via CEO.
 
-## 10. CEO decisions (2026-11-07)
+## 11. Unmapped items (pending CTO confirmation)
 
-1. **Wave 0 goes first**, per the CTO merge order. ROS-E00-T001 is **In Progress**. It lands in the `pro-max/release` integration branch ahead of the Wave 2 streams. ROS-E02-T002 keeps its dependency on ROS-E00-T001.
-2. **Stream D, Wave 1 only:** the F-16 captain credential test fix, moving the demo passwords out of git (F-06), locking down the public seed route, and the credential verification script. Memberships are deferred.
-3. **D owns** `lib/demo/seed-demo-kitchen.ts` and the legacy seed route. In Wave 1, D may only remove credential literals in that file. M never edits that file or the legacy seed route. M builds the new demo seed on its own paths.
-4. **Wave 1 typecheck and lint** fixes in files owned by C, E, or F are made serially by the single Wave 1 implementer. The owning stream lead reviews those diffs in the Wave 1 PR. From Wave 2 on, `docs/pro-max/PATH_OWNERS.md` governs.
-5. **Payment gateway (F-20)** stays parked under D as Backlog until the Founder picks a gateway. Status: Founder decision pending.
-6. **Client, deadline, and budget stay TBD** until the Founder approves them. No values are set in this plan.
+These proposals are not approved. They fill gaps the v2 board left open. Each line is **pending CTO confirmation**.
+
+| Item | Proposed owner | Proposed path | Notes |
+|---|---|---|---|
+| Structured logger | L | `lib/observability/logger.ts` | JSON logs. Redaction reuses `lib/ai/redact.ts`. Other streams call it; they do not add a second logger. |
+| Request / correlation id | L proposes the helper; A lands the edge read because A owns `proxy.ts` | `lib/observability/request-id.ts`, queued patch on `proxy.ts` | Reuse `correlationId` in `lib/db/mongo-tx.ts` (H). B stores it on order events and the payment ledger. K stores it on print jobs. |
+| Rate-limit store | L | `lib/rate-limit/store.ts` | Not inside `lib/security/**` (D). Login, public order, Wi-Fi, loyalty, and pairing limiters call it. Fail closed when the store is down. |
+| Backup and restore drill | L | `docs/ops/BACKUP_RESTORE_DRILL.md` | Synthetic copy only. RPO 15 minutes and RTO 1 hour stay design targets, not measurements. |
+| `PRODUCTION_DEPLOYMENT_CHECKLIST.md` | L | repo root, existing file | Deploy checklist. No secret values. |
+| Legacy `/admin` pages | Already assigned, not a new proposal | `app/admin/menu/**`, `app/admin/media/**`, `app/admin/availability/**` → F. Profile paths FROZEN | APIs stay with their domain owners. See PATH_OWNERS.md. |
+
+ADR authors, also **pending CTO confirmation**: TRONX BACKEND ENGINEER for `docs/adr/0001-tenancy.md` through `docs/adr/0005-polling.md`. ADR 0005 already covers KOT failure alerts and retries (outlet-visible alert, existing attempt counter and dedupe key, order write still commits). No ADR 0006 is added.
