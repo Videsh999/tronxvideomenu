@@ -29,7 +29,7 @@ export async function GET(request: Request) {
     addonRepository.findGroupsByRestaurantId(admin.restaurantId),
   ]);
 
-  const buffer = writeMenuExportBuffer(categories, dishes, addonGroups, format);
+  const buffer = await writeMenuExportBuffer(categories, dishes, addonGroups, format);
   const slug = restaurant.slug || "menu";
   const stamp = new Date().toISOString().slice(0, 10);
   const filename =

@@ -41,7 +41,8 @@ export default function OrganizationDashboard({ restaurantName }: Props) {
   }
 
   useEffect(() => {
-    void refresh();
+    const timer = window.setTimeout(() => void refresh(), 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   async function createOrg(event: FormEvent) {

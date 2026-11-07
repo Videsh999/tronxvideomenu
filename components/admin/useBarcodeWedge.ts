@@ -6,7 +6,10 @@ import { createBarcodeWedgeDetector } from "@/lib/devices/barcode-wedge";
 /** Listens for keyboard-wedge scanner input. Lookup is caller's responsibility; never mutates stock. */
 export function useBarcodeWedge(onScan: (code: string) => void, enabled = true) {
   const onScanRef = useRef(onScan);
-  onScanRef.current = onScan;
+
+  useEffect(() => {
+    onScanRef.current = onScan;
+  }, [onScan]);
 
   useEffect(() => {
     if (!enabled) return;

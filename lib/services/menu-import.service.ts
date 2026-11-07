@@ -48,7 +48,7 @@ export class MenuImportService {
     buffer: Buffer;
   }) {
     assertSafeUpload(input.fileName, input.mimeType, input.buffer.byteLength);
-    const parsed = parseWorkbookBuffer(input.buffer);
+    const parsed = await parseWorkbookBuffer(input.buffer);
     const selectedSheet = parsed.sheets[0]?.name;
     const headers = parsed.sheets[0]?.headers ?? [];
     const columnMappings = suggestColumnMappings(headers);

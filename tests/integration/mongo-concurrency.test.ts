@@ -11,17 +11,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { randomUUID } from "node:crypto";
-import mongoose from "mongoose";
+import { connectReplicaSet, disconnectTestDatabase, integrationEnabled } from "./harness";
 
-const enabled = process.env.RUN_INTEGRATION === "1" && Boolean(process.env.MONGODB_URI);
+const enabled = integrationEnabled();
 
 function skipReason() {
-  return "Set RUN_INTEGRATION=1 and MONGODB_URI to a MongoDB replica set to run concurrency tests.";
+  return "Set RUN_INTEGRATION=1. npm run test:integration starts a replica set and fails if it cannot.";
 }
 
 async function connect() {
-  const uri = process.env.MONGODB_URI!;
-  await mongoose.connect(uri, { serverSelectionTimeoutMS: 8000 });
+  await connectReplicaSet();
 }
 
 test("concurrent coupon maxRedemptions: at most one of 20 succeeds when limit=1", async (t) => {
@@ -60,7 +59,7 @@ test("concurrent coupon maxRedemptions: at most one of 20 succeeds when limit=1"
   assert.equal(ok.length, 1, `expected exactly 1 success, got ${ok.length}`);
   const refreshed = await crmRepository.getCouponById(restaurantId, coupon.id);
   assert.equal(refreshed?.redemptionCount, 1);
-  await mongoose.disconnect();
+  await disconnectTestDatabase();
 });
 
 test("concurrent loyalty redeem cannot overdraw points", async (t) => {
@@ -101,7 +100,7 @@ test("concurrent loyalty redeem cannot overdraw points", async (t) => {
   assert.equal(fulfilled.length, 1, `expected 1 redeem success, got ${fulfilled.length}`);
   const again = await crmRepository.getCustomer(restaurantId, customer.id);
   assert.equal(again?.loyaltyPoints, 0);
-  await mongoose.disconnect();
+  await disconnectTestDatabase();
 });
 
 test("duplicate purchase receipt idempotency key does not double stock", async (t) => {
@@ -145,7 +144,7 @@ test("duplicate purchase receipt idempotency key does not double stock", async (
   assert.equal(first.id, second.id);
   const ingredient = await inventoryRepository.getIngredient(restaurantId, ingredientId);
   assert.equal(ingredient?.quantityOnHand, 100);
-  await mongoose.disconnect();
+  await disconnectTestDatabase();
 });
 
 test("atomic stock consume: last unit wins once under concurrency", async (t) => {
@@ -186,5 +185,5 @@ test("atomic stock consume: last unit wins once under concurrency", async (t) =>
   assert.equal(ok.length, 1, `expected exactly 1 consume, got ${ok.length}`);
   const ingredient = await inventoryRepository.getIngredient(restaurantId, ingredientId);
   assert.equal(ingredient?.quantityOnHand, 0);
-  await mongoose.disconnect();
+  await disconnectTestDatabase();
 });

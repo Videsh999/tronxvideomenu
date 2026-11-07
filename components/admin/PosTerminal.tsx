@@ -8,9 +8,12 @@ import type {
   OrderChannel,
   PaymentMethod,
   PosShift,
+  RestaurantBillingSettings,
   RestaurantTable,
 } from "@/types";
-import { computeBillTotals, lineItemTotal, roundMoney } from "@/lib/order-pricing";
+import { previewStaffCartBill } from "@/lib/billing/preview-cart";
+import { resolveLineTaxRate } from "@/lib/billing/resolve-tax-rate";
+import { lineItemTotal, roundMoney } from "@/lib/order-pricing";
 import { useBarcodeWedge } from "@/components/admin/useBarcodeWedge";
 import { MonitorSmartphone, Search, Trash2 } from "lucide-react";
 
@@ -31,6 +34,7 @@ type CartLine = {
 type PosTerminalProps = {
   restaurantName: string;
   currency: string;
+  billing?: RestaurantBillingSettings | null;
   taxRatePercent: number;
   taxLabel: string;
   categories: Category[];
@@ -50,6 +54,7 @@ function money(value: number, currency: string) {
 export default function PosTerminal({
   restaurantName,
   currency,
+  billing,
   taxRatePercent,
   taxLabel,
   categories,
@@ -117,18 +122,20 @@ export default function PosTerminal({
   );
   useBarcodeWedge(onBarcodeScan, Boolean(shift));
 
-  const lineTotals = cart.map((line) =>
-    lineItemTotal({
-      unitPrice: line.unitPrice,
-      quantity: line.quantity,
-      addonTotals: line.addons.map((addon) => addon.price),
-      itemDiscountAmount: line.itemDiscountAmount,
+  const totals = previewStaffCartBill({
+    lines: cart.map((line) => {
+      const dish = dishes.find((entry) => entry.id === line.dishId);
+      const category = categories.find((entry) => entry.id === dish?.categoryId);
+      return {
+        unitPrice: line.unitPrice,
+        quantity: line.quantity,
+        addonUnitPrices: line.addons.map((addon) => addon.price),
+        itemDiscountAmount: line.itemDiscountAmount,
+        gstRatePercent: resolveLineTaxRate({ dish, category, billing }).rate,
+      };
     }),
-  );
-  const totals = computeBillTotals({
-    lineTotals,
     billDiscountAmount: billDiscount,
-    taxRatePercent,
+    billing,
   });
 
   function dishNeedsCustomize(dish: Dish) {
@@ -815,12 +822,43 @@ export default function PosTerminal({
                   <span>−{money(billDiscount, currency)}</span>
                 </div>
               ) : null}
-              <div className="flex justify-between text-[#d9cfc0]">
-                <span>
-                  {taxLabel} ({taxRatePercent}%)
-                </span>
-                <span>{money(totals.taxAmount, currency)}</span>
-              </div>
+              {totals.packagingCharge > 0 ? (
+                <div className="flex justify-between text-[#d9cfc0]">
+                  <span>Packaging</span>
+                  <span>{money(totals.packagingCharge, currency)}</span>
+                </div>
+              ) : null}
+              {totals.serviceCharge > 0 ? (
+                <div className="flex justify-between text-[#d9cfc0]">
+                  <span>Service charge</span>
+                  <span>{money(totals.serviceCharge, currency)}</span>
+                </div>
+              ) : null}
+              {totals.igstAmount > 0 ? (
+                <div className="flex justify-between text-[#d9cfc0]">
+                  <span>IGST</span>
+                  <span>{money(totals.igstAmount, currency)}</span>
+                </div>
+              ) : totals.cgstAmount > 0 || totals.sgstAmount > 0 ? (
+                <>
+                  <div className="flex justify-between text-[#d9cfc0]">
+                    <span>CGST</span>
+                    <span>{money(totals.cgstAmount, currency)}</span>
+                  </div>
+                  <div className="flex justify-between text-[#d9cfc0]">
+                    <span>SGST</span>
+                    <span>{money(totals.sgstAmount, currency)}</span>
+                  </div>
+                </>
+              ) : (
+                <div className="flex justify-between text-[#d9cfc0]">
+                  <span>
+                    {totals.taxLabel || taxLabel}
+                    {taxRatePercent ? ` (${taxRatePercent}%)` : ""}
+                  </span>
+                  <span>{money(totals.taxAmount, currency)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-lg font-bold">
                 <span>Total</span>
                 <span>{money(totals.total, currency)}</span>

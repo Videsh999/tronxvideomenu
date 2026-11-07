@@ -505,6 +505,8 @@ export type OrderItemSnapshot = {
   preparationStatus?: "QUEUED" | "PREPARING" | "READY";
   /** Cumulative quantity cancelled on this line (partial cancel). */
   cancelledQuantity?: number;
+  /** GST percent frozen when the line was added. */
+  gstRateSnapshot?: number;
   itemTotal: number;
 };
 
@@ -541,6 +543,7 @@ export type PaymentLedgerEntry = {
   recordedAt: string;
   recordedBy: PaymentAuditActor;
   reason?: string;
+  idempotencyKey?: string;
 };
 
 export type PaymentSummary = {
@@ -636,6 +639,8 @@ export type RestaurantOrder = {
   payment: PaymentSummary;
   events?: OrderEvent[];
   shiftId?: string;
+  /** Optimistic concurrency token. Missing documents are version 0. */
+  version?: number;
   createdAt: string;
   updatedAt: string;
   completedAt?: string;
@@ -1059,6 +1064,9 @@ export type OrderLineCancellation = {
   idempotencyKey: string;
   actor: PaymentAuditActor;
   createdAt: string;
+  applyStatus?: "PENDING" | "APPLIED";
+  baseVersion?: number;
+  plannedCancelled?: Record<string, number>;
 };
 
 export type CustomerFeedback = {

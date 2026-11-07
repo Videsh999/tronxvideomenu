@@ -4,6 +4,26 @@ import { connectToDatabase } from "@/lib/db/mongodb";
 import { OrderCounterModel, OrderModel, ReceiptReprintLogModel } from "@/lib/db/models";
 import { toDomain } from "@/lib/db/mongo-mappers";
 
+function versionClause(expectedVersion: number): Record<string, unknown> {
+  if (expectedVersion === 0) {
+    return { $or: [{ version: 0 }, { version: { $exists: false } }, { version: null }] };
+  }
+  return { version: expectedVersion };
+}
+
+function amountPaidClause(expectedAmountPaid: number): Record<string, unknown> {
+  if (expectedAmountPaid === 0) {
+    return {
+      $or: [
+        { "payment.amountPaid": 0 },
+        { "payment.amountPaid": { $exists: false } },
+        { "payment.amountPaid": null },
+      ],
+    };
+  }
+  return { "payment.amountPaid": expectedAmountPaid };
+}
+
 export class OrderRepository implements IOrderRepository {
   async create(data: Omit<RestaurantOrder, "orderNumber" | "createdAt" | "updatedAt">) {
     await connectToDatabase();
@@ -197,6 +217,9 @@ export class OrderRepository implements IOrderRepository {
       amountPaid: number;
       ledgerEntry?: import("@/types").PaymentLedgerEntry;
       orderEvent?: OrderEvent;
+      expectedVersion?: number;
+      expectedAmountPaid?: number;
+      idempotencyKey?: string;
     },
   ) {
     await connectToDatabase();
@@ -213,22 +236,22 @@ export class OrderRepository implements IOrderRepository {
       push.events = options.orderEvent;
     }
 
-    const filter: Record<string, unknown> = {
-      restaurantId,
-      id,
-      status: { $nin: ["CANCELLED", "REJECTED"] },
-    };
-    if (paymentStatus === "PAID" && !options) {
-      filter.$or = [
-        { "payment.status": { $in: ["UNPAID", "NOT_RECORDED", "PARTIAL"] } },
-        { payment: { $exists: false } },
-      ];
-    } else {
-      filter["payment.status"] = { $in: ["UNPAID", "NOT_RECORDED", "PARTIAL"] };
+    const clauses: Record<string, unknown>[] = [
+      {
+        restaurantId,
+        id,
+        status: { $nin: ["CANCELLED", "REJECTED", "REFUNDED"] },
+        "payment.status": { $in: ["UNPAID", "NOT_RECORDED", "PARTIAL"] },
+      },
+    ];
+    if (options?.expectedVersion != null) clauses.push(versionClause(options.expectedVersion));
+    if (options?.expectedAmountPaid != null) clauses.push(amountPaidClause(options.expectedAmountPaid));
+    if (options?.idempotencyKey) {
+      clauses.push({ "payment.ledger.idempotencyKey": { $ne: options.idempotencyKey } });
     }
 
     const order = await OrderModel.findOneAndUpdate(
-      filter,
+      { $and: clauses },
       {
         $set: {
           "payment.status": paymentStatus,
@@ -238,6 +261,7 @@ export class OrderRepository implements IOrderRepository {
           "payment.recordedAt": now,
           "payment.recordedBy": actor,
           updatedAt: now,
+          ...(options?.expectedVersion != null ? { version: options.expectedVersion + 1 } : {}),
         },
         $push: push,
       },
@@ -375,6 +399,7 @@ export class OrderRepository implements IOrderRepository {
       event: OrderEvent;
       reopenForKitchen?: boolean;
       billDiscountAmount?: number;
+      expectedVersion: number;
     },
   ) {
     await connectToDatabase();
@@ -383,6 +408,7 @@ export class OrderRepository implements IOrderRepository {
       subtotal: patch.subtotal,
       taxAmount: patch.taxAmount,
       total: patch.total,
+      version: patch.expectedVersion + 1,
       updatedAt: new Date().toISOString(),
     };
     if (patch.taxRatePercent !== undefined) set.taxRatePercent = patch.taxRatePercent;
@@ -397,7 +423,12 @@ export class OrderRepository implements IOrderRepository {
     if (patch.reopenForKitchen) set.status = "PREPARING";
 
     const order = await OrderModel.findOneAndUpdate(
-      { restaurantId, id, status: { $nin: ["CANCELLED", "REJECTED", "REFUNDED", "COMPLETED"] } },
+      {
+        $and: [
+          { restaurantId, id, status: { $nin: ["CANCELLED", "REJECTED", "REFUNDED", "COMPLETED"] } },
+          versionClause(patch.expectedVersion),
+        ],
+      },
       {
         $set: set,
         $push: { events: patch.event },

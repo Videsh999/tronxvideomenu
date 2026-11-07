@@ -42,12 +42,17 @@ async function req(path, init = {}, timeoutMs = 120_000) {
   }
 }
 
+const demoPassword = process.env.TRONX_DEMO_ADMIN_PASSWORD;
+if (!demoPassword) {
+  console.error("TRONX_DEMO_ADMIN_PASSWORD is required. The value is not printed.");
+  process.exit(1);
+}
 const login = await req("/api/auth/login", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({
     email: "demo@tronx.local",
-    password: "DemoKitchen!2026",
+    password: demoPassword,
     role: "RESTAURANT_ADMIN",
     restaurantSlug: "tronx-demo-kitchen",
   }),

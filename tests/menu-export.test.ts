@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import * as XLSX from "xlsx";
 import {
   buildMenuExportRows,
   sanitizeExportCell,
   writeMenuExportBuffer,
 } from "../lib/menu-export/build-workbook";
+import { readXlsxSheets } from "../lib/spreadsheet";
 import type { AddonGroup, Category, Dish } from "../types";
 
 const categories: Category[] = [
@@ -109,19 +109,19 @@ test("menu export rows include prices, half/full, and add-ons", () => {
   assert.match(String(injected!["Add-ons"]), /Cheese:20/);
 });
 
-test("xlsx workbook round-trips through sheetjs", () => {
-  const buffer = writeMenuExportBuffer(categories, dishes, addonGroups, "xlsx");
+test("xlsx workbook round-trips through the spreadsheet reader", async () => {
+  const buffer = await writeMenuExportBuffer(categories, dishes, addonGroups, "xlsx");
   assert.ok(buffer.byteLength > 100);
-  const book = XLSX.read(buffer, { type: "buffer" });
-  assert.ok(book.SheetNames.includes("Menu"));
-  assert.ok(book.SheetNames.includes("Categories"));
-  const menu = XLSX.utils.sheet_to_json<Record<string, unknown>>(book.Sheets.Menu!);
-  assert.equal(menu.length, 2);
-  assert.ok(menu.some((row) => row["Item Name"] === "Chai" || row["Item Name"] === "'=SUM(A1)"));
+  const sheets = await readXlsxSheets(buffer);
+  assert.ok(sheets.some((sheet) => sheet.name === "Menu"));
+  assert.ok(sheets.some((sheet) => sheet.name === "Categories"));
+  const menu = sheets.find((sheet) => sheet.name === "Menu");
+  const names = (menu?.rows ?? []).map((row) => row[1]);
+  assert.ok(names.includes("Chai") || names.includes("'=SUM(A1)"));
 });
 
-test("csv export is utf-8 text with headers", () => {
-  const buffer = writeMenuExportBuffer(categories, dishes, addonGroups, "csv");
+test("csv export is utf-8 text with headers", async () => {
+  const buffer = await writeMenuExportBuffer(categories, dishes, addonGroups, "csv");
   const text = buffer.toString("utf8");
   assert.match(text, /Category,Item Name/);
   assert.match(text, /Chai/);

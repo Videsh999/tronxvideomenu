@@ -24,7 +24,7 @@ import WifiAccessPanel from "@/components/customer/WifiAccessPanel";
 import CustomerLoyaltyPanel from "@/components/customer/CustomerLoyaltyPanel";
 
 type CartSelection = { groupId: string; addonIds: string[] };
-type CartLine = { key: string; dishId: string; quantity: number; selections: CartSelection[] };
+type CartLine = { key: string; dishId: string; quantity: number; variantId?: string; selections: CartSelection[] };
 type CustomerOrderReceipt = Pick<OrderSummary, "id" | "orderNumber" | "tableNumber" | "total" | "status"> & Partial<Pick<OrderSummary, "items" | "subtotal" | "createdAt" | "updatedAt">> & { token: string; restaurantId?: string; restaurantSlug?: string; tableId?: string; customerSessionId?: string };
 
 const orderStatusMessage: Record<OrderSummary["status"], MessageKey> = {
@@ -80,7 +80,7 @@ function createUuid(): string {
 function isCartLine(value: unknown): value is CartLine {
   if (!value || typeof value !== "object") return false;
   const line = value as Partial<CartLine>;
-  return typeof line.key === "string" && typeof line.dishId === "string" && typeof line.quantity === "number" && Number.isInteger(line.quantity) && line.quantity > 0 && Array.isArray(line.selections) && line.selections.every((selection) => Boolean(selection && typeof selection.groupId === "string" && Array.isArray(selection.addonIds) && selection.addonIds.every((id) => typeof id === "string")));
+  return typeof line.key === "string" && typeof line.dishId === "string" && typeof line.quantity === "number" && Number.isInteger(line.quantity) && line.quantity > 0 && (line.variantId === undefined || typeof line.variantId === "string") && Array.isArray(line.selections) && line.selections.every((selection) => Boolean(selection && typeof selection.groupId === "string" && Array.isArray(selection.addonIds) && selection.addonIds.every((id) => typeof id === "string")));
 }
 
 function isCustomerOrderReceipt(value: unknown): value is CustomerOrderReceipt {
@@ -315,6 +315,12 @@ export default function CustomerMenu({
     } catch { /* Ordering remains usable if browser storage is unavailable. */ }
   }, [cart, cartKey, cartReady, loadedCartKey]);
 
+  const unitPriceForLine = (line: CartLine) => {
+    const dish = menu.dishes.find((entry) => entry.id === line.dishId);
+    if (!dish) return 0;
+    const variant = line.variantId ? dish.variants?.find((entry) => entry.id === line.variantId) : undefined;
+    return variant?.price ?? dish.price;
+  };
   const priceForLine = (line: CartLine) => {
     const dish = menu.dishes.find((entry) => entry.id === line.dishId);
     if (!dish) return 0;
@@ -322,20 +328,20 @@ export default function CustomerMenu({
       const group = dish.addonGroups?.find((entry) => entry.id === selection.groupId);
       return selection.addonIds.map((addonId) => group?.addons.find((addon) => addon.id === addonId)?.price ?? 0);
     }).reduce((sum, price) => sum + price, 0);
-    return (dish.price + addonTotal) * line.quantity;
+    return (unitPriceForLine(line) + addonTotal) * line.quantity;
   };
   const cartCount = cart.reduce((sum, line) => sum + line.quantity, 0);
   const cartTotal = cart.reduce((sum, line) => sum + priceForLine(line), 0);
   const customerOrdersTotal = customerOrders.reduce((sum, order) => sum + order.total, 0);
 
-  const addToCart = (entry: { dishId: string; quantity: number; selections: CartSelection[] }) => {
+  const addToCart = (entry: { dishId: string; quantity: number; variantId?: string; selections: CartSelection[] }) => {
     const canonicalSelections = [...entry.selections].map((selection) => ({ ...selection, addonIds: [...selection.addonIds].sort() })).sort((a, b) => a.groupId.localeCompare(b.groupId));
-    const key = `${entry.dishId}:${JSON.stringify(canonicalSelections)}`;
+    const key = `${entry.dishId}:${entry.variantId ?? ""}:${JSON.stringify(canonicalSelections)}`;
     setCart((current) => {
       const existing = current.find((line) => line.key === key);
       return existing
         ? current.map((line) => line.key === key ? { ...line, quantity: Math.min(99, line.quantity + entry.quantity) } : line)
-        : [...current, { key, dishId: entry.dishId, quantity: entry.quantity, selections: canonicalSelections }];
+        : [...current, { key, dishId: entry.dishId, variantId: entry.variantId, quantity: entry.quantity, selections: canonicalSelections }];
     });
     setOrderError("");
   };
@@ -359,10 +365,12 @@ export default function CustomerMenu({
           idempotencyKey: key,
           items: cart.map((line) => {
             const dish = menu.dishes.find((entry) => entry.id === line.dishId)!;
+            const variant = line.variantId ? dish.variants?.find((entry) => entry.id === line.variantId) : undefined;
             return {
               dishId: dish.id,
+              variantId: variant?.id,
               quantity: line.quantity,
-              expectedUnitPrice: dish.price,
+              expectedUnitPrice: variant?.price ?? dish.price,
               selections: line.selections.map((selection) => ({
                 groupId: selection.groupId,
                 addons: selection.addonIds.map((addonId) => ({
@@ -374,11 +382,11 @@ export default function CustomerMenu({
           }),
         }),
       });
-      const result = await response.json() as { success: boolean; error?: string; data?: { order: OrderSummary; customerToken: string } };
+      const result = await response.json() as { success: boolean; error?: string; data?: { order: OrderSummary; customerToken?: string; duplicate?: boolean } };
       if (!response.ok || !result.success || !result.data) throw new Error(result.error || "Unable to place your order.");
       const receipt: CustomerOrderReceipt = {
         ...result.data.order,
-        token: result.data.customerToken,
+        token: result.data.customerToken ?? "",
         restaurantId: menu.restaurant.id,
         restaurantSlug: menu.restaurant.slug,
         tableId: tableId ?? undefined,

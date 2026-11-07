@@ -86,6 +86,15 @@ export async function proxy(request: NextRequest) {
 
   if (!isApiRequest) return NextResponse.next();
 
+  if (request.method === "POST" && pathname === "/api/dev/seed-demo-kitchen") {
+    const host = request.nextUrl.hostname;
+    const loopback = host === "localhost" || host === "127.0.0.1" || host === "::1";
+    if (process.env.NODE_ENV === "production" || !loopback) {
+      return NextResponse.json({ success: false, error: "Forbidden." }, { status: 403 });
+    }
+    return NextResponse.next();
+  }
+
   const authClass = classifyApiRequest(request.method, pathname);
   const allowed = apiSessionAllowed(authClass, {
     restaurantAdmin: restaurantSession?.role === "RESTAURANT_ADMIN",

@@ -8,9 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test tests/*.test.ts",
-    "test:unit": "tsx --test tests/*.test.ts",
-    "test:integration": "tsx --test tests/integration/*.test.ts",
+    "test": "NODE_OPTIONS='--conditions=react-server' tsx --test tests/*.test.ts",
+    "test:unit": "NODE_OPTIONS='--conditions=react-server' tsx --test tests/*.test.ts",
+    "test:integration": "NODE_OPTIONS='--conditions=react-server' tsx scripts/run-integration-tests.ts",
     "seed:mongodb": "node --env-file=.env.local --import tsx scripts/seed-mongodb.ts",
     "demo:workbook": "node --import tsx scripts/generate-demo-menu-workbook.ts",
     "demo:workbook:reupload": "node --import tsx scripts/generate-demo-reupload-workbook.ts",
@@ -23,6 +23,7 @@
     "@hookform/resolvers": "^5.9.1",
     "@types/qrcode": "^1.5.6",
     "cloudinary": "^2.11.0",
+    "exceljs": "^4.4.0",
     "hls.js": "^1.7.3",
     "lucide-react": "^1.48.0",
     "mongoose": "^9.10.2",
@@ -31,8 +32,8 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-hook-form": "^7.89.0",
-    "xlsx": "^0.18.5",
-    "zod": "^4.6.5"
+    "server-only": "^0.0.1",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -41,6 +42,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.3.6",
+    "mongodb-memory-server": "^11.3.0",
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
     "typescript": "^5"

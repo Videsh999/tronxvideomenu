@@ -93,7 +93,8 @@ export default function KitchenKanban({
   }, [load, pollMs]);
 
   useEffect(() => {
-    void load().catch(() => null);
+    const timer = window.setTimeout(() => void load().catch(() => null), 0);
+    return () => window.clearTimeout(timer);
   }, [load]);
 
   useEffect(() => {

@@ -13,8 +13,12 @@ function money(value: number, currency = "INR") {
   }).format(value);
 }
 
+function minutesSince(iso: string) {
+  return Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+}
+
 function elapsed(iso: string) {
-  const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+  const mins = minutesSince(iso);
   if (mins < 60) return `${mins}m`;
   return `${Math.floor(mins / 60)}h ${mins % 60}m`;
 }
@@ -148,7 +152,7 @@ export default function CaptainApprovals({
       ) : (
         <ul className="space-y-4">
           {filtered.map((order) => {
-            const waitMins = Math.round((Date.now() - new Date(order.createdAt).getTime()) / 60000);
+            const waitMins = minutesSince(order.createdAt);
             const delayed = waitMins >= 8;
             const auth = resolveAuthorization(order);
             return (

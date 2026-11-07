@@ -7,18 +7,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { randomUUID } from "node:crypto";
-import mongoose from "mongoose";
 import { createPrintJobDraft } from "../../lib/devices/device-jobs";
 import type { DeviceConnectorRecord, DeviceRecord } from "../../lib/devices/device.types";
+import { connectReplicaSet, disconnectTestDatabase, integrationEnabled } from "./harness";
 
-const enabled = process.env.RUN_INTEGRATION === "1" && Boolean(process.env.MONGODB_URI);
+const enabled = integrationEnabled();
 
 function skipReason() {
-  return "Set RUN_INTEGRATION=1 and MONGODB_URI to a MongoDB replica set to run print-job lease tests.";
+  return "Set RUN_INTEGRATION=1. npm run test:integration starts a replica set and fails if it cannot.";
 }
 
 async function connect() {
-  await mongoose.connect(process.env.MONGODB_URI!, { serverSelectionTimeoutMS: 8000 });
+  await connectReplicaSet();
 }
 
 test("assigned connector claims job; unassigned connector cannot", async (t) => {
@@ -119,7 +119,7 @@ test("assigned connector claims job; unassigned connector cannot", async (t) => 
   await PrintJobModel.deleteMany({ restaurantId });
   await HardwareDeviceModel.deleteMany({ restaurantId });
   await DeviceConnectorModel.deleteMany({ restaurantId });
-  await mongoose.disconnect();
+  await disconnectTestDatabase();
 });
 
 test("two connectors racing the same assigned job: exactly one wins", async (t) => {
@@ -221,7 +221,7 @@ test("two connectors racing the same assigned job: exactly one wins", async (t) 
   await PrintJobModel.deleteMany({ restaurantId });
   await HardwareDeviceModel.deleteMany({ restaurantId });
   await DeviceConnectorModel.deleteMany({ restaurantId });
-  await mongoose.disconnect();
+  await disconnectTestDatabase();
 });
 
 test("expired lease returns to QUEUED and can be reclaimed", async (t) => {
@@ -305,7 +305,7 @@ test("expired lease returns to QUEUED and can be reclaimed", async (t) => {
   await PrintJobModel.deleteMany({ restaurantId });
   await HardwareDeviceModel.deleteMany({ restaurantId });
   await DeviceConnectorModel.deleteMany({ restaurantId });
-  await mongoose.disconnect();
+  await disconnectTestDatabase();
 });
 
 test("revoked connector cannot authenticate", async (t) => {
@@ -336,5 +336,5 @@ test("revoked connector cannot authenticate", async (t) => {
   assert.equal(list[0]?.displayStatus, "REVOKED");
   await assert.rejects(() => connectorService.authenticateConnector(id, "any"), /unauthorized/i);
   await DeviceConnectorModel.deleteMany({ restaurantId });
-  await mongoose.disconnect();
+  await disconnectTestDatabase();
 });

@@ -1,6 +1,6 @@
 # TRONX Demo Kitchen — Guide
 
-Isolated local/staging demo outlet. **Do not run against production** unless `ALLOW_PRODUCTION_SEED=true` is intentionally set.
+Isolated local demo outlet. The seed refuses production and any non-loopback database. Set `TRONX_DEMO_SEED_CONFIRM=localhost` and `TRONX_DEMO_ADMIN_PASSWORD` (at least 12 characters) in the environment. The password is not stored in this repository.
 
 ## 1. Create Excel workbooks
 
@@ -33,7 +33,7 @@ npm run demo:seed
 | Name | TRONX Demo Kitchen |
 | Slug | `tronx-demo-kitchen` |
 | Admin | `demo@tronx.local` |
-| Password | `DemoKitchen!2026` (local only) |
+| Password | `TRONX_DEMO_ADMIN_PASSWORD` from the environment. Not printed by the seed. |
 | Menu | `/menu/tronx-demo-kitchen` |
 | Admin | `/admin/tronx-demo-kitchen` |
 

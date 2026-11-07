@@ -28,7 +28,18 @@ test("restaurant admin cannot satisfy super-admin API class", () => {
 
 test("path classification separates public, captain, admin, and staff surfaces", () => {
   assert.equal(classifyApiRequest("POST", "/api/public/orders"), "public");
-  assert.equal(classifyApiRequest("POST", "/api/dev/seed-demo-kitchen"), "public");
+  assert.equal(classifyApiRequest("POST", "/api/dev/seed-demo-kitchen"), "local_dev");
+  assert.equal(apiSessionAllowed("local_dev", { restaurantAdmin: true, superAdmin: true, captain: true }), false);
+  assert.equal(classifyApiRequest("POST", "/api/public/loyalty/login"), "customer");
+  assert.equal(classifyApiRequest("POST", "/api/public/loyalty/register"), "customer");
+  assert.equal(classifyApiRequest("POST", "/api/public/loyalty/reset-password"), "customer");
+  assert.equal(classifyApiRequest("GET", "/api/public/loyalty/me"), "customer");
+  assert.equal(apiSessionAllowed("customer", { restaurantAdmin: false, superAdmin: false, captain: false }), true);
+  assert.equal(classifyApiRequest("POST", "/api/connector/pair"), "connector");
+  assert.equal(classifyApiRequest("GET", "/api/connector/jobs"), "connector");
+  assert.equal(classifyApiRequest("POST", "/api/connector/heartbeat"), "connector");
+  assert.equal(apiSessionAllowed("connector", { restaurantAdmin: false, superAdmin: false, captain: false }), true);
+  assert.equal(apiSessionAllowed("staff", { restaurantAdmin: false, superAdmin: false, captain: true }), false);
   assert.equal(classifyApiRequest("GET", "/api/orders/abc/status"), "public");
   assert.equal(classifyApiRequest("GET", "/api/captain/orders"), "captain");
   assert.equal(classifyApiRequest("GET", "/api/admin/captains"), "restaurant_admin");

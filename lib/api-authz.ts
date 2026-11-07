@@ -5,6 +5,9 @@
 
 export type ApiAuthClass =
   | "public"
+  | "customer" // handler-owned guest session; login/register/reset need no session
+  | "connector" // pairing code or connector secret, enforced by the handler
+  | "local_dev" // loopback demo seed; never a staff or public session
   | "captain"
   | "restaurant_admin"
   | "super_admin"
@@ -21,9 +24,22 @@ export function classifyApiRequest(method: string, pathname: string): ApiAuthCla
     return "public";
   }
 
-  // Local/staging demo seed — handler enforces NODE_ENV / ALLOW_PRODUCTION_SEED / optional token.
+  // Demo seed is not a public API. The proxy only forwards loopback, non-production
+  // requests, and the handler still refuses without an explicit safe config.
   if (method === "POST" && pathname === "/api/dev/seed-demo-kitchen") {
-    return "public";
+    return "local_dev";
+  }
+
+  // Guest loyalty. Login, register, forgot, and reset are anonymous.
+  // /me and logout clear or read the customer cookie inside the handler.
+  if (pathname.startsWith("/api/public/loyalty/")) {
+    return "customer";
+  }
+
+  // Device connector. Pairing uses a one-time code; heartbeat, jobs, and ack
+  // use the connector secret. Neither is a staff cookie.
+  if (pathname.startsWith("/api/connector/")) {
+    return "connector";
   }
 
   if (
@@ -70,7 +86,11 @@ export function apiSessionAllowed(
 ): boolean {
   switch (authClass) {
     case "public":
+    case "customer":
+    case "connector":
       return true;
+    case "local_dev":
+      return false;
     case "captain":
       return sessions.captain;
     case "super_admin":

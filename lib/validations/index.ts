@@ -303,6 +303,7 @@ export const placeOrderSchema = z.object({
     .array(
       z.object({
         dishId: z.string().min(1),
+        variantId: z.string().min(1).optional(),
         quantity: z.number().int().min(1).max(99),
         expectedUnitPrice: z.number().min(0),
         selections: z
@@ -432,6 +433,7 @@ export const recordPaymentSchema = z
   .object({
     method: z.enum(["CASH", "UPI", "CARD"]),
     amount: z.number().positive().max(1_000_000).optional(),
+    idempotencyKey: z.string().trim().min(8).max(200).optional(),
   })
   .strict();
 export type RecordPaymentInput = z.infer<typeof recordPaymentSchema>;

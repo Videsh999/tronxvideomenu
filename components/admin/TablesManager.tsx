@@ -19,10 +19,20 @@ type TablesManagerProps = {
   tableOrderingEnabled?: boolean;
 };
 
-const statusLabel: Record<TableStatus, string> = { OPEN: "Open", OCCUPIED: "Occupied", CLOSED: "Closed" };
+const statusLabel: Record<TableStatus, string> = {
+  OPEN: "Open",
+  OCCUPIED: "Occupied",
+  BILL_REQUESTED: "Bill requested",
+  PAYMENT_PENDING: "Payment pending",
+  CLEANING: "Cleaning",
+  CLOSED: "Closed",
+};
 const statusStyle: Record<TableStatus, string> = {
   OPEN: "bg-emerald-50 text-emerald-700 ring-emerald-200",
   OCCUPIED: "bg-amber-50 text-amber-700 ring-amber-200",
+  BILL_REQUESTED: "bg-sky-50 text-sky-700 ring-sky-200",
+  PAYMENT_PENDING: "bg-violet-50 text-violet-700 ring-violet-200",
+  CLEANING: "bg-orange-50 text-orange-700 ring-orange-200",
   CLOSED: "bg-neutral-100 text-neutral-600 ring-neutral-200",
 };
 const inputClass = "mt-1.5 h-11 w-full rounded-xl border border-neutral-300 bg-white px-3 text-sm text-neutral-900";

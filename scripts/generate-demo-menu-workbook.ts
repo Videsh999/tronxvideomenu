@@ -6,7 +6,7 @@
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import * as XLSX from "xlsx";
+import { writeXlsxSheets } from "../lib/spreadsheet";
 
 const OUT = join(process.cwd(), "fixtures", "tronx-demo-kitchen-menu.xlsx");
 
@@ -141,26 +141,26 @@ function toRow(item: (typeof bases)[number], index: number): Row {
   };
 }
 
-function main() {
+async function main() {
   const items = expandToEighty();
   const rows = items.map(toRow);
-  const book = XLSX.utils.book_new();
-  const menuSheet = XLSX.utils.json_to_sheet(rows);
-  XLSX.utils.book_append_sheet(book, menuSheet, "Menu");
-
-  const negative = XLSX.utils.aoa_to_sheet([
-    ["Category", "Item Name", "Description", "Price", "Half", "Full", "Dietary", "SKU"],
-    ["", "Missing Category", "Should fail", 100, "", "", "VEG", "BAD-001"],
-    ["Starters", "", "Missing name", 100, "", "", "VEG", "BAD-002"],
-    ["Starters", "Bad Price", "", "abc", "", "", "VEG", "BAD-003"],
-    ["Starters", "Negative Price", "", -10, "", "", "VEG", "BAD-004"],
+  const headers = Object.keys(rows[0] ?? {});
+  const buffer = await writeXlsxSheets([
+    { name: "Menu", rows: [headers, ...rows.map((row) => headers.map((header) => row[header] ?? ""))] },
+    {
+      name: "Negative-Tests",
+      rows: [
+        ["Category", "Item Name", "Description", "Price", "Half", "Full", "Dietary", "SKU"],
+        ["", "Missing Category", "Should fail", 100, "", "", "VEG", "BAD-001"],
+        ["Starters", "", "Missing name", 100, "", "", "VEG", "BAD-002"],
+        ["Starters", "Bad Price", "", "abc", "", "", "VEG", "BAD-003"],
+        ["Starters", "Negative Price", "", -10, "", "", "VEG", "BAD-004"],
+      ],
+    },
   ]);
-  XLSX.utils.book_append_sheet(book, negative, "Negative-Tests");
-
   mkdirSync(dirname(OUT), { recursive: true });
-  const buffer = XLSX.write(book, { type: "buffer", bookType: "xlsx" }) as Buffer;
   writeFileSync(OUT, buffer);
   console.log(JSON.stringify({ path: OUT, menuRows: rows.length, categories: categories.length }, null, 2));
 }
 
-main();
+void main();

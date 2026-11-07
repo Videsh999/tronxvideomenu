@@ -4,31 +4,30 @@ import { seedTronxDemoKitchen } from "@/lib/demo/seed-demo-kitchen";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+function isLoopbackHost(hostname: string) {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+}
+
 /**
- * Local/staging helper — seeds TRONX Demo Kitchen via the Next.js Mongo connection.
- * Blocked in production unless ALLOW_PRODUCTION_SEED=true.
- * If DEMO_SEED_TOKEN is set, require header: x-tronx-demo-seed: <token>
+ * Local helper only. Production and any non-loopback host are refused here,
+ * and seedTronxDemoKitchen refuses again unless the safe-config env is set.
+ * The response never includes a password.
  */
 export async function POST(request: Request) {
-  if (process.env.NODE_ENV === "production" && process.env.ALLOW_PRODUCTION_SEED !== "true") {
-    return NextResponse.json({ success: false, error: "Forbidden in production." }, { status: 403 });
-  }
-
-  const expected = process.env.DEMO_SEED_TOKEN?.trim();
-  if (expected) {
-    const provided = request.headers.get("x-tronx-demo-seed");
-    if (provided !== expected) {
-      return NextResponse.json({ success: false, error: "Unauthorized." }, { status: 401 });
-    }
+  const host = new URL(request.url).hostname;
+  if (process.env.NODE_ENV === "production" || !isLoopbackHost(host)) {
+    return NextResponse.json({ success: false, error: "Forbidden." }, { status: 403 });
   }
 
   try {
     const data = await seedTronxDemoKitchen();
     return NextResponse.json({ success: true, data });
   } catch (error) {
+    const message = error instanceof Error ? error.message : "Seed failed";
+    const refused = message.startsWith("Refusing to seed");
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : "Seed failed" },
-      { status: 500 },
+      { success: false, error: refused ? message : "Seed failed" },
+      { status: refused ? 403 : 500 },
     );
   }
 }

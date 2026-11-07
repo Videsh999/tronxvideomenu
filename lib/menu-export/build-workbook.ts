@@ -1,5 +1,5 @@
-import * as XLSX from "xlsx";
 import type { AddonGroup, Category, Dish } from "@/types";
+import { gridToCsv, writeXlsxSheets } from "@/lib/spreadsheet";
 
 export const MENU_EXPORT_HEADERS = [
   "Category",
@@ -81,40 +81,42 @@ export function buildMenuExportRows(
   });
 }
 
-export function buildMenuExportWorkbook(
+export function buildMenuExportSheets(
   categories: Category[],
   dishes: Dish[],
   addonGroups: AddonGroup[] = [],
-): XLSX.WorkBook {
+) {
   const rows = buildMenuExportRows(categories, dishes, addonGroups);
-  const sheet = XLSX.utils.json_to_sheet(rows, { header: [...MENU_EXPORT_HEADERS] });
-  const book = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(book, sheet, "Menu");
-
-  const categorySheet = XLSX.utils.json_to_sheet(
-    [...categories]
+  const menu = [
+    [...MENU_EXPORT_HEADERS],
+    ...rows.map((row) => MENU_EXPORT_HEADERS.map((header) => row[header])),
+  ];
+  const categoryRows = [
+    ["Name", "Description", "Active", "Sort Order"],
+    ...[...categories]
       .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name))
-      .map((category) => ({
-        Name: sanitizeExportCell(category.name),
-        Description: sanitizeExportCell(category.description ?? ""),
-        Active: category.isActive === false ? "NO" : "YES",
-        "Sort Order": category.sortOrder ?? "",
-      })),
-  );
-  XLSX.utils.book_append_sheet(book, categorySheet, "Categories");
-  return book;
+      .map((category) => [
+        sanitizeExportCell(category.name),
+        sanitizeExportCell(category.description ?? ""),
+        category.isActive === false ? "NO" : "YES",
+        category.sortOrder ?? "",
+      ]),
+  ];
+  return [
+    { name: "Menu", rows: menu },
+    { name: "Categories", rows: categoryRows },
+  ];
 }
 
-export function writeMenuExportBuffer(
+export async function writeMenuExportBuffer(
   categories: Category[],
   dishes: Dish[],
   addonGroups: AddonGroup[] = [],
   format: "xlsx" | "csv" = "xlsx",
-): Buffer {
-  const book = buildMenuExportWorkbook(categories, dishes, addonGroups);
+): Promise<Buffer> {
+  const sheets = buildMenuExportSheets(categories, dishes, addonGroups);
   if (format === "csv") {
-    const csv = XLSX.utils.sheet_to_csv(book.Sheets.Menu!);
-    return Buffer.from(csv, "utf8");
+    return Buffer.from(gridToCsv(sheets[0]?.rows ?? []), "utf8");
   }
-  return XLSX.write(book, { type: "buffer", bookType: "xlsx" }) as Buffer;
+  return writeXlsxSheets(sheets);
 }
