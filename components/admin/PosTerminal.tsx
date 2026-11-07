@@ -450,13 +450,13 @@ export default function PosTerminal({
   }
 
   return (
-    <div className="flex min-h-[32rem] w-full min-w-0 max-w-full flex-col gap-3 overflow-x-hidden overflow-y-auto bg-[linear-gradient(160deg,#f7f4ef_0%,#ebe4d8_45%,#f3eee6_100%)] p-2 sm:gap-4 sm:p-3 md:p-4 lg:h-[calc(100dvh-6rem)] lg:overflow-hidden">
-      <header className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#d9cfc0] bg-[#fffaf3]/90 px-3 py-3 sm:px-4">
+    <div className="flex min-h-[32rem] w-full min-w-0 max-w-full flex-col gap-3 overflow-x-hidden overflow-y-auto bg-[#f7f7f5] p-2 sm:p-3 lg:h-[calc(100dvh-6rem)] lg:overflow-hidden">
+      <header className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-neutral-200 bg-white px-3 py-2.5 sm:px-4">
         <div className="flex items-center gap-3">
-          <MonitorSmartphone className="h-6 w-6 text-[#5c4634]" />
+          <MonitorSmartphone className="h-5 w-5 text-neutral-500" />
           <div>
-            <p className="text-xs uppercase tracking-[0.18em] text-[#8a7460]">POS</p>
-            <h1 className="font-serif text-2xl text-[#2f241c]">{restaurantName}</h1>
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-neutral-400">Point of sale</p>
+            <h1 className="text-lg font-bold text-neutral-900">{restaurantName}</h1>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -465,10 +465,10 @@ export default function PosTerminal({
               key={value}
               type="button"
               onClick={() => setChannel(value)}
-              className={`min-h-11 rounded-xl px-4 text-sm font-medium ${
+              className={`min-h-10 rounded-lg border px-4 text-sm font-semibold ${
                 channel === value
-                  ? "bg-[#2f241c] text-[#f7f1e8]"
-                  : "bg-[#efe6d8] text-[#2f241c]"
+                  ? "border-neutral-900 bg-neutral-900 text-white"
+                  : "border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50"
               }`}
             >
               {value === "POS_DINE_IN" ? "Dine-in" : value === "POS_TAKEAWAY" ? "Takeaway" : "Delivery"}
@@ -530,8 +530,8 @@ export default function PosTerminal({
         </section>
       )}
 
-      <div className="grid min-h-0 min-w-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(22rem,30rem)] lg:gap-4">
-        <section className="flex min-h-[22rem] min-w-0 flex-col gap-3 overflow-hidden rounded-2xl border border-[#d9cfc0] bg-white/85 p-3 lg:min-h-0">
+      <div className="grid min-h-0 min-w-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(22rem,30rem)]">
+        <section className="flex min-h-[22rem] min-w-0 flex-col gap-3 overflow-hidden rounded-xl border border-neutral-200 bg-white p-3 lg:min-h-0">
           <div className="flex min-w-0 shrink-0 flex-wrap gap-2">
             {channel === "POS_DINE_IN" ? (
               <select
@@ -540,10 +540,10 @@ export default function PosTerminal({
                   setTableNumber(event.target.value ? Number(event.target.value) : "")
                 }
                 aria-invalid={tableNumber === ""}
-                className={`min-h-11 max-w-full rounded-xl border bg-[#fffaf3] px-3 ${
+                className={`min-h-11 max-w-full rounded-lg border bg-white px-3 ${
                   tableNumber === ""
                     ? "border-rose-400 ring-2 ring-rose-200"
-                    : "border-[#d9cfc0]"
+                    : "border-neutral-200"
                 }`}
               >
                 <option value="">Select table (required)</option>
@@ -556,17 +556,17 @@ export default function PosTerminal({
               </select>
             ) : null}
             <div className="relative min-w-0 flex-1 basis-[12rem]">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8a7460]" />
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Search menu"
-                className="min-h-11 w-full rounded-xl border border-[#d9cfc0] bg-[#fffaf3] pl-9 pr-3"
+                className="min-h-11 w-full rounded-lg border border-neutral-200 bg-white pl-9 pr-3 outline-none focus:border-neutral-400"
               />
             </div>
           </div>
 
-          <div className="grid min-h-0 flex-1 gap-3 sm:grid-cols-[8rem_minmax(0,1fr)]">
+          <div className="grid min-h-0 flex-1 gap-3 sm:grid-cols-[9rem_minmax(0,1fr)]">
             <nav
               aria-label="Menu categories"
               className="flex shrink-0 gap-1.5 overflow-x-auto pb-1 sm:flex-col sm:overflow-y-auto sm:overflow-x-hidden sm:pb-0"
@@ -574,8 +574,8 @@ export default function PosTerminal({
               <button
                 type="button"
                 onClick={() => setCategoryId("ALL")}
-                className={`min-h-10 shrink-0 rounded-xl px-3 text-left text-xs font-semibold sm:w-full ${
-                  categoryId === "ALL" ? "bg-[#2f241c] text-white" : "bg-[#efe6d8] text-[#2f241c]"
+                className={`min-h-11 shrink-0 rounded-lg px-3 text-left text-sm font-semibold sm:w-full ${
+                  categoryId === "ALL" ? "bg-[#ed542d] text-white" : "bg-transparent text-neutral-700 hover:bg-neutral-100"
                 }`}
               >
                 All
@@ -585,10 +585,10 @@ export default function PosTerminal({
                   key={category.id}
                   type="button"
                   onClick={() => setCategoryId(category.id)}
-                  className={`min-h-10 shrink-0 rounded-xl px-3 text-left text-xs font-semibold sm:w-full ${
+                  className={`min-h-11 shrink-0 rounded-lg px-3 text-left text-sm font-semibold sm:w-full ${
                     categoryId === category.id
-                      ? "bg-[#2f241c] text-white"
-                      : "bg-[#efe6d8] text-[#2f241c]"
+                      ? "bg-[#ed542d] text-white"
+                      : "bg-transparent text-neutral-700 hover:bg-neutral-100"
                   }`}
                 >
                   {category.name}
@@ -602,7 +602,7 @@ export default function PosTerminal({
                   key={dish.id}
                   type="button"
                   onClick={() => beginCustomize(dish)}
-                  className="min-h-[5.5rem] min-w-0 self-start rounded-2xl border border-[#e4dacb] bg-[#fffaf3] p-3 text-left transition hover:border-[#2f241c] hover:shadow-sm"
+                  className="min-h-[6.25rem] min-w-0 self-start rounded-lg border border-neutral-200 bg-white p-3 text-left transition hover:border-neutral-400 hover:shadow-sm active:scale-[0.99]"
                 >
                   <span
                     className={`mb-2 inline-block h-2.5 w-2.5 rounded-full ${
@@ -610,10 +610,10 @@ export default function PosTerminal({
                     }`}
                     aria-hidden
                   />
-                  <p className="line-clamp-2 font-medium leading-snug text-[#2f241c]">
+                  <p className="line-clamp-2 font-semibold leading-snug text-neutral-900">
                     {dish.name?.trim() || "Unnamed dish"}
                   </p>
-                  <p className="mt-1 text-sm text-[#8a7460]">
+                  <p className="mt-1 text-sm text-neutral-500">
                     {money((dish.variants?.[0]?.price ?? dish.price) as number, currency)}
                   </p>
                 </button>
@@ -622,13 +622,13 @@ export default function PosTerminal({
           </div>
         </section>
 
-        <aside className="flex min-h-[26rem] min-w-0 flex-col overflow-hidden rounded-2xl border border-[#d9cfc0] bg-[#2f241c] text-[#f7f1e8] lg:min-h-0 lg:h-full lg:max-h-full">
-          <div className="shrink-0 space-y-2 border-b border-white/10 p-3 sm:p-4">
+        <aside className="flex min-h-[26rem] min-w-0 flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white text-neutral-900 lg:h-full lg:min-h-0 lg:max-h-full">
+          <div className="shrink-0 space-y-2 border-b border-neutral-200 p-3 sm:p-4">
             <div className="flex items-center justify-between gap-2">
               <h2 className="text-lg font-semibold">
                 Current bill
                 {cart.length > 0 ? (
-                  <span className="ml-2 text-sm font-normal text-[#d9cfc0]">
+                  <span className="ml-2 text-sm font-normal text-neutral-500">
                     ({cart.reduce((sum, line) => sum + line.quantity, 0)} items)
                   </span>
                 ) : null}
@@ -637,7 +637,7 @@ export default function PosTerminal({
                 <button
                   type="button"
                   onClick={clearBill}
-                  className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-rose-500/20 px-2.5 text-xs font-semibold text-rose-100 hover:bg-rose-500/30"
+                  className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-2.5 text-xs font-semibold text-rose-700 hover:bg-rose-100"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                   Clear bill
@@ -649,8 +649,8 @@ export default function PosTerminal({
                 role="status"
                 className={`rounded-xl px-3 py-2 text-xs font-medium ${
                   /failed|select|open a pos|add at least|unavailable|invalid/i.test(message)
-                    ? "bg-rose-500/20 text-rose-100"
-                    : "bg-emerald-500/15 text-emerald-100"
+                    ? "bg-rose-50 text-rose-700"
+                    : "bg-emerald-50 text-emerald-700"
                 }`}
               >
                 {message}
@@ -658,44 +658,47 @@ export default function PosTerminal({
             ) : null}
           </div>
 
-          <ul className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain px-3 py-3 sm:px-4">
+          <ul aria-label="Items in current bill" className="min-h-[13rem] flex-[1_1_58%] space-y-2 overflow-y-auto overscroll-contain bg-neutral-50/60 px-3 py-3 sm:px-4">
             {cart.length === 0 ? (
-              <li className="flex min-h-[8rem] items-center justify-center rounded-xl border border-dashed border-white/20 px-4 text-center text-sm text-[#d9cfc0]">
+              <li className="flex min-h-[8rem] items-center justify-center rounded-xl border border-dashed border-neutral-300 px-4 text-center text-sm text-neutral-500">
                 Tap a dish to add it. Each line will show − / + and Remove here.
               </li>
             ) : (
-              cart.map((line) => (
-                <li key={line.key} className="rounded-xl bg-white/10 p-3">
+              cart.map((line, index) => (
+                <li key={line.key} className="rounded-xl border border-neutral-300 bg-white p-3 shadow-sm ring-1 ring-black/[0.02]">
                   <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="font-medium leading-snug">
+                    <div className="flex min-w-0 items-start gap-2.5">
+                      <span className="grid h-7 min-w-7 shrink-0 place-items-center rounded-lg bg-neutral-900 px-1.5 text-xs font-bold text-white">{index + 1}</span>
+                      <div className="min-w-0">
+                      <p className="text-[15px] font-bold leading-snug text-neutral-950">
                         {line.name?.trim() || "Item"}
-                        {line.variantName ? ` · ${line.variantName}` : ""}
                       </p>
+                      {line.variantName ? <p className="mt-0.5 text-xs font-semibold text-neutral-600">{line.variantName}</p> : null}
                       {line.addons.length > 0 ? (
-                        <p className="mt-0.5 text-xs text-[#d9cfc0]">
-                          {line.addons.map((addon) => addon.name).join(", ")}
+                        <p className="mt-1 text-xs leading-relaxed text-neutral-500">
+                          Add-ons: {line.addons.map((addon) => addon.name).join(", ")}
                         </p>
                       ) : null}
-                      <p className="mt-1 text-xs text-[#d9cfc0]">
+                      <p className="mt-1 text-xs text-neutral-500">
                         {money(line.unitPrice, currency)} each
                       </p>
+                      </div>
                     </div>
                     <button
                       type="button"
                       onClick={() => removeLine(line.key)}
-                      className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-rose-500/25 px-2 py-1.5 text-xs font-semibold text-rose-50 hover:bg-rose-500/40"
+                      className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-rose-50 px-2 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100"
                       aria-label={`Remove ${line.name}`}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                       Remove
                     </button>
                   </div>
-                  <div className="mt-2 grid grid-cols-[auto_minmax(5.5rem,1fr)_auto] items-center gap-2">
+                  <div className="mt-3 grid grid-cols-[auto_minmax(5.5rem,1fr)_auto] items-center gap-2 border-t border-neutral-100 pt-2.5">
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        className="min-h-9 min-w-9 rounded-lg bg-white/15 text-lg font-semibold"
+                        className="min-h-9 min-w-9 rounded-lg border border-neutral-200 bg-neutral-50 text-lg font-semibold"
                         onClick={() => updateQty(line.key, -1)}
                         aria-label="Decrease quantity"
                       >
@@ -704,7 +707,7 @@ export default function PosTerminal({
                       <span className="min-w-6 text-center font-semibold">{line.quantity}</span>
                       <button
                         type="button"
-                        className="min-h-9 min-w-9 rounded-lg bg-white/15 text-lg font-semibold"
+                        className="min-h-9 min-w-9 rounded-lg border border-neutral-200 bg-neutral-50 text-lg font-semibold"
                         onClick={() => updateQty(line.key, 1)}
                         aria-label="Increase quantity"
                       >
@@ -727,9 +730,9 @@ export default function PosTerminal({
                           ),
                         );
                       }}
-                      className="min-h-9 w-full min-w-0 rounded-lg border border-white/20 bg-transparent px-2 py-1 text-sm"
+                      className="min-h-9 w-full min-w-0 rounded-lg border border-neutral-200 bg-white px-2 py-1 text-sm"
                     />
-                    <span className="min-w-[5rem] text-right font-semibold tabular-nums">
+                    <span className="min-w-[5rem] text-right text-base font-bold tabular-nums text-neutral-950">
                       {money(
                         lineItemTotal({
                           unitPrice: line.unitPrice,
@@ -751,17 +754,17 @@ export default function PosTerminal({
                         ),
                       );
                     }}
-                    placeholder="Notes"
-                    className="mt-2 min-h-8 w-full rounded-lg border border-white/15 bg-transparent px-2 text-xs text-[#f7f1e8] placeholder:text-white/35"
+                    placeholder="Add kitchen note for this item"
+                    className="mt-2 min-h-9 w-full rounded-lg border border-neutral-200 bg-white px-2 text-xs text-neutral-900 placeholder:text-neutral-400"
                   />
                 </li>
               ))
             )}
           </ul>
 
-          <div className="shrink-0 border-t border-white/10 bg-[#241c16] px-3 py-3 sm:px-4">
+          <div aria-label="Bill totals and checkout" className="shrink-0 border-t border-neutral-300 bg-white px-3 py-3 sm:px-4 lg:max-h-[44%] lg:overflow-y-auto">
             <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2">
-              <span className="shrink-0 rounded-lg border border-white/15 px-2 py-1.5 text-[11px] font-semibold text-[#d9cfc0]">
+              <span className="shrink-0 rounded-lg border border-neutral-200 bg-white px-2 py-1.5 text-[11px] font-semibold text-neutral-600">
                 ₹ off
               </span>
               <input
@@ -770,12 +773,12 @@ export default function PosTerminal({
                 value={billDiscount || ""}
                 onChange={(event) => setBillDiscount(Number(event.target.value) || 0)}
                 placeholder="0"
-                className="min-h-9 min-w-0 flex-1 rounded-lg border border-white/20 bg-transparent px-2 text-sm"
+                className="min-h-9 min-w-0 flex-1 rounded-lg border border-neutral-200 bg-white px-2 text-sm"
               />
               <button
                 type="button"
                 onClick={() => setExtrasOpen((open) => !open)}
-                className="min-h-9 shrink-0 rounded-lg border border-white/15 px-2.5 py-1.5 text-[11px] font-semibold text-[#d9cfc0]"
+                className="min-h-9 shrink-0 rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-neutral-600"
               >
                 {extrasOpen ? "Hide" : "Coupon · note · phone"}
               </button>
@@ -787,35 +790,35 @@ export default function PosTerminal({
                   value={couponCode}
                   onChange={(event) => setCouponCode(event.target.value)}
                   placeholder="Coupon"
-                  className="min-h-9 rounded-lg border border-white/20 bg-transparent px-2 text-xs"
+                  className="min-h-9 rounded-lg border border-neutral-200 bg-white px-2 text-xs"
                 />
                 <input
                   value={orderNote}
                   onChange={(event) => setOrderNote(event.target.value)}
                   placeholder="Order note"
-                  className="min-h-9 rounded-lg border border-white/20 bg-transparent px-2 text-xs"
+                  className="min-h-9 rounded-lg border border-neutral-200 bg-white px-2 text-xs"
                 />
                 <input
                   value={customerPhone}
                   onChange={(event) => setCustomerPhone(event.target.value)}
                   placeholder="Phone (optional)"
-                  className="min-h-9 rounded-lg border border-white/20 bg-transparent px-2 text-xs"
+                  className="min-h-9 rounded-lg border border-neutral-200 bg-white px-2 text-xs"
                 />
               </div>
             ) : null}
 
             <div className="mt-2 space-y-0.5 text-sm">
-              <div className="grid grid-cols-[1fr_auto] gap-3 text-[#d9cfc0]">
+              <div className="grid grid-cols-[1fr_auto] gap-3 text-neutral-500">
                 <span>Subtotal</span>
                 <span>{money(totals.itemsSubtotal, currency)}</span>
               </div>
               {billDiscount > 0 ? (
-                <div className="grid grid-cols-[1fr_auto] gap-3 text-emerald-200">
+                <div className="grid grid-cols-[1fr_auto] gap-3 text-emerald-700">
                   <span>Discount</span>
                   <span>−{money(billDiscount, currency)}</span>
                 </div>
               ) : null}
-              <div className="grid grid-cols-[1fr_auto] gap-3 text-[#d9cfc0]">
+              <div className="grid grid-cols-[1fr_auto] gap-3 text-neutral-500">
                 <span>
                   {taxLabel} ({taxRatePercent}%)
                 </span>
@@ -829,7 +832,7 @@ export default function PosTerminal({
 
             <div className="mt-2 space-y-1.5">
               {placeBlocked ? (
-                <p className="rounded-lg bg-amber-500/20 px-3 py-1.5 text-xs font-medium text-amber-100">
+                <p className="rounded-lg bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-800">
                   {placeBlocked}
                 </p>
               ) : null}
@@ -837,7 +840,7 @@ export default function PosTerminal({
                 type="button"
                 disabled={pending || Boolean(placeBlocked)}
                 onClick={placeOrder}
-                className="min-h-11 w-full rounded-xl bg-[#f59e0b] text-sm font-bold text-[#1a120c] disabled:opacity-50"
+                className="min-h-12 w-full rounded-lg bg-[#ed542d] text-sm font-bold text-white hover:bg-[#d94723] disabled:opacity-50"
               >
                 {pending ? "Sending…" : "Save & send to kitchen"}
               </button>
@@ -845,7 +848,7 @@ export default function PosTerminal({
                 type="button"
                 disabled={pending || Boolean(placeBlocked)}
                 onClick={placeAndPay}
-                className="min-h-10 w-full rounded-xl border border-white/30 bg-white text-sm font-bold text-[#2f241c] disabled:opacity-50"
+                className="min-h-11 w-full rounded-lg border border-neutral-300 bg-white text-sm font-bold text-neutral-900 hover:bg-neutral-100 disabled:opacity-50"
               >
                 Bill &amp; pay ({payMethod})
               </button>
@@ -856,7 +859,7 @@ export default function PosTerminal({
                     type="button"
                     onClick={() => setPayMethod(method)}
                     className={`min-h-10 min-w-0 rounded-lg px-2 text-[11px] font-semibold ${
-                      payMethod === method ? "bg-[#f59e0b] text-[#1a120c]" : "bg-white/10"
+                      payMethod === method ? "bg-neutral-900 text-white" : "border border-neutral-200 bg-white text-neutral-600"
                     }`}
                   >
                     {method}
@@ -871,13 +874,13 @@ export default function PosTerminal({
                   onChange={(event) =>
                     setPayAmount(event.target.value === "" ? "" : Number(event.target.value))
                   }
-                  className="col-span-2 min-h-10 w-full min-w-0 rounded-lg border border-white/20 bg-transparent px-2 text-xs tabular-nums sm:col-span-1"
+                  className="col-span-2 min-h-10 w-full min-w-0 rounded-lg border border-neutral-200 bg-white px-2 text-xs tabular-nums sm:col-span-1"
                 />
                 <button
                   type="button"
                   disabled={pending || !lastOrderId}
                   onClick={recordPay}
-                  className="min-h-10 rounded-lg bg-white/15 px-3 text-[11px] font-semibold disabled:opacity-40"
+                  className="min-h-10 rounded-lg bg-neutral-200 px-3 text-[11px] font-semibold text-neutral-800 disabled:opacity-40"
                 >
                   Record
                 </button>
