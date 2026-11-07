@@ -12,6 +12,7 @@ import {
   Wallet,
 } from "lucide-react";
 import type { OrderSummary, RestaurantTable } from "@/types";
+import { locationName } from "@/lib/service-location";
 import type { ServiceRequest, ServiceRequestType } from "@/types/service-request";
 import { TABLE_STATUS_LABEL, TABLE_STATUS_STYLE } from "@/lib/captain-floor";
 import { isPendingCaptainApproval } from "@/lib/order-authorization";
@@ -237,7 +238,7 @@ export default function CaptainTableWorkspace({
             <ArrowLeft className="h-4 w-4" /> My Tables
           </Link>
           <div className="mt-2 flex flex-wrap items-center gap-3">
-            <h1 className="text-4xl font-black tracking-tight">Table {table.tableNumber}</h1>
+            <h1 className="text-4xl font-black tracking-tight">{locationName(table)}</h1>
             <span
               className={`rounded-full border px-3 py-1 text-xs font-bold ${TABLE_STATUS_STYLE[table.status]}`}
             >

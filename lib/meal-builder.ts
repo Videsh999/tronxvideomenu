@@ -75,22 +75,32 @@ export function buildMeal(options: {
   mood: MealMood;
   size: number;
   locked?: (Dish | null)[];
+  /** Prefer different dishes on a re-spin; falls back when the catalog is too small. */
+  avoidIds?: Iterable<string>;
   random?: () => number;
 }): Dish[] {
   const { pool, mood, size, random = Math.random } = options;
   const locked = Array.from({ length: size }, (_, index) => options.locked?.[index] ?? null);
   const keptIds = new Set(locked.filter((dish): dish is Dish => Boolean(dish)).map((dish) => dish.id));
+  const avoidIds = new Set(options.avoidIds ?? []);
   const open = locked.filter((dish) => !dish).length;
   const fresh = (list: Dish[]) => list.filter((dish) => !keptIds.has(dish.id));
+  const changed = (list: Dish[]) => fresh(list).filter((dish) => !avoidIds.has(dish.id));
+  const variedWithFallback = (list: Dish[], count: number) => {
+    const preferred = pickVaried(changed(list), count, random);
+    if (preferred.length === count) return preferred;
+    const used = new Set(preferred.map((dish) => dish.id));
+    return [...preferred, ...pickVaried(fresh(list).filter((dish) => !used.has(dish.id)), count - preferred.length, random)];
+  };
 
   let picks: Dish[];
-  if (mood === "eat") picks = pickVaried(fresh(pool.food), open, random);
-  else if (mood === "drink") picks = pickVaried(fresh(pool.drinks), open, random);
+  if (mood === "eat") picks = variedWithFallback(pool.food, open);
+  else if (mood === "drink") picks = variedWithFallback(pool.drinks, open);
   else {
     const keptDrinks = locked.filter((dish) => dish && pool.drinks.some((drink) => drink.id === dish.id)).length;
     const wantedDrinks = Math.max(0, Math.max(1, Math.round(size / 3)) - keptDrinks);
-    const drinks = pickVaried(fresh(pool.drinks), Math.min(open, wantedDrinks), random);
-    const food = pickVaried(fresh(pool.food), open - drinks.length, random);
+    const drinks = variedWithFallback(pool.drinks, Math.min(open, wantedDrinks));
+    const food = variedWithFallback(pool.food, open - drinks.length);
     picks = [...food, ...drinks];
     if (picks.length < open) {
       const used = new Set(picks.map((dish) => dish.id));

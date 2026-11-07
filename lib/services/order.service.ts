@@ -39,6 +39,7 @@ const staffOrderView = (order: RestaurantOrder) => ({
   orderNumber: order.orderNumber,
   tableNumber: order.tableNumber,
   tableId: order.tableId,
+  locationType: order.locationType,
   status: order.status,
   channel: order.channel ?? "QR",
   source: order.source ?? "QR",
@@ -69,6 +70,7 @@ const customerOrderView = (order: RestaurantOrder) => ({
   id: order.id,
   orderNumber: order.orderNumber,
   tableNumber: order.tableNumber,
+  locationType: order.locationType,
   status: order.status,
   items: order.items,
   subtotal: order.subtotal,
@@ -143,8 +145,8 @@ export class OrderService {
     const menu = await restaurantService.getFullMenu(input.slug);
     if (!menu) throw new OrderServiceError("Restaurant not found.", 404);
     const table = await tableRepository.findByRestaurantAndNumber(menu.restaurant.id, input.tableNumber);
-    if (!table || !table.isActive || table.status === "CLOSED") {
-      throw new OrderServiceError("This table is unavailable. Please ask restaurant staff for help.");
+    if (!table || (table.locationType ?? "TABLE") !== input.locationType || !table.isActive || table.status === "CLOSED") {
+      throw new OrderServiceError(`This ${input.locationType === "ROOM" ? "room" : "table"} is unavailable. Please ask restaurant staff for help.`);
     }
     if (await orderRepository.hasIdempotencyKey(menu.restaurant.id, input.idempotencyKey)) {
       throw new OrderServiceError("This order was already submitted. Refresh the page to see your order status.");
@@ -274,6 +276,7 @@ export class OrderService {
       restaurantId: menu.restaurant.id,
       tableId: table.id,
       tableNumber: table.tableNumber,
+      locationType: table.locationType ?? "TABLE",
       customerTokenHash: createHash("sha256").update(customerToken).digest("hex"),
       idempotencyKey: input.idempotencyKey,
       status: "PENDING",
@@ -329,6 +332,7 @@ export class OrderService {
 
     let tableId = `virtual-counter-${restaurantId}`;
     let tableNumber = 0;
+    let locationType: RestaurantOrder["locationType"];
     if (input.channel === "POS_DINE_IN") {
       const table = await tableRepository.findByRestaurantAndNumber(restaurantId, input.tableNumber!);
       if (!table || !table.isActive || table.status === "CLOSED" || table.status === "CLEANING") {
@@ -336,6 +340,7 @@ export class OrderService {
       }
       tableId = table.id;
       tableNumber = table.tableNumber;
+      locationType = table.locationType ?? "TABLE";
     }
 
     const categoryStation = new Map(
@@ -564,6 +569,7 @@ export class OrderService {
         restaurantId,
         tableId,
         tableNumber,
+        locationType,
         customerTokenHash: createHash("sha256").update(randomBytes(32)).digest("hex"),
         idempotencyKey: input.idempotencyKey,
         status: "PENDING",

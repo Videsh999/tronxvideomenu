@@ -16,6 +16,7 @@ import {
 import { buildSampleSimulatorDevices } from "@/lib/devices/sample-devices";
 import { resolveProfile, validatePrinterConfiguration } from "@/lib/devices/escpos/capabilities";
 import { buildEscPosDocument } from "@/lib/devices/escpos/layout";
+import { orderLocationName } from "@/lib/service-location";
 import { assertAssignablePrinterRole } from "@/lib/devices/printer-roles";
 import {
   jobTypeForRoute,
@@ -490,13 +491,22 @@ export class DeviceService {
           actorId: opts.actorId,
           payload: {
             orderNumber: order.orderNumber,
+            location: orderLocationName(order),
             station,
             isReprint: Boolean(opts.isReprint),
             items: (items.length ? items : order.items).map((i) => ({
-              name: i.dishNameSnapshot,
+              name: `${i.dishNameSnapshot}${i.variantNameSnapshot ? ` (${i.variantNameSnapshot})` : ""}`,
               qty: i.quantity,
-              notes: i.note,
+              total: i.itemTotal,
+              notes: [
+                i.addons.length ? i.addons.map((addon) => `+ ${addon.nameSnapshot}`).join(", ") : "",
+                i.note ? `NOTE: ${i.note}` : "",
+              ].filter(Boolean).join(" | "),
             })),
+            subtotal: order.subtotal,
+            discount: order.billDiscountAmount ?? 0,
+            tax: order.taxAmount ?? 0,
+            total: order.total,
           },
         });
         jobIds.push(job.id);

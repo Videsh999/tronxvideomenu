@@ -6,6 +6,7 @@ import { ArrowLeft, Minus, Plus, Search, ShoppingBag, Trash2, X } from "lucide-r
 import type { CaptainPermissions, Category, Dish, PaymentMethod, RestaurantTable } from "@/types";
 import { computeBillTotals, lineItemTotal, roundMoney } from "@/lib/order-pricing";
 import { resolveCaptainPermissions } from "@/lib/captain-permissions";
+import { locationName } from "@/lib/service-location";
 
 type CartLine = {
   key: string;
@@ -98,6 +99,8 @@ export default function CaptainOrderPad({
 
   const tableKey = tableNumber === "" ? "" : String(tableNumber);
   const session = cartsByTable[tableKey] ?? emptyCartState();
+  const selectedLocation = tableNumber === "" ? null : tables.find((item) => item.tableNumber === tableNumber) ?? null;
+  const selectedLocationName = selectedLocation ? locationName(selectedLocation) : "location not selected";
 
   function patchSession(patch: Partial<TableCartState>) {
     if (!tableKey) return;
@@ -150,7 +153,7 @@ export default function CaptainOrderPad({
 
   function beginCustomize(dish: Dish) {
     if (!tableKey) {
-      setMessage("Select an assigned table first.");
+      setMessage("Select an assigned table or room first.");
       return;
     }
     if (!dishNeedsCustomize(dish)) {
@@ -176,7 +179,7 @@ export default function CaptainOrderPad({
       addons: [],
     };
     patchSession({ cart: [...session.cart, next] });
-    setMessage(`Added ${dish.name} · Table ${tableNumber}`);
+    setMessage(`Added ${dish.name} · ${selectedLocationName}`);
   }
 
   function confirmCustomize() {
@@ -209,13 +212,13 @@ export default function CaptainOrderPad({
       addons,
     };
     patchSession({ cart: [...session.cart, next] });
-    setMessage(`Added ${customizing.name}${variant ? ` · ${variant.name}` : ""} · Table ${tableNumber}`);
+    setMessage(`Added ${customizing.name}${variant ? ` · ${variant.name}` : ""} · ${selectedLocationName}`);
     setCustomizing(null);
   }
 
   function placeOrder(andPay: boolean) {
     if (tableNumber === "" || Number(tableNumber) < 1) {
-      setMessage("Select an assigned table first.");
+      setMessage("Select an assigned table or room first.");
       return;
     }
     if (session.cart.length === 0) {
@@ -299,7 +302,7 @@ export default function CaptainOrderPad({
         patchSession(emptyCartState());
         const warning = json.meta?.warning ? ` · ${json.meta.warning}` : "";
         setMessage(
-          `Order #${json.data.orderNumber} ${json.meta?.appended ? "updated" : "placed"} for table ${tableNumber}${
+          `Order #${json.data.orderNumber} ${json.meta?.appended ? "updated" : "placed"} for ${selectedLocationName}${
             json.meta?.sentToKitchen ? " · KOT sent to kitchen" : ""
           }${andPay ? ` · paid (${payMethod})` : ""}${warning}`,
         );
@@ -389,7 +392,7 @@ export default function CaptainOrderPad({
             <option value="">Select table</option>
             {tables.map((table) => (
               <option key={table.id} value={table.tableNumber}>
-                T{table.tableNumber}
+                {table.locationType === "ROOM" ? "Room" : "T"}{table.tableNumber}
                 {table.label ? ` · ${table.label}` : ""} · {table.status}
               </option>
             ))}
@@ -416,7 +419,7 @@ export default function CaptainOrderPad({
             <div className="inline-flex rounded-xl border border-neutral-200 bg-neutral-50 p-1">
               <span className="rounded-lg bg-neutral-900 px-3 py-2 text-xs font-bold text-white">Dine-in</span>
               {tableNumber !== "" ? (
-                <span className="px-3 py-2 text-xs font-semibold text-neutral-700">Table {tableNumber}</span>
+                <span className="px-3 py-2 text-xs font-semibold text-neutral-700">{locationName(tables.find((item) => item.tableNumber === tableNumber)!)}</span>
               ) : (
                 <span className="px-3 py-2 text-xs font-semibold text-rose-600">Pick a table</span>
               )}
@@ -508,7 +511,7 @@ export default function CaptainOrderPad({
             <h2 className="text-lg font-semibold">
               Current bill
               {tableNumber !== "" ? (
-                <span className="ml-2 text-sm font-normal text-white/60">· Table {tableNumber}</span>
+                <span className="ml-2 text-sm font-normal text-white/60">· {selectedLocationName}</span>
               ) : null}
               <span className="ml-2 text-sm font-normal text-white/60">
                 ({session.cart.reduce((sum, line) => sum + line.quantity, 0)} items)
@@ -795,7 +798,7 @@ export default function CaptainOrderPad({
             <ShoppingBag className="h-5 w-5" />
             {cartItemCount > 0 ? <span className="absolute -right-1.5 -top-1.5 grid h-5 min-w-5 place-items-center rounded-full bg-amber-500 px-1 text-[10px] font-bold text-neutral-950">{cartItemCount}</span> : null}
           </span>
-          <span><span className="block text-sm font-bold">{cartItemCount ? "View current order" : "Cart is empty"}</span><span className="block text-xs text-white/60">Table {tableNumber || "not selected"}</span></span>
+          <span><span className="block text-sm font-bold">{cartItemCount ? "View current order" : "Cart is empty"}</span><span className="block text-xs text-white/60">{selectedLocationName}</span></span>
         </span>
         <span className="text-base font-bold">{money(totals.total, currency)}</span>
       </button>

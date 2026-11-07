@@ -7,7 +7,7 @@ import { toDomain } from "@/lib/db/mongo-mappers";
 
 function tableToDomain(table: unknown) {
   const result = toDomain<RestaurantTable>(table);
-  return { ...result, status: result.status ?? "OPEN" };
+  return { ...result, locationType: result.locationType ?? "TABLE", status: result.status ?? "OPEN" };
 }
 
 export class TableRepository implements ITableRepository {
@@ -19,7 +19,14 @@ export class TableRepository implements ITableRepository {
 
   async findBookableByRestaurant(restaurantId: string, guestCount: number) {
     await connectToDatabase();
-    const tables = await TableModel.find({ restaurantId, isActive: true, status: "OPEN", capacity: { $gte: guestCount } }).sort({ tableNumber: 1 }).lean();
+    const tables = await TableModel.find({
+      restaurantId,
+      isActive: true,
+      status: "OPEN",
+      capacity: { $gte: guestCount },
+      // Hotel rooms are service locations, not restaurant reservation inventory.
+      $or: [{ locationType: "TABLE" }, { locationType: { $exists: false } }],
+    }).sort({ tableNumber: 1 }).lean();
     return tables.map(tableToDomain);
   }
 

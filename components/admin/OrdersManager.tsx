@@ -16,6 +16,7 @@ import {
   type OrderBoardStage,
 } from "@/lib/order-board";
 import { printKitchenOrderTicket } from "@/lib/kot-print";
+import { orderLocationName } from "@/lib/service-location";
 
 function playNotificationChime() {
   try {
@@ -288,7 +289,7 @@ export default function OrdersManager({
                   <div className="min-w-0">
                     <h3 className="text-lg font-bold text-neutral-900">
                       #{order.orderNumber}
-                      <span className="ml-2 text-sm font-semibold text-neutral-500">Table {order.tableNumber}</span>
+                      <span className="ml-2 text-sm font-semibold text-neutral-500">{orderLocationName(order)}</span>
                     </h3>
                     <p className="mt-0.5 text-xs text-neutral-400">
                       {formatOrderClock(order.createdAt)} · {statusLabel(order.status)}
@@ -412,7 +413,7 @@ export default function OrdersManager({
           <div className="w-full max-w-md space-y-4 rounded-2xl border border-neutral-200 bg-white p-6 shadow-2xl">
             <h3 className="text-lg font-bold">Record payment · #{paymentModalOrder.orderNumber}</h3>
             <p className="text-sm text-neutral-500">
-              Table {paymentModalOrder.tableNumber} · <strong className="text-neutral-900">₹{paymentModalOrder.total}</strong>
+              {orderLocationName(paymentModalOrder)} · <strong className="text-neutral-900">₹{paymentModalOrder.total}</strong>
             </p>
             {paymentError ? <p className="text-xs text-rose-600">{paymentError}</p> : null}
             <div className="grid grid-cols-3 gap-2">

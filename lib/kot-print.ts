@@ -1,98 +1,61 @@
 import type { OrderSummary } from "@/types";
 import { formatOrderClock } from "@/lib/order-board";
-
-/** Opens a print-ready Kitchen Order Ticket for the given order. */
-export function printKitchenOrderTicket(order: OrderSummary, restaurantName?: string) {
-  if (typeof window === "undefined") return;
-
-  const itemsHtml = order.items
-    .map((item) => {
-      const addons = item.addons
-        .map((addon) => `<div class="addon">+ ${escapeHtml(addon.nameSnapshot)}${addon.quantity > 1 ? ` × ${addon.quantity}` : ""}</div>`)
-        .join("");
-      return `<tr>
-        <td class="qty">${item.quantity}</td>
-        <td>
-          <div class="dish">${escapeHtml(item.dishNameSnapshot)}</div>
-          ${addons}
-        </td>
-      </tr>`;
-    })
-    .join("");
-
-  const html = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <title>KOT #${order.orderNumber}</title>
-  <style>
-    @page { margin: 8mm; size: 80mm auto; }
-    * { box-sizing: border-box; }
-    body { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; color: #111; }
-    .ticket { width: 72mm; max-width: 100%; margin: 0 auto; }
-    .brand { font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; text-align: center; }
-    .title { margin: 6px 0 2px; font-size: 22px; font-weight: 900; text-align: center; }
-    .meta { text-align: center; font-size: 12px; margin-bottom: 10px; }
-    .rule { border-top: 1px dashed #111; margin: 8px 0; }
-    table { width: 100%; border-collapse: collapse; }
-    td { vertical-align: top; padding: 4px 0; font-size: 13px; }
-    .qty { width: 18px; font-weight: 900; }
-    .dish { font-weight: 800; font-size: 14px; }
-    .addon { font-size: 11px; margin-top: 2px; }
-    .foot { margin-top: 10px; text-align: center; font-size: 11px; }
-  </style>
-</head>
-<body>
-  <div class="ticket">
-    <div class="brand">${escapeHtml(restaurantName || "TRONX")}</div>
-    <div class="title">KOT #${escapeHtml(String(order.orderNumber))}</div>
-    <div class="meta">Table ${escapeHtml(String(order.tableNumber))} · ${escapeHtml(formatOrderClock(order.createdAt))}</div>
-    <div class="rule"></div>
-    <table>${itemsHtml}</table>
-    <div class="rule"></div>
-    <div class="foot">Kitchen copy · Powered by TRONX</div>
-  </div>
-  <script>
-    window.onload = function () {
-      window.focus();
-      window.print();
-      setTimeout(function () { window.close(); }, 400);
-    };
-  </script>
-</body>
-</html>`;
-
-  const popup = window.open("", "_blank", "noopener,noreferrer,width=420,height=640");
-  if (!popup) {
-    // Popup blocked — fall back to an iframe print so Accept still works.
-    const frame = document.createElement("iframe");
-    frame.setAttribute("aria-hidden", "true");
-    frame.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0";
-    document.body.appendChild(frame);
-    const doc = frame.contentDocument;
-    if (!doc) {
-      document.body.removeChild(frame);
-      return;
-    }
-    doc.open();
-    doc.write(html);
-    doc.close();
-    frame.onload = () => {
-      frame.contentWindow?.focus();
-      frame.contentWindow?.print();
-      setTimeout(() => document.body.removeChild(frame), 1000);
-    };
-    return;
-  }
-  popup.document.open();
-  popup.document.write(html);
-  popup.document.close();
-}
+import { orderLocationName } from "@/lib/service-location";
 
 function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function money(value: number) {
+  return `₹${Number(value || 0).toFixed(2)}`;
+}
+
+/** Pure ticket markup used by browser/mobile printing and regression tests. */
+export function buildKitchenOrderTicketHtml(order: OrderSummary, restaurantName = "TRONX") {
+  const itemsHtml = order.items.map((item) => {
+    const activeQuantity = Math.max(0, item.quantity - (item.cancelledQuantity ?? 0));
+    const addons = item.addons.map((addon) => `<div class="detail">+ ${escapeHtml(addon.nameSnapshot)}${addon.quantity > 1 ? ` × ${addon.quantity}` : ""} · ${money(addon.total)}</div>`).join("");
+    const variant = item.variantNameSnapshot ? `<div class="detail">Variant: ${escapeHtml(item.variantNameSnapshot)}</div>` : "";
+    const note = item.note ? `<div class="note">NOTE: ${escapeHtml(item.note)}</div>` : "";
+    const cancelled = item.cancelledQuantity ? `<div class="cancelled">Cancelled: ${item.cancelledQuantity}</div>` : "";
+    return `<tr><td class="qty">${activeQuantity}×</td><td class="item"><div class="dish">${escapeHtml(item.dishNameSnapshot)}</div>${variant}${addons}${note}${cancelled}</td><td class="price"><div>${money(item.unitPriceSnapshot)}</div><strong>${money(item.itemTotal)}</strong></td></tr>`;
+  }).join("");
+  const discount = order.billDiscountAmount ?? 0;
+  return `<section class="kot-ticket" aria-label="Kitchen order ticket ${order.orderNumber}"><header><div class="brand">${escapeHtml(restaurantName)}</div><div class="kind">KITCHEN ORDER TICKET</div><div class="order-number">ORDER #${escapeHtml(String(order.orderNumber))}</div><div class="location">${escapeHtml(orderLocationName(order))}</div><div class="meta">${escapeHtml(formatOrderClock(order.createdAt))} · ${escapeHtml((order.source ?? order.channel ?? "ORDER").replace(/_/g, " "))}</div></header><div class="rule"></div><table><thead><tr><th>Qty</th><th>Item</th><th class="price">Price</th></tr></thead><tbody>${itemsHtml}</tbody></table><div class="rule"></div><dl class="totals"><div><dt>Subtotal</dt><dd>${money(order.subtotal)}</dd></div>${discount > 0 ? `<div><dt>Discount</dt><dd>−${money(discount)}</dd></div>` : ""}${(order.packagingCharge ?? 0) > 0 ? `<div><dt>Packaging</dt><dd>${money(order.packagingCharge ?? 0)}</dd></div>` : ""}${(order.serviceCharge ?? 0) > 0 ? `<div><dt>Service</dt><dd>${money(order.serviceCharge ?? 0)}</dd></div>` : ""}<div><dt>Tax</dt><dd>${money(order.taxAmount ?? 0)}</dd></div><div class="grand"><dt>TOTAL</dt><dd>${money(order.total)}</dd></div></dl>${order.orderNote ? `<div class="order-note"><strong>ORDER NOTE</strong><br>${escapeHtml(order.orderNote)}</div>` : ""}<footer>Kitchen copy · ${escapeHtml(order.payment?.status ?? "UNPAID")} · Powered by TRONX</footer></section>`;
+}
+
+const PRINT_CSS = `
+@page { margin: 3mm; size: 80mm auto; }
+#tronx-kot-print-root { display: none; }
+@media print {
+ html,body{width:100%;min-height:0!important;margin:0!important;padding:0!important;background:#fff!important;overflow:visible!important}
+ body>*:not(#tronx-kot-print-root){display:none!important}
+ #tronx-kot-print-root{display:block!important;position:static!important;width:74mm!important;max-width:100%!important;margin:0 auto!important;color:#000!important;background:#fff!important;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace!important}
+ .kot-ticket{width:100%;font-size:10.5pt;line-height:1.25;print-color-adjust:exact;-webkit-print-color-adjust:exact}.kot-ticket header{text-align:center}.kot-ticket .brand{font-size:9pt;font-weight:700;letter-spacing:.12em;text-transform:uppercase}.kot-ticket .kind{margin-top:2mm;font-size:11pt;font-weight:900}.kot-ticket .order-number{margin-top:1mm;font-size:22pt;line-height:1;font-weight:900}.kot-ticket .location{margin-top:2mm;font-size:16pt;font-weight:900}.kot-ticket .meta{margin-top:1mm;font-size:8.5pt}.kot-ticket .rule{border-top:.35mm dashed #000;margin:2.5mm 0}.kot-ticket table{width:100%;border-collapse:collapse;table-layout:fixed}.kot-ticket th{padding:0 0 1.5mm;border-bottom:.25mm solid #000;font-size:8pt;text-align:left;text-transform:uppercase}.kot-ticket td{padding:2mm 0;vertical-align:top;border-bottom:.15mm dotted #777;break-inside:avoid}.kot-ticket .qty{width:10mm;font-size:15pt;font-weight:900}.kot-ticket .item{padding-right:1.5mm;overflow-wrap:anywhere}.kot-ticket .dish{font-size:11pt;font-weight:900}.kot-ticket .detail{margin-top:.7mm;font-size:8.5pt}.kot-ticket .note{margin-top:1mm;padding:1mm;border:.25mm solid #000;font-size:9pt;font-weight:900}.kot-ticket .cancelled{text-decoration:line-through;font-size:8pt}.kot-ticket .price{width:21mm;text-align:right;font-size:8.5pt;white-space:nowrap}.kot-ticket .price strong{display:block;margin-top:1mm;font-size:10pt}.kot-ticket .totals{margin:0}.kot-ticket .totals div{display:flex;justify-content:space-between;gap:3mm;margin:.8mm 0}.kot-ticket .totals dt,.kot-ticket .totals dd{margin:0}.kot-ticket .grand{margin-top:1.5mm!important;padding-top:1.5mm;border-top:.4mm solid #000;font-size:15pt;font-weight:900}.kot-ticket .order-note{margin-top:2.5mm;padding:2mm;border:.35mm solid #000;font-size:9pt}.kot-ticket footer{margin-top:3mm;text-align:center;font-size:8pt}
+}`;
+
+/** Uses the current page because mobile Safari/Chrome often block popup and iframe printing. */
+export function printKitchenOrderTicket(order: OrderSummary, restaurantName?: string) {
+  if (typeof window === "undefined") return;
+  document.getElementById("tronx-kot-print-root")?.remove();
+  document.getElementById("tronx-kot-print-style")?.remove();
+  const style = document.createElement("style");
+  style.id = "tronx-kot-print-style";
+  style.textContent = PRINT_CSS;
+  const root = document.createElement("div");
+  root.id = "tronx-kot-print-root";
+  root.innerHTML = buildKitchenOrderTicketHtml(order, restaurantName);
+  document.head.appendChild(style);
+  document.body.appendChild(root);
+  let cleaned = false;
+  const cleanup = () => {
+    if (cleaned) return;
+    cleaned = true;
+    window.removeEventListener("afterprint", cleanup);
+    root.remove();
+    style.remove();
+  };
+  window.addEventListener("afterprint", cleanup, { once: true });
+  window.setTimeout(() => window.print(), 120);
+  window.setTimeout(cleanup, 60_000);
 }

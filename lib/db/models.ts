@@ -277,6 +277,7 @@ const tableSchema = new Schema<RestaurantTable>(
   {
     id: { type: String, required: true, unique: true, index: true },
     restaurantId: { type: String, required: true },
+    locationType: { type: String, enum: ["TABLE", "ROOM"], required: true, default: "TABLE" },
     tableNumber: { type: Number, required: true, min: 1 },
     label: String,
     capacity: { type: Number, min: 1 },
@@ -429,6 +430,7 @@ const orderSchema = new Schema<RestaurantOrder>(
     restaurantId: { type: String, required: true },
     tableId: { type: String, required: true },
     tableNumber: { type: Number, required: true },
+    locationType: { type: String, enum: ["TABLE", "ROOM"] },
     orderNumber: { type: Number, required: true },
     customerTokenHash: { type: String, required: true, select: false },
     idempotencyKey: { type: String, required: true, select: false },

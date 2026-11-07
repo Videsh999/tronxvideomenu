@@ -9,6 +9,7 @@ import { api } from "@/lib/api";
 import { Copy, Download, ExternalLink, Pencil, Plus, Printer, QrCode, Trash2, Users } from "lucide-react";
 import QRCode from "qrcode";
 import AdminModal from "@/components/admin/AdminModal";
+import { locationMenuUrl, locationName, locationType } from "@/lib/service-location";
 
 type TablesManagerProps = {
   initialTables: RestaurantTable[];
@@ -19,10 +20,13 @@ type TablesManagerProps = {
   tableOrderingEnabled?: boolean;
 };
 
-const statusLabel: Record<TableStatus, string> = { OPEN: "Open", OCCUPIED: "Occupied", CLOSED: "Closed" };
+const statusLabel: Record<TableStatus, string> = { OPEN: "Open", OCCUPIED: "Occupied", BILL_REQUESTED: "Bill requested", PAYMENT_PENDING: "Payment pending", CLEANING: "Cleaning", CLOSED: "Closed" };
 const statusStyle: Record<TableStatus, string> = {
   OPEN: "bg-emerald-50 text-emerald-700 ring-emerald-200",
   OCCUPIED: "bg-amber-50 text-amber-700 ring-amber-200",
+  BILL_REQUESTED: "bg-violet-50 text-violet-700 ring-violet-200",
+  PAYMENT_PENDING: "bg-blue-50 text-blue-700 ring-blue-200",
+  CLEANING: "bg-neutral-100 text-neutral-700 ring-neutral-300",
   CLOSED: "bg-neutral-100 text-neutral-600 ring-neutral-200",
 };
 const inputClass = "mt-1.5 h-11 w-full rounded-xl border border-neutral-300 bg-white px-3 text-sm text-neutral-900";
@@ -30,6 +34,7 @@ const qrOptions = { width: 560, margin: 1, color: { dark: "#000000", light: "#ff
 
 export default function TablesManager({ initialTables, initialOrders = [], restaurantSlug, restaurantName, orderManagementEnabled = true, tableOrderingEnabled = true }: TablesManagerProps) {
   const [tables, setTables] = useState(initialTables);
+  const [activeKind, setActiveKind] = useState<"TABLE" | "ROOM">("TABLE");
   const [orders, setOrders] = useState(initialOrders);
   const [mode, setMode] = useState<"single" | "bulk">(initialTables.length ? "single" : "bulk");
   const [tableNumber, setTableNumber] = useState("");
@@ -69,13 +74,13 @@ export default function TablesManager({ initialTables, initialOrders = [], resta
     return () => window.removeEventListener("focus", updateOrigin);
   }, []);
 
-  const menuUrl = useCallback((number: number) => `${origin}/menu/${encodeURIComponent(restaurantSlug)}?table=${number}`, [origin, restaurantSlug]);
+  const menuUrl = useCallback((location: RestaurantTable) => locationMenuUrl(origin, restaurantSlug, location), [origin, restaurantSlug]);
 
   useEffect(() => {
     const table = tables.find((entry) => entry.id === qrTable);
     if (!table || !origin) return;
     let alive = true;
-    void QRCode.toDataURL(menuUrl(table.tableNumber), qrOptions)
+    void QRCode.toDataURL(menuUrl(table), qrOptions)
       .then((url) => { if (alive) setQrDataUrl(url); })
       .catch(() => { if (alive) setQrDataUrl(""); });
     return () => { alive = false; };
@@ -89,20 +94,21 @@ export default function TablesManager({ initialTables, initialOrders = [], resta
     return () => { window.clearTimeout(timer); window.removeEventListener("afterprint", done); };
   }, [printCodes]);
 
+  const visibleLocations = useMemo(() => tables.filter((table) => locationType(table) === activeKind), [activeKind, tables]);
   const counts = useMemo(() => ({
-    OPEN: tables.filter((table) => table.status === "OPEN").length,
-    OCCUPIED: tables.filter((table) => table.status === "OCCUPIED").length,
-    CLOSED: tables.filter((table) => table.status === "CLOSED").length,
-    seats: tables.reduce((sum, table) => sum + (table.capacity ?? 0), 0),
-  }), [tables]);
+    OPEN: visibleLocations.filter((table) => table.status === "OPEN").length,
+    OCCUPIED: visibleLocations.filter((table) => table.status === "OCCUPIED").length,
+    CLOSED: visibleLocations.filter((table) => table.status === "CLOSED").length,
+    seats: visibleLocations.reduce((sum, table) => sum + (table.capacity ?? 0), 0),
+  }), [visibleLocations]);
 
   const sortTables = (list: RestaurantTable[]) => [...list].sort((a, b) => a.tableNumber - b.tableNumber);
 
   const createSingle = async () => {
-    const created = await api.createTable({ tableNumber: Number(tableNumber), label: label.trim() || undefined, capacity: Number(capacity) });
+    const created = await api.createTable({ locationType: activeKind, tableNumber: Number(tableNumber), label: label.trim() || undefined, capacity: Number(capacity) });
     setTables((current) => sortTables([...current, created]));
     setTableNumber(""); setLabel("");
-    setMessage({ tone: "ok", text: `Table ${created.tableNumber} added.` });
+    setMessage({ tone: "ok", text: `${locationName(created)} added.` });
   };
 
   const createBulk = async () => {
@@ -116,12 +122,12 @@ export default function TablesManager({ initialTables, initialOrders = [], resta
     const created: RestaurantTable[] = [];
     for (const number of numbers) {
       setMessage({ tone: "ok", text: `Adding table ${number} (${created.length + 1} of ${numbers.length})…` });
-      created.push(await api.createTable({ tableNumber: number, label: label.trim() || undefined, capacity: Number(capacity) }));
+      created.push(await api.createTable({ locationType: activeKind, tableNumber: number, label: label.trim() || undefined, capacity: Number(capacity) }));
     }
     setTables((current) => sortTables([...current, ...created]));
     const skipped = to - from + 1 - numbers.length;
     setRangeFrom(String(to + 1)); setRangeTo(String(to + 10));
-    setMessage({ tone: "ok", text: `${created.length} tables added${skipped ? ` (${skipped} already existed)` : ""}.` });
+    setMessage({ tone: "ok", text: `${created.length} ${activeKind === "ROOM" ? "rooms" : "tables"} added${skipped ? ` (${skipped} already existed)` : ""}.` });
   };
 
   const create = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -179,7 +185,7 @@ export default function TablesManager({ initialTables, initialOrders = [], resta
   };
 
   const copy = async (table: RestaurantTable) => {
-    try { await navigator.clipboard.writeText(menuUrl(table.tableNumber)); setMessage({ tone: "ok", text: `Table ${table.tableNumber} menu link copied.` }); }
+    try { await navigator.clipboard.writeText(menuUrl(table)); setMessage({ tone: "ok", text: `${locationName(table)} menu link copied.` }); }
     catch { setMessage({ tone: "error", text: "Could not copy the link. Open the QR panel and copy it manually." }); }
   };
 
@@ -188,7 +194,7 @@ export default function TablesManager({ initialTables, initialOrders = [], resta
     if (!printable.length) { setMessage({ tone: "error", text: "Add or activate at least one table first." }); return; }
     setBusy(true);
     try {
-      const codes = await Promise.all(printable.map(async (table) => ({ table, url: await QRCode.toDataURL(menuUrl(table.tableNumber), qrOptions) })));
+      const codes = await Promise.all(printable.map(async (table) => ({ table, url: await QRCode.toDataURL(menuUrl(table), qrOptions) })));
       setPrintCodes(codes);
     } catch { setMessage({ tone: "error", text: "Could not generate QR codes. Try again." }); }
     finally { setBusy(false); }
@@ -197,8 +203,8 @@ export default function TablesManager({ initialTables, initialOrders = [], resta
   return <div className="space-y-6">
     <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div>
-        <h1 className="text-2xl font-bold text-neutral-900 sm:text-3xl">Tables & QR codes</h1>
-        <p className="mt-1 text-sm text-neutral-500">Each table gets its own QR code. Guests scan it to see the menu and order straight to this table.</p>
+        <h1 className="text-2xl font-bold text-neutral-900 sm:text-3xl">Tables, rooms &amp; QR codes</h1>
+        <p className="mt-1 text-sm text-neutral-500">Manage dining tables and hotel rooms separately. Every location uses the same menu, order, kitchen and billing workflow.</p>
       </div>
       {tableOrderingEnabled && tables.length > 0 ? (
         <button type="button" onClick={() => void printAll()} disabled={busy} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-neutral-300 bg-white px-4 text-sm font-semibold text-neutral-900 transition hover:bg-neutral-50 disabled:opacity-50">
@@ -207,9 +213,17 @@ export default function TablesManager({ initialTables, initialOrders = [], resta
       ) : null}
     </header>
 
+    <div role="tablist" aria-label="Service location type" className="grid grid-cols-2 rounded-2xl bg-neutral-200/70 p-1 sm:max-w-md">
+      {(["TABLE", "ROOM"] as const).map((kind) => (
+        <button key={kind} type="button" role="tab" aria-selected={activeKind === kind} onClick={() => setActiveKind(kind)} className={`min-h-11 rounded-xl text-sm font-bold transition ${activeKind === kind ? "bg-white text-neutral-900 shadow-sm" : "text-neutral-500"}`}>
+          {kind === "TABLE" ? `Tables (${tables.filter((item) => locationType(item) === "TABLE").length})` : `Rooms (${tables.filter((item) => locationType(item) === "ROOM").length})`}
+        </button>
+      ))}
+    </div>
+
     {tables.length > 0 ? (
       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {[{ label: "Tables", value: tables.length }, { label: "Open", value: counts.OPEN }, { label: "Occupied", value: counts.OCCUPIED }, { label: "Total seats", value: counts.seats }].map((item) => (
+        {[{ label: activeKind === "ROOM" ? "Rooms" : "Tables", value: visibleLocations.length }, { label: "Open", value: counts.OPEN }, { label: "Occupied", value: counts.OCCUPIED }, { label: activeKind === "ROOM" ? "Guest capacity" : "Total seats", value: counts.seats }].map((item) => (
           <div key={item.label} className="rounded-2xl border border-neutral-200 bg-white p-4"><dt className="text-xs text-neutral-500">{item.label}</dt><dd className="mt-1 text-2xl font-bold tabular-nums">{item.value}</dd></div>
         ))}
       </dl>
@@ -217,24 +231,24 @@ export default function TablesManager({ initialTables, initialOrders = [], resta
 
     <form onSubmit={create} className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4 sm:p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-sm font-semibold text-neutral-900">{tables.length ? "Add tables" : "Set up your tables"}</h2>
+        <h2 className="text-sm font-semibold text-neutral-900">Add {activeKind === "ROOM" ? "rooms" : "tables"}</h2>
         <div role="tablist" aria-label="How many tables" className="inline-flex rounded-xl bg-white p-1 ring-1 ring-neutral-200">
-          {([["single", "One table"], ["bulk", "Several tables"]] as const).map(([value, text]) => (
+          {([["single", activeKind === "ROOM" ? "One room" : "One table"], ["bulk", activeKind === "ROOM" ? "Several rooms" : "Several tables"]] as const).map(([value, text]) => (
             <button key={value} type="button" role="tab" aria-selected={mode === value} onClick={() => setMode(value)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${mode === value ? "bg-neutral-900 text-white" : "text-neutral-600 hover:text-neutral-900"}`}>{text}</button>
           ))}
         </div>
       </div>
       <div className={`mt-4 grid gap-3 sm:items-end ${mode === "bulk" ? "sm:grid-cols-[1fr_1fr_1fr_1.3fr_auto]" : "sm:grid-cols-[1fr_1fr_1.3fr_auto]"}`}>
         {mode === "bulk" ? <>
-          <label className="text-xs font-medium text-neutral-600">From table<input required min={1} max={9999} type="number" value={rangeFrom} onChange={(event) => setRangeFrom(event.target.value)} className={inputClass} /></label>
-          <label className="text-xs font-medium text-neutral-600">To table<input required min={1} max={9999} type="number" value={rangeTo} onChange={(event) => setRangeTo(event.target.value)} className={inputClass} /></label>
+          <label className="text-xs font-medium text-neutral-600">From {activeKind === "ROOM" ? "room" : "table"}<input required min={1} max={9999} type="number" value={rangeFrom} onChange={(event) => setRangeFrom(event.target.value)} className={inputClass} /></label>
+          <label className="text-xs font-medium text-neutral-600">To {activeKind === "ROOM" ? "room" : "table"}<input required min={1} max={9999} type="number" value={rangeTo} onChange={(event) => setRangeTo(event.target.value)} className={inputClass} /></label>
         </> : (
-          <label className="text-xs font-medium text-neutral-600">Table number<input required min={1} max={9999} type="number" value={tableNumber} onChange={(event) => setTableNumber(event.target.value)} placeholder={String((tables.at(-1)?.tableNumber ?? 0) + 1)} className={inputClass} /></label>
+          <label className="text-xs font-medium text-neutral-600">{activeKind === "ROOM" ? "Room" : "Table"} number<input required min={1} max={9999} type="number" value={tableNumber} onChange={(event) => setTableNumber(event.target.value)} placeholder={String((visibleLocations.at(-1)?.tableNumber ?? 0) + 1)} className={inputClass} /></label>
         )}
-        <label className="text-xs font-medium text-neutral-600">Seats per table<input required min={1} max={1000} type="number" value={capacity} onChange={(event) => setCapacity(event.target.value)} className={inputClass} /></label>
-        <label className="text-xs font-medium text-neutral-600">Area (optional)<input maxLength={80} value={label} onChange={(event) => setLabel(event.target.value)} placeholder="Patio, window, rooftop…" className={inputClass} /></label>
+        <label className="text-xs font-medium text-neutral-600">{activeKind === "ROOM" ? "Guest capacity" : "Seats per table"}<input required min={1} max={1000} type="number" value={capacity} onChange={(event) => setCapacity(event.target.value)} className={inputClass} /></label>
+        <label className="text-xs font-medium text-neutral-600">{activeKind === "ROOM" ? "Floor / wing" : "Area"} (optional)<input maxLength={80} value={label} onChange={(event) => setLabel(event.target.value)} placeholder={activeKind === "ROOM" ? "First floor, east wing…" : "Patio, window, rooftop…"} className={inputClass} /></label>
         <button disabled={busy} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-neutral-900 px-5 text-sm font-bold text-white transition hover:bg-neutral-800 disabled:opacity-50">
-          <Plus className="h-4 w-4" />{mode === "bulk" ? `Add ${Math.max(0, Number(rangeTo) - Number(rangeFrom) + 1) || ""} tables` : "Add table"}
+          <Plus className="h-4 w-4" />{mode === "bulk" ? `Add ${Math.max(0, Number(rangeTo) - Number(rangeFrom) + 1) || ""} ${activeKind === "ROOM" ? "rooms" : "tables"}` : `Add ${activeKind === "ROOM" ? "room" : "table"}`}
         </button>
       </div>
       {mode === "bulk" ? <p className="mt-3 text-xs text-neutral-500">Existing table numbers are skipped, so it is safe to run again.</p> : null}
@@ -250,13 +264,13 @@ export default function TablesManager({ initialTables, initialOrders = [], resta
       </div>
     ) : (
       <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {tables.map((table) => {
+        {visibleLocations.map((table) => {
           const liveOrders = orders.filter((order) => order.tableNumber === table.tableNumber && order.status !== "SERVED" && order.status !== "CANCELLED");
           const liveTotal = liveOrders.reduce((sum, order) => sum + order.total, 0);
           return <li key={table.id} className={`flex flex-col rounded-2xl border bg-white p-4 ${table.isActive ? "border-neutral-200" : "border-dashed border-neutral-300 opacity-75"}`}>
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-xs font-medium text-neutral-500">{table.label || "Table"}</p>
+                <p className="text-xs font-medium text-neutral-500">{table.label || locationName(table, false)}</p>
                 <h2 className="text-3xl font-bold tabular-nums text-neutral-900">{table.tableNumber}</h2>
               </div>
               <div className="flex flex-col items-end gap-1.5">
@@ -291,7 +305,7 @@ export default function TablesManager({ initialTables, initialOrders = [], resta
               {qrDataUrl ? <Image unoptimized src={qrDataUrl} alt={`QR code for Table ${table.tableNumber}`} width={128} height={128} className="h-32 w-32 shrink-0 rounded-xl bg-white p-1.5 ring-1 ring-neutral-200" /> : <div className="grid h-32 w-32 shrink-0 place-items-center rounded-xl bg-neutral-100 text-xs text-neutral-500">Generating…</div>}
               <div className="min-w-0 space-y-2">
                 {!table.isActive && <p className="text-xs text-amber-700">Inactive — new orders are blocked.</p>}
-                <a className="flex items-center gap-1 break-all text-xs text-neutral-600 underline underline-offset-2" href={menuUrl(table.tableNumber)} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-3 w-3 shrink-0" />Open table menu</a>
+                <a className="flex items-center gap-1 break-all text-xs text-neutral-600 underline underline-offset-2" href={menuUrl(table)} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-3 w-3 shrink-0" />Open {locationName(table, false).toLowerCase()} menu</a>
                 {qrDataUrl && <a href={qrDataUrl} download={`table-${table.tableNumber}-qr.png`} className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 px-3 py-2 text-xs font-semibold text-neutral-800 hover:bg-neutral-50"><Download className="h-3.5 w-3.5" />Download PNG</a>}
               </div>
             </div>}
@@ -322,7 +336,7 @@ export default function TablesManager({ initialTables, initialOrders = [], resta
           {printCodes.map(({ table, url }) => (
             <div key={table.id} className="break-inside-avoid rounded-3xl border-2 border-neutral-900 p-6 text-center">
               <p className="text-sm font-bold uppercase tracking-[0.2em]">{restaurantName ?? restaurantSlug}</p>
-              <p className="mt-1 text-5xl font-black">Table {table.tableNumber}</p>
+              <p className="mt-1 text-5xl font-black">{locationName(table)}</p>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={url} alt="" className="mx-auto mt-4 h-56 w-56" />
               <p className="mt-3 text-base font-semibold">Scan to see the menu &amp; order</p>

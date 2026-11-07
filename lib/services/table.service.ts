@@ -21,13 +21,14 @@ export class TableService {
     return table?.isActive ? table : null;
   }
 
-  async create(restaurantId: string, input: { tableNumber: number; label?: string; capacity: number; isActive?: boolean; status?: RestaurantTable["status"] }) {
+  async create(restaurantId: string, input: { locationType?: RestaurantTable["locationType"]; tableNumber: number; label?: string; capacity: number; isActive?: boolean; status?: RestaurantTable["status"] }) {
     if (!(await restaurantRepository.findById(restaurantId))) throw new TableServiceError("Restaurant not found.");
     if (await tableRepository.findByRestaurantAndNumber(restaurantId, input.tableNumber)) {
       throw new TableServiceError("A table with this number already exists.");
     }
     return tableRepository.create({
       restaurantId,
+      locationType: input.locationType ?? "TABLE",
       tableNumber: input.tableNumber,
       label: input.label?.trim() || undefined,
       capacity: input.capacity,
@@ -36,7 +37,7 @@ export class TableService {
     });
   }
 
-  async update(restaurantId: string, id: string, input: Partial<Pick<RestaurantTable, "tableNumber" | "label" | "capacity" | "isActive" | "status">>) {
+  async update(restaurantId: string, id: string, input: Partial<Pick<RestaurantTable, "locationType" | "tableNumber" | "label" | "capacity" | "isActive" | "status">>) {
     if (input.tableNumber !== undefined) {
       const duplicate = await tableRepository.findByRestaurantAndNumber(restaurantId, input.tableNumber);
       if (duplicate && duplicate.id !== id) throw new TableServiceError("A table with this number already exists.");

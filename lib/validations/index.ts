@@ -285,6 +285,7 @@ export type CreateDishInput = z.infer<typeof dishSchema>;
 export type UpdateDishInput = z.infer<typeof updateDishSchema>;
 
 export const createTableSchema = z.object({
+  locationType: z.enum(["TABLE", "ROOM"]).default("TABLE"),
   tableNumber: z.number().int().min(1).max(9999),
   label: z.string().trim().max(80).optional(),
   capacity: z.number().int().min(1).max(1000),
@@ -297,6 +298,7 @@ export const updateTableSchema = createTableSchema.partial().extend({
 });
 export const placeOrderSchema = z.object({
   slug: z.string().min(1),
+  locationType: z.enum(["TABLE", "ROOM"]).default("TABLE"),
   tableNumber: z.number().int().min(1),
   idempotencyKey: z.string().uuid(),
   items: z

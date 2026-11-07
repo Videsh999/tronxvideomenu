@@ -77,7 +77,8 @@ export default function SurpriseMe({ dishes, categories, canOrder, onClose, onOp
     const keep = choice.keep ?? locked;
     const current = choice.current ?? meal;
     const lockedSlots = Array.from({ length: size }, (_, index) => (current[index] && keep.has(current[index].id) ? current[index] : null));
-    const final = buildMeal({ pool: spinPool, mood: spinMood, size, locked: lockedSlots });
+    const avoidIds = current.filter((dish) => !keep.has(dish.id)).map((dish) => dish.id);
+    const final = buildMeal({ pool: spinPool, mood: spinMood, size, locked: lockedSlots, avoidIds });
     setAdded(null);
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const candidates = spinMood === "drink" ? spinPool.drinks : spinMood === "eat" ? spinPool.food : [...spinPool.food, ...spinPool.drinks];

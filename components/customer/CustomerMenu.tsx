@@ -104,6 +104,7 @@ type CustomerMenuProps = {
   initialMenu: RestaurantMenu;
   restaurantIdOrSlug: string;
   tableNumber: number | null;
+  locationType?: "TABLE" | "ROOM";
   tableId: string | null;
   tableStatus: TableStatus | null;
   invalidTable: boolean;
@@ -119,6 +120,7 @@ export default function CustomerMenu({
   initialMenu,
   restaurantIdOrSlug,
   tableNumber,
+  locationType = "TABLE",
   tableId,
   tableStatus,
   invalidTable,
@@ -211,6 +213,7 @@ export default function CustomerMenu({
   const orderKey = `${cartKey}:orders`;
   const legacyOrderKey = `${cartKey}:active-order`;
   const canOrder = Boolean(tableOrderingEnabled && tableNumber && !invalidTable && tableStatus !== "CLOSED");
+  const serviceLocationLabel = tableNumber ? (locationType === "ROOM" ? `Room ${tableNumber}` : t("table", { number: tableNumber })) : "–";
   const tableResolved = Boolean(tableNumber && tableId && !invalidTable);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [cartReady, setCartReady] = useState(false);
@@ -355,6 +358,7 @@ export default function CustomerMenu({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           slug: menu.restaurant.slug,
+          locationType,
           tableNumber,
           idempotencyKey: key,
           items: cart.map((line) => {
@@ -608,6 +612,7 @@ export default function CustomerMenu({
       <RestaurantHero
         restaurant={menu.restaurant}
         tableNumber={tableResolved ? tableNumber : null}
+        locationType={locationType}
         extraActions={<>
           {wifiEnabled && <button type="button" onClick={() => setWifiOpen(true)} className={`${heroPill} sm:hidden`}><Wifi className="h-3.5 w-3.5" />{t("wifi")}</button>}
           <button type="button" onClick={surpriseMe} className={heroPill}><Dices className="h-3.5 w-3.5" />{t("surpriseMe")}</button>
@@ -630,7 +635,7 @@ export default function CustomerMenu({
                 <span className="grid h-10 w-10 place-items-center rounded-2xl bg-[var(--restaurant-primary)] text-white"><Receipt className="h-5 w-5" /></span>
                 <span>
                   <span className="block text-sm font-bold text-[var(--restaurant-text)]">{t("yourOrders")}</span>
-                  <span className="block text-xs text-[var(--restaurant-text-muted)]">{tn("ordersCount", customerOrders.length)}{tableNumber ? ` · ${t("table", { number: tableNumber })}` : ""}</span>
+                  <span className="block text-xs text-[var(--restaurant-text-muted)]">{tn("ordersCount", customerOrders.length)}{tableNumber ? ` · ${serviceLocationLabel}` : ""}</span>
                 </span>
               </span>
               <span className="flex items-center gap-3">
@@ -753,7 +758,7 @@ export default function CustomerMenu({
           <button type="button" onClick={() => setCartOpen(true)} className="pointer-events-auto mx-auto flex w-full max-w-2xl animate-sheet-up items-center justify-between gap-4 rounded-full bg-[var(--restaurant-primary)] py-2.5 pl-2.5 pr-5 text-left text-white shadow-[0_18px_40px_-12px_var(--restaurant-primary)] ring-1 ring-white/10 transition hover:bg-[var(--restaurant-primary-dark)] active:scale-[0.99]">
             <span className="flex items-center gap-3">
               <span className="relative grid h-11 w-11 place-items-center rounded-full bg-white/15"><ShoppingBag className="h-5 w-5" /><span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-white px-1 text-[11px] font-bold tabular-nums text-[var(--restaurant-primary)]">{cartCount}</span></span>
-              <span><span className="block text-sm font-bold">{t("viewCart")}</span><span className="block text-xs text-white/70">{tn("itemsCount", cartCount)} · {t("table", { number: tableNumber ?? "–" })}</span></span>
+              <span><span className="block text-sm font-bold">{t("viewCart")}</span><span className="block text-xs text-white/70">{tn("itemsCount", cartCount)} · {serviceLocationLabel}</span></span>
             </span>
             <span className="text-lg font-bold tabular-nums">₹{cartTotal}</span>
           </button>
@@ -765,7 +770,7 @@ export default function CustomerMenu({
           <div className="flex max-h-[92dvh] w-full max-w-xl animate-sheet-up flex-col overflow-hidden rounded-t-[2rem] bg-[var(--restaurant-background)] shadow-2xl sm:animate-scale-in sm:rounded-[2rem]">
             <div className="flex justify-center pt-3 sm:hidden"><span className="h-1.5 w-12 rounded-full bg-[var(--customer-border)]" /></div>
             <header className="flex items-center justify-between gap-3 px-5 pb-4 pt-3 sm:pt-5">
-              <div><h2 id="cart-title" className="font-serif text-2xl font-semibold text-[var(--restaurant-text)]">{t("yourOrder")}</h2><p className="mt-0.5 text-xs text-[var(--restaurant-text-muted)]">{t("table", { number: tableNumber ?? "–" })} · {tn("itemsCount", cartCount)}</p></div>
+              <div><h2 id="cart-title" className="font-serif text-2xl font-semibold text-[var(--restaurant-text)]">{t("yourOrder")}</h2><p className="mt-0.5 text-xs text-[var(--restaurant-text-muted)]">{serviceLocationLabel} · {tn("itemsCount", cartCount)}</p></div>
               <button type="button" onClick={() => setCartOpen(false)} aria-label={t("closeCart")} className="grid h-10 w-10 place-items-center rounded-full bg-[var(--customer-cream)] text-[var(--restaurant-text)] transition hover:bg-[var(--customer-border)]"><X className="h-5 w-5" /></button>
             </header>
             <div className="flex-1 space-y-3 overflow-y-auto overscroll-contain border-t border-[var(--customer-border)] bg-[var(--customer-cream)]/40 p-4 sm:p-5">

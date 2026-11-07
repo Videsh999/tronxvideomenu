@@ -37,9 +37,9 @@ async function fetcher<T>(url: string, options?: RequestInit): Promise<T> {
 export const api = {
   // Tables and restaurant order management
   getTables: () => fetcher<RestaurantTable[]>("/api/tables"),
-  createTable: (data: { tableNumber: number; label?: string; capacity: number }) =>
+  createTable: (data: { locationType?: RestaurantTable["locationType"]; tableNumber: number; label?: string; capacity: number }) =>
     fetcher<RestaurantTable>("/api/tables", { method: "POST", body: JSON.stringify(data) }),
-  updateTable: (id: string, data: Partial<Pick<RestaurantTable, "tableNumber" | "label" | "capacity" | "isActive" | "status">>) =>
+  updateTable: (id: string, data: Partial<Pick<RestaurantTable, "locationType" | "tableNumber" | "label" | "capacity" | "isActive" | "status">>) =>
     fetcher<RestaurantTable>(`/api/tables/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   deleteTable: (id: string) => fetcher<{ deleted: boolean }>(`/api/tables/${id}`, { method: "DELETE" }),
   getOrders: () => fetcher<OrderSummary[]>("/api/orders"),

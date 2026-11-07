@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { ExternalLink, Eye, EyeOff } from "lucide-react";
 import type { CaptainPermissions, CaptainView, RestaurantTable } from "@/types";
+import { locationName, locationType } from "@/lib/service-location";
 import { PasswordInput } from "@/components/shared/AuthLayout";
 import { resolveCaptainPermissions } from "@/lib/captain-permissions";
 
@@ -283,7 +284,7 @@ export default function CaptainManagement({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-neutral-400">Required setup</p>
-            <h2 className="mt-1 text-xl font-bold text-neutral-900">Assign tables to each captain</h2>
+            <h2 className="mt-1 text-xl font-bold text-neutral-900">Assign tables and rooms to each captain</h2>
             <p className="mt-1 max-w-2xl text-sm text-neutral-600">
               You decide the split — e.g. 50 tables and 10 captains (5 each), or any unequal mix. Tick tables under a
               captain and press <strong>Save table assignment</strong>. One table → one active captain.
@@ -306,11 +307,11 @@ export default function CaptainManagement({
             <span className="font-semibold text-neutral-900">
               {activeTables
                 .filter((table) => !captains.some((captain) => (captain.assignedTableIds ?? []).includes(table.id)))
-                .map((table) => `T${table.tableNumber}`)
+                .map((table) => locationName(table))
                 .join(", ") || "none — all covered"}
             </span>
             {" · "}
-            {activeTables.length} active table{activeTables.length === 1 ? "" : "s"} · {captains.length} captain
+            {activeTables.length} active location{activeTables.length === 1 ? "" : "s"} · {captains.length} captain
             {captains.length === 1 ? "" : "s"}
           </p>
         )}
@@ -388,7 +389,7 @@ export default function CaptainManagement({
               <div className="mt-4 rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-sm font-bold text-neutral-900">
-                    Tables for this captain
+                    Tables &amp; rooms for this captain
                     <span className="ml-2 text-xs font-semibold text-neutral-500">
                       ({(assignDraft[captain.id] ?? []).length} selected)
                     </span>
@@ -399,8 +400,11 @@ export default function CaptainManagement({
                 </div>
                 {activeTables.length ? (
                   <>
-                    <div className="mt-3 flex max-h-48 flex-wrap gap-2 overflow-y-auto">
-                      {activeTables.map((table) => {
+                    <div className="mt-3 max-h-64 space-y-3 overflow-y-auto">
+                      {(["TABLE", "ROOM"] as const).map((kind) => <div key={kind}>
+                        <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-neutral-400">{kind === "TABLE" ? "Tables" : "Rooms"}</p>
+                        <div className="flex flex-wrap gap-2">
+                      {activeTables.filter((table) => locationType(table) === kind).map((table) => {
                         const checked = (assignDraft[captain.id] ?? []).includes(table.id);
                         const conflict = assignedElsewhere(table.id, captain.id);
                         return (
@@ -418,7 +422,7 @@ export default function CaptainManagement({
                               checked={checked}
                               onChange={() => toggleTableDraft(captain.id, table.id)}
                             />
-                            T{table.tableNumber}
+                            {locationName(table)}
                             {table.label ? (
                               <span className={`text-xs font-normal ${checked ? "text-white/70" : "text-neutral-400"}`}>
                                 {table.label}
@@ -430,6 +434,8 @@ export default function CaptainManagement({
                           </label>
                         );
                       })}
+                        </div>
+                      </div>)}
                     </div>
                     <button
                       type="button"
@@ -437,7 +443,7 @@ export default function CaptainManagement({
                       onClick={() => void saveTableAssignment(captain)}
                       className="mt-3 inline-flex min-h-11 items-center rounded-xl bg-neutral-900 px-4 text-sm font-bold text-white disabled:opacity-50"
                     >
-                      {pendingId === captain.id ? "Saving…" : "Save table assignment"}
+                      {pendingId === captain.id ? "Saving…" : "Save location assignment"}
                     </button>
                   </>
                 ) : (

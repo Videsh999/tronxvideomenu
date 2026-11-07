@@ -8,6 +8,7 @@ export type PrintDocumentKind = "RECEIPT" | "KOT" | "TEST_PAGE" | "REPRINT_RECEI
 export type PrintDocumentInput = {
   kind: PrintDocumentKind;
   orderNumber?: string | number;
+  location?: string;
   station?: string;
   isReprint?: boolean;
   items?: Array<{ name?: string; qty?: number; total?: number; notes?: string }>;
@@ -81,6 +82,7 @@ export function buildEscPosDocument(
 
   if (input.isReprint || input.kind.startsWith("REPRINT")) line("*** REPRINT ***");
   if (input.orderNumber != null) line(`Order #${input.orderNumber}`);
+  if (input.location) line(input.location);
   if (input.station) line(`Station ${input.station}`);
   line(separator(w));
 
@@ -88,7 +90,7 @@ export function buildEscPosDocument(
     const qty = item.qty ?? 1;
     const name = String(item.name ?? "Item");
     if (input.kind.startsWith("KOT") || input.kind === "REPRINT_KOT") {
-      line(`${qty}x ${name}`.slice(0, w));
+      line(padLine(`${qty}x ${name}`.slice(0, w - 10), money(item.total), w));
       if (item.notes) line(`  ${item.notes}`.slice(0, w));
     } else {
       line(padLine(`${qty}x ${name}`.slice(0, w - 8), money(item.total), w));
@@ -106,6 +108,14 @@ export function buildEscPosDocument(
     if (input.total != null) line(padLine("TOTAL", money(input.total), w));
     if (profile.capabilities.bold) push(ESC, 0x45, 0x00);
     if (input.paymentStatus) line(`Payment ${input.paymentStatus}`);
+  } else {
+    line(separator(w));
+    if (input.subtotal != null) line(padLine("Subtotal", money(input.subtotal), w));
+    if (input.discount != null && Number(input.discount) !== 0) line(padLine("Discount", `-${money(input.discount)}`, w));
+    if (input.tax != null) line(padLine("Tax", money(input.tax), w));
+    if (profile.capabilities.bold) push(ESC, 0x45, 0x01);
+    if (input.total != null) line(padLine("TOTAL", money(input.total), w));
+    if (profile.capabilities.bold) push(ESC, 0x45, 0x00);
   }
 
   if (input.qrPayload) {

@@ -12,6 +12,7 @@ import {
   ticketUrgency,
 } from "@/lib/kitchen-board";
 import { printKitchenOrderTicket } from "@/lib/kot-print";
+import { orderLocationName } from "@/lib/service-location";
 
 function playChime() {
   try {
@@ -275,7 +276,7 @@ export default function KitchenKanban({
                           <div>
                             <p className="text-2xl font-black tracking-tight">#{order.orderNumber}</p>
                             <p className="mt-0.5 text-sm text-[#b9a792]">
-                              {order.tableNumber > 0 ? `Table ${order.tableNumber}` : order.channel ?? "Counter"}
+                              {order.tableNumber > 0 ? orderLocationName(order) : order.channel ?? "Counter"}
                             </p>
                           </div>
                           <div className="text-right">

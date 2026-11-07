@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
 import type { OrderSummary } from "@/types";
 import { resolveAuthorization } from "@/lib/order-authorization";
 import { Clock3, ShieldCheck, ShieldX } from "lucide-react";
+import { orderLocationName } from "@/lib/service-location";
 
 function money(value: number, currency = "INR") {
   return new Intl.NumberFormat(undefined, {
@@ -161,7 +162,7 @@ export default function CaptainApprovals({
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="text-lg font-bold">
-                      Order #{order.orderNumber} · Table {order.tableNumber}
+                      Order #{order.orderNumber} · {orderLocationName(order)}
                     </p>
                     <p className="mt-1 flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide text-neutral-400">
                       <span>{auth.entrySource.replace(/_/g, " ")}</span>

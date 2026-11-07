@@ -422,6 +422,8 @@ export type RestaurantMenu = {
 export type RestaurantTable = {
   id: string;
   restaurantId: string;
+  /** Service location kind. Legacy records without this field are dining tables. */
+  locationType?: "TABLE" | "ROOM";
   tableNumber: number;
   label?: string;
   capacity?: number;
@@ -605,6 +607,7 @@ export type RestaurantOrder = {
   restaurantId: string;
   tableId: string;
   tableNumber: number;
+  locationType?: "TABLE" | "ROOM";
   orderNumber: number;
   customerTokenHash: string;
   idempotencyKey: string;
@@ -647,6 +650,7 @@ export type OrderSummary = Pick<
   | "orderNumber"
   | "tableNumber"
   | "tableId"
+  | "locationType"
   | "status"
   | "channel"
   | "source"

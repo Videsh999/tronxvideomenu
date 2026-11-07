@@ -75,7 +75,7 @@ export default function CaptainNavigation({
         <nav className="space-y-0.5">
           {links.map((link) => {
             const active = isActive(link.href, link.exact);
-            const badge = "badge" in link ? link.badge : 0;
+            const badge = "badge" in link && typeof link.badge === "number" ? link.badge : 0;
             const Icon = link.icon;
             return (
               <Link
@@ -150,7 +150,7 @@ export default function CaptainNavigation({
         <ul className="mx-auto grid max-w-xl grid-cols-5 gap-1">
           {primaryLinks.map((link) => {
             const active = isActive(link.href, link.exact);
-            const badge = "badge" in link ? link.badge : 0;
+            const badge = "badge" in link && typeof link.badge === "number" ? link.badge : 0;
             const Icon = link.icon;
             return (
               <li key={link.href}>

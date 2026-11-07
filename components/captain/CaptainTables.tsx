@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { Clock3, IndianRupee, Users, UtensilsCrossed } from "lucide-react";
 import type { OrderSummary, RestaurantTable } from "@/types";
@@ -9,6 +10,7 @@ import {
   enrichCaptainTables,
 } from "@/lib/captain-floor";
 import CaptainTableStats from "@/components/captain/CaptainTableStats";
+import { locationName, locationType } from "@/lib/service-location";
 
 function money(value: number, currency = "INR") {
   return new Intl.NumberFormat(undefined, {
@@ -42,6 +44,8 @@ export default function CaptainTables({
 }) {
   const assigned = new Set(assignedTableIds);
   const rows = enrichCaptainTables(initialTables, initialOrders, assigned);
+  const [activeKind, setActiveKind] = useState<"TABLE" | "ROOM">("TABLE");
+  const visibleRows = rows.filter(({ table }) => locationType(table) === activeKind);
   const counts = {
     available: rows.filter((row) => row.table.status === "OPEN").length,
     occupied: rows.filter((row) =>
@@ -66,7 +70,7 @@ export default function CaptainTables({
       <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-neutral-400">Floor</p>
-          <h1 className="mt-1 text-3xl font-bold tracking-tight">My Tables</h1>
+          <h1 className="mt-1 text-3xl font-bold tracking-tight">My Tables &amp; Rooms</h1>
           <p className="mt-1 text-sm text-neutral-500">
             Only tables your manager assigned to you. Tap a table to take a walk-in order, or check Approvals for QR
             orders waiting your tick.
@@ -91,8 +95,16 @@ export default function CaptainTables({
         </div>
       </header>
 
+      <div role="tablist" aria-label="Assigned service locations" className="grid grid-cols-2 rounded-2xl bg-neutral-200/70 p-1 sm:max-w-md">
+        {(["TABLE", "ROOM"] as const).map((kind) => (
+          <button key={kind} type="button" role="tab" aria-selected={activeKind === kind} onClick={() => setActiveKind(kind)} className={`min-h-11 rounded-xl text-sm font-bold ${activeKind === kind ? "bg-white shadow-sm" : "text-neutral-500"}`}>
+            {kind === "TABLE" ? "Tables" : "Rooms"} ({rows.filter(({ table }) => locationType(table) === kind).length})
+          </button>
+        ))}
+      </div>
+
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {rows.map(({ table, activeOrder }) => (
+        {visibleRows.map(({ table, activeOrder }) => (
           <Link
             key={table.id}
             href={`/captain/${slug}/tables/${table.id}`}
@@ -112,7 +124,7 @@ export default function CaptainTables({
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-4xl font-black tabular-nums tracking-tight">{table.tableNumber}</p>
-                <p className="mt-1 text-sm text-neutral-500">{table.label || `Table ${table.tableNumber}`}</p>
+                <p className="mt-1 text-sm text-neutral-500">{table.label || locationName(table)}</p>
               </div>
               <span
                 className={`rounded-full border px-2.5 py-1 text-[11px] font-bold ${TABLE_STATUS_STYLE[table.status]}`}
@@ -151,6 +163,7 @@ export default function CaptainTables({
             )}
           </Link>
         ))}
+        {visibleRows.length === 0 ? <p className="col-span-full rounded-3xl border border-dashed border-neutral-300 p-10 text-center text-sm text-neutral-500">No {activeKind === "ROOM" ? "rooms" : "tables"} assigned to you.</p> : null}
       </div>
 
       <CaptainTableStats />

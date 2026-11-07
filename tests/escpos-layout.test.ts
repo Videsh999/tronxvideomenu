@@ -32,6 +32,21 @@ test("ESC/POS receipt formats totals and marks reprints", () => {
   assert.ok(doc.bytes[0] === 0x1b);
 });
 
+test("ESC/POS KOT prints order, location, item prices and total", () => {
+  const doc = buildEscPosDocument({
+    kind: "KOT",
+    orderNumber: 412,
+    location: "Room 204",
+    items: [{ name: "Paneer Large", qty: 2, total: 380, notes: "+ Cheese | NOTE: No onion" }],
+    subtotal: 380,
+    tax: 19,
+    total: 399,
+  }, resolveProfile({ paperWidth: 80, encoding: "ascii" }));
+  for (const expected of ["Order #412", "Room 204", "380.00", "Subtotal", "Tax", "TOTAL", "399.00"]) {
+    assert.ok(doc.previewLines.some((line) => line.includes(expected)), `missing ${expected}`);
+  }
+});
+
 test("unsupported QR capability falls back without claiming support", () => {
   const profile = resolveProfile({ capabilities: { qrCode: false } });
   const doc = buildEscPosDocument(

@@ -98,13 +98,14 @@ export function buildDocumentBytes(
   if (caps.align) push(ESC, 0x61, 0x00);
   if (payload.isReprint) line("*** REPRINT ***");
   line(`Order #${payload.orderNumber ?? "—"}`);
+  if (payload.location) line(String(payload.location).slice(0, w));
   if (payload.station) line(`Station ${payload.station}`);
   line("-".repeat(Math.min(w, 42)));
   const items = Array.isArray(payload.items) ? payload.items : [];
   for (const item of items) {
     const row = item as { qty?: number; name?: string; total?: number; notes?: string };
     if (kind === "KOT") {
-      line(`${row.qty ?? 1}x ${row.name ?? "Item"}`.slice(0, w));
+      line(padLine(`${row.qty ?? 1}x ${row.name ?? "Item"}`.slice(0, w - 10), money(row.total), w));
       if (row.notes) line(`  ${row.notes}`.slice(0, w));
     } else {
       line(padLine(`${row.qty ?? 1}x ${row.name ?? "Item"}`.slice(0, w - 8), money(row.total), w));
@@ -121,6 +122,14 @@ export function buildDocumentBytes(
     if (payload.total != null) line(padLine("TOTAL", money(payload.total), w));
     if (caps.bold) push(ESC, 0x45, 0x00);
     if (payload.paymentStatus) line(`Payment ${payload.paymentStatus}`);
+  } else {
+    line("-".repeat(Math.min(w, 42)));
+    if (payload.subtotal != null) line(padLine("Subtotal", money(payload.subtotal), w));
+    if (payload.discount != null && Number(payload.discount) !== 0) line(padLine("Discount", `-${money(payload.discount)}`, w));
+    if (payload.tax != null) line(padLine("Tax", money(payload.tax), w));
+    if (caps.bold) push(ESC, 0x45, 0x01);
+    if (payload.total != null) line(padLine("TOTAL", money(payload.total), w));
+    if (caps.bold) push(ESC, 0x45, 0x00);
   }
   if (payload.qrPayload) {
     if (caps.qrCode) {

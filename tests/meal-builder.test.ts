@@ -62,6 +62,19 @@ test("vegetarian meals only include vegetarian dishes", () => {
   assert.ok(meal.every((item) => item.isVeg));
 });
 
+test("re-spin avoids previous unlocked dishes when alternatives exist", () => {
+  const pool = mealPool(dishes, categories, false);
+  const previous = [dishes[0], dishes[2]];
+  const next = buildMeal({
+    pool,
+    mood: "eat",
+    size: 2,
+    avoidIds: previous.map((item) => item.id),
+    random: seeded(11),
+  });
+  assert.ok(next.every((item) => !previous.some((old) => old.id === item.id)));
+});
+
 test("default add-on selections satisfy required groups or ask the guest", () => {
   const withSauce = dish("x", "mains", {
     addonGroups: [{ id: "sauce", name: "Sauce", isRequired: true, minSelect: 1, maxSelect: 1, addons: [

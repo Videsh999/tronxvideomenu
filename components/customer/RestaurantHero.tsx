@@ -9,6 +9,7 @@ import { useI18n } from "./I18nProvider";
 type RestaurantHeroProps = {
   restaurant: Restaurant;
   tableNumber?: number | null;
+  locationType?: "TABLE" | "ROOM";
   extraActions?: ReactNode;
 };
 
@@ -20,7 +21,7 @@ export function directionsUrl(restaurant: Restaurant) {
     : null;
 }
 
-export default function RestaurantHero({ restaurant, tableNumber, extraActions }: RestaurantHeroProps) {
+export default function RestaurantHero({ restaurant, tableNumber, locationType = "TABLE", extraActions }: RestaurantHeroProps) {
   const { t, tc } = useI18n();
   const [hoursOpen, setHoursOpen] = useState(false);
   const hoursRef = useRef<HTMLDivElement>(null);
@@ -88,7 +89,7 @@ export default function RestaurantHero({ restaurant, tableNumber, extraActions }
                 </div>
               ) : null}
             </div>
-            {tableNumber ? <span className="inline-flex h-9 items-center gap-1.5 rounded-full bg-white px-3.5 text-xs font-bold text-neutral-900"><Armchair className="h-3.5 w-3.5" />{t("table", { number: tableNumber })}</span> : null}
+            {tableNumber ? <span className="inline-flex h-9 items-center gap-1.5 rounded-full bg-white px-3.5 text-xs font-bold text-neutral-900"><Armchair className="h-3.5 w-3.5" />{locationType === "ROOM" ? `Room ${tableNumber}` : t("table", { number: tableNumber })}</span> : null}
             {restaurant.phone ? <a href={`tel:${restaurant.phone.replace(/\s+/g, "")}`} className={heroPill}><Phone className="h-3.5 w-3.5" />{t("call")}</a> : null}
             {directions ? <a href={directions} target="_blank" rel="noopener noreferrer" className={heroPill}><MapPin className="h-3.5 w-3.5" />{t("directions")}</a> : null}
             {extraActions}
