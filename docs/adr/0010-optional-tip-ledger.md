@@ -9,9 +9,17 @@ Tips must be voluntary and separately reportable, not hidden inside menu revenue
 
 ## Decision
 
-- `ENABLE_CUSTOMER_TIPS` defaults OFF per outlet, with eligible order types, suggestions, custom permission, limits and config version. OFF means no new tip controls/prompts/QR component or tip receipt line anywhere, while historical records retain original tip lines. Disabling with an existing confirmed-tip request requires an explicit audited preservation/closure migration rule, never silently reducing that request's amount. Founder must choose this rule before implementation.
+### CEO defaults (configurable, pending Founder confirmation)
+
+- The tip base is the post-discount, pre-tax subtotal, rounded half-up to the rupee.
+- The default cap is 25% of that subtotal. The cap is configurable.
+- Turning tips off affects new bills only. Historical tips stay intact.
+- A tip is never preselected.
+- Neutral copy is `Add a tip (optional)` and `No tip`.
+
+- `ENABLE_CUSTOMER_TIPS` defaults OFF per outlet, with eligible order types, suggestions, custom permission, limits and config version. OFF means no new tip controls, prompts, QR component, or tip receipt line. Historical tip lines stay on the records that already have them. Turning tips off does not rewrite those historical bills and does not silently reduce an amount already confirmed on them.
 - ON offers no tip, fixed, percentage, or allowed custom amount. No nonzero preselection, forced tip, inferred confirmation, or obstructed no-tip choice. Require affirmative customer confirmation of tip and displayed grand total. Staff-assisted capture records source and affirmative customer evidence; staff cannot invent consent. Zero remains valid.
-- Proposed percentage base: snapshotted item subtotal after item discounts, excluding tax, packaging, service charge and tip. Show that base. B calculates using integer paise, deterministic nearest-paise half-up rounding, eligible order types and validated caps. Custom client amounts are validated inputs, never authoritative totals. A different approved percentage base is explicit and versioned, never frontend-only math.
+- Percentage base under the CEO default: snapshotted item subtotal after item discounts, excluding tax, packaging, service charge, and tip. Show that base. B rounds half-up to the rupee. The default cap is 25% of that subtotal and is configurable. Custom client amounts are validated inputs, never authoritative totals. A different approved percentage base is explicit and versioned, never frontend-only math. A tip is never preselected. The neutral labels are `Add a tip (optional)` and `No tip`.
 - Separate tip component records safe-integer `amountPaise`, currency, source (none/fixed/percentage/custom/staff-assisted), rate/base where applicable, confirmation evidence/time, org/outlet/order/billVersion, collection/payment reference, and timestamp. Keep selected, verified collected and refunded tips distinct. Exclude tips from service-charge base, food revenue and coupon/discount base.
 - Proposed default excludes tip from taxable base unless an approved versioned tax policy says otherwise. This is NOT an assertion of GST law. Finance/CA must confirm GST/invoice treatment and accounting before live enablement; B alone snapshots any required tip-related tax calculation. Do not infer statutory exemption from this ADR.
 - A 500 base + explicitly confirmed 50 tip produces 550 only through B's finalized snapshot. Add/change/remove tip increments billVersion, supersedes/expires the old request and creates a new one (ADR 0007). No-tip flow stays 500. Late old money is review, never silent settlement or extra tip.

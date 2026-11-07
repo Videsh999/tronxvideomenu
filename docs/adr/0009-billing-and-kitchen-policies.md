@@ -11,6 +11,15 @@ Dine-in running checks and takeaway prepayment share an order aggregate. Payment
 
 B owns a pure server-side policy resolver and immutable effective-policy/source snapshot in its billing contract. O queues changes to B; every UI and WhatsApp workflow consumes the same result.
 
+### CEO defaults (configurable, pending Founder confirmation)
+
+- Dine-in is `PAY_AFTER_MEAL`. Takeaway and delivery are `PAY_BEFORE_PREPARATION`.
+- Kitchen release is a separate policy. Dine-in releases on order. Prepay channels release on verified payment.
+- The prepay kitchen gate is the bill total excluding tip. A tip never blocks the kitchen.
+- Precedence, highest first: order override, then table or session, then channel, then outlet, then organization, then default.
+- Partial instalments are created by Cashier, Manager, or Admin. A captain can only display or share an existing request.
+- Refunds and `MANUAL_REVIEW` resolution are Manager or Admin only.
+
 - `PAY_BEFORE_PREPARATION`: collection is expected before preparation. The expectation alone does not block/enqueue a KOT; independent kitchen-release policy governs execution. Show a warning for configurations allowing unpaid kitchen release.
 - `PAY_AFTER_MEAL`: table session/running bill, finalized at checkout or authorized bill request. Cross-order table consolidation requires B's explicit aggregate/allocation contract before shared-bill collection (ADR 0007).
 - `FLEXIBLE`: choose a configured concrete pay-before/pay-after rule by dine-in/takeaway/delivery/reservation channel. Display resolved rule and winning source, not an ambiguous flexible flag.
@@ -26,14 +35,14 @@ Precedence, highest first:
 
 Table wins over channel. Pick the highest present setting. If it is FLEXIBLE, expand using the outlet's concrete channel map, then org concrete channel map, then explicit outlet/org concrete fallback, ultimately PAY_AFTER_MEAL. This expansion does not override a higher-priority explicit concrete rule. Mapping/fallback values cannot themselves be FLEXIBLE: validate against recursion. Missing/invalid configuration generates a repair warning; no implicit authorization bypass. UI shows the source hierarchy, config version and effective concrete rule. The proposed compatibility fallback is a Founder-confirmation item, not a claim about the existing implementation.
 
-Organization admins change org defaults only within authorized organization membership. Outlet admins/managers configure their outlet defaults/channel maps/table-session and order overrides. Until D/H membership work lands, enable only equivalent verified restaurant-admin capabilities. Cashiers/captains display policy and can request/finalize/share/collect only through separately granted capabilities; they cannot override policy, configure merchants, refund, settle or cash-close by default. Audit actor, scope, before/after, reason, source, config version, time and correlation id. A caller's supplied policy never grants permission.
+Organization admins change org defaults only within authorized organization membership. Outlet admins/managers configure their outlet defaults/channel maps/table-session and order overrides. Until D/H membership work lands, enable only equivalent verified restaurant-admin capabilities. Cashiers, Managers, and Admins may create partial instalments. A captain can only display or share an existing request. Refunds and `MANUAL_REVIEW` resolution are Manager or Admin only. Captains cannot override policy, configure merchants, refund, settle, or cash-close by default. Audit actor, scope, before/after, reason, source, config version, time and correlation id. A caller's supplied policy never grants permission.
 
 Snapshot policy at order/bill creation. New configuration does not silently change historical/open orders. Changing an existing order's effective policy is an explicit audited manager/admin action; payable changes also version the bill and invalidate requests. A timing-only policy override does not rewrite monetary history. Settings/override writes use optimistic concurrency.
 
 Kitchen release is a separate server resolver with outlet default and audited manager/admin order override:
 
 - `ON_ACCEPTANCE` (proposed compatibility default): existing authorized order transitions may release without verified payment.
-- `AFTER_VERIFIED_PAYMENT`: requires B's ledger-derived full current due satisfied; partial/pending/review is insufficient. Proposed gate includes confirmed tips; Founder must confirm this product choice. Zero-due final bills use B's explicit zero-balance rule, not a fictitious provider payment.
+- `AFTER_VERIFIED_PAYMENT`: requires B's ledger-derived bill total excluding tip to be satisfied. Partial, pending, and review are insufficient. A tip never blocks the kitchen. Zero-due final bills use B's explicit zero-balance rule, not a fictitious provider payment.
 - `MANUAL_AUTHORIZED_RELEASE`: explicitly authorized staff action with audit/reason; no default captain bypass.
 
 Expose the effective policy pair. Odd combinations (pay-before plus acceptance release, pay-after plus payment gate) require clear configuration acknowledgement; never silently rewrite one from the other. Existing order transitions still apply. After paid/released items are appended, gate only the new/unreleased KOT batch against the new outstanding balance; never retract prepared batches or print them twice. E/K integrate through B's transitions. Print failure follows ADR 0005 alerts/retries, not a new money state machine. Payment verification schedules one idempotent release effect, not duplicate KOT commands.
