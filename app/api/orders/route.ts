@@ -4,7 +4,7 @@ import { orderService } from "@/lib/services/order.service";
 import { restaurantService } from "@/lib/services/restaurant.service";
 import { requireRestaurantFeature } from "@/lib/feature-access";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const { admin, error } = await requireRestaurantAdmin();
     if (error) return error;
@@ -28,7 +28,10 @@ export async function GET() {
       );
     }
 
-    const orders = await orderService.listForRestaurant(admin.restaurantId);
+    const history = new URL(request.url).searchParams.get("history") === "done";
+    const orders = history
+      ? await orderService.listDoneHistory(admin.restaurantId)
+      : await orderService.listForRestaurant(admin.restaurantId);
     return NextResponse.json(
       { success: true, data: orders },
       { headers: { "Cache-Control": "no-store" } },

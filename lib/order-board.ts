@@ -73,5 +73,5 @@ export function canCancelOrder(status: OrderStatus) {
 }
 
 export function canReprintKot(status: OrderStatus) {
-  return status === "ACCEPTED" || status === "PREPARING" || status === "READY";
+  return !["PENDING", "REJECTED"].includes(status);
 }

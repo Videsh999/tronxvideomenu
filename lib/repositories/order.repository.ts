@@ -37,6 +37,18 @@ export class OrderRepository implements IOrderRepository {
     return orders.map((order) => this.mapOrder(order));
   }
 
+  async findDoneHistory(restaurantId: string, limit = 500) {
+    await connectToDatabase();
+    const orders = await OrderModel.find({
+      restaurantId,
+      status: { $in: ["SERVED", "COMPLETED", "CANCELLED", "REJECTED", "REFUNDED"] },
+    })
+      .sort({ createdAt: -1 })
+      .limit(Math.min(Math.max(limit, 1), 1000))
+      .lean();
+    return orders.map((order) => this.mapOrder(order));
+  }
+
   /**
    * Live floor window: every open order plus recently created ones.
    * Avoids loading full order history on every screen / poll.

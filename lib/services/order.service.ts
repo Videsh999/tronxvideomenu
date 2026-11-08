@@ -121,6 +121,10 @@ export class OrderService {
     return (await orderRepository.findOperational(restaurantId)).map(staffOrderView);
   }
 
+  async listDoneHistory(restaurantId: string, limit = 500) {
+    return (await orderRepository.findDoneHistory(restaurantId, limit)).map(staffOrderView);
+  }
+
   async listKitchen(restaurantId: string, station?: KitchenStation) {
     return (await orderRepository.findKitchenActive(restaurantId, station))
       .filter((order) => isCaptainKitchenEligible(order))

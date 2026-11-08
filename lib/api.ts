@@ -43,6 +43,7 @@ export const api = {
     fetcher<RestaurantTable>(`/api/tables/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   deleteTable: (id: string) => fetcher<{ deleted: boolean }>(`/api/tables/${id}`, { method: "DELETE" }),
   getOrders: () => fetcher<OrderSummary[]>("/api/orders"),
+  getDoneOrderHistory: () => fetcher<OrderSummary[]>("/api/orders?history=done"),
   updateOrderStatus: (id: string, status: RestaurantOrder["status"]) =>
     fetcher<OrderSummary>(`/api/orders/${id}`, { method: "PATCH", body: JSON.stringify({ status }) }),
   recordPayment: (id: string, method: import("@/types").PaymentMethod) =>

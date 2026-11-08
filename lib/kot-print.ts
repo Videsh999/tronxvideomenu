@@ -1,4 +1,5 @@
 import type { OrderSummary } from "@/types";
+import { jsPDF } from "jspdf";
 import { formatOrderClock } from "@/lib/order-board";
 import { orderLocationName } from "@/lib/service-location";
 
@@ -58,4 +59,101 @@ export function printKitchenOrderTicket(order: OrderSummary, restaurantName?: st
   window.addEventListener("afterprint", cleanup, { once: true });
   window.setTimeout(() => window.print(), 120);
   window.setTimeout(cleanup, 60_000);
+}
+
+function pdfMoney(value: number) {
+  return `Rs. ${Number(value || 0).toFixed(2)}`;
+}
+
+/** Downloads a durable digital KOT copy without requiring a configured printer. */
+export function downloadKitchenOrderTicketPdf(order: OrderSummary, restaurantName = "TRONX") {
+  if (typeof window === "undefined") return;
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const left = 16;
+  const right = 194;
+  let y = 18;
+  const ensureSpace = (height: number) => {
+    if (y + height <= 280) return;
+    doc.addPage();
+    y = 18;
+  };
+  const line = (label: string, value: string, bold = false) => {
+    ensureSpace(8);
+    doc.setFont("helvetica", bold ? "bold" : "normal");
+    doc.text(label, left, y);
+    doc.text(value, right, y, { align: "right" });
+    y += 7;
+  };
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(16);
+  doc.text(restaurantName, 105, y, { align: "center" });
+  y += 8;
+  doc.setFontSize(12);
+  doc.text("KITCHEN ORDER TICKET", 105, y, { align: "center" });
+  y += 9;
+  doc.setFontSize(20);
+  doc.text(`ORDER #${order.orderNumber}`, 105, y, { align: "center" });
+  y += 8;
+  doc.setFontSize(12);
+  doc.text(orderLocationName(order), 105, y, { align: "center" });
+  y += 6;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.text(`${formatOrderClock(order.createdAt)} | ${(order.source ?? order.channel ?? "ORDER").replace(/_/g, " ")}`, 105, y, { align: "center" });
+  y += 7;
+  doc.line(left, y, right, y);
+  y += 7;
+
+  doc.setFontSize(10);
+  for (const item of order.items) {
+    const quantity = Math.max(0, item.quantity - (item.cancelledQuantity ?? 0));
+    const title = `${quantity} x ${item.dishNameSnapshot}`;
+    const titleLines = doc.splitTextToSize(title, 125) as string[];
+    ensureSpace(titleLines.length * 5 + 14);
+    doc.setFont("helvetica", "bold");
+    doc.text(titleLines, left, y);
+    doc.text(pdfMoney(item.itemTotal), right, y, { align: "right" });
+    y += titleLines.length * 5;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    const details = [
+      item.variantNameSnapshot ? `Variant: ${item.variantNameSnapshot}` : "",
+      ...item.addons.map((addon) => `+ ${addon.nameSnapshot}${addon.quantity > 1 ? ` x ${addon.quantity}` : ""}`),
+      item.note ? `NOTE: ${item.note}` : "",
+      item.cancelledQuantity ? `Cancelled quantity: ${item.cancelledQuantity}` : "",
+    ].filter(Boolean);
+    for (const detail of details) {
+      const detailLines = doc.splitTextToSize(detail, 150) as string[];
+      ensureSpace(detailLines.length * 4 + 2);
+      doc.text(detailLines, left + 5, y);
+      y += detailLines.length * 4;
+    }
+    y += 4;
+    doc.setFontSize(10);
+  }
+
+  ensureSpace(48);
+  doc.line(left, y, right, y);
+  y += 7;
+  line("Subtotal", pdfMoney(order.subtotal));
+  if ((order.billDiscountAmount ?? 0) > 0) line("Discount", `- ${pdfMoney(order.billDiscountAmount ?? 0)}`);
+  if ((order.packagingCharge ?? 0) > 0) line("Packaging", pdfMoney(order.packagingCharge ?? 0));
+  if ((order.serviceCharge ?? 0) > 0) line("Service", pdfMoney(order.serviceCharge ?? 0));
+  line("Tax", pdfMoney(order.taxAmount ?? 0));
+  doc.setFontSize(13);
+  line("TOTAL", pdfMoney(order.total), true);
+  doc.setFontSize(9);
+  if (order.orderNote) {
+    ensureSpace(18);
+    doc.setFont("helvetica", "bold");
+    doc.text("ORDER NOTE", left, y);
+    y += 5;
+    doc.setFont("helvetica", "normal");
+    const noteLines = doc.splitTextToSize(order.orderNote, right - left) as string[];
+    doc.text(noteLines, left, y);
+  }
+
+  const safeRestaurant = restaurantName.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "restaurant";
+  doc.save(`${safeRestaurant}-kot-${order.orderNumber}.pdf`);
 }

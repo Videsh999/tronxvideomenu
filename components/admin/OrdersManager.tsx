@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import type { OrderSummary, PaymentMethod } from "@/types";
-import { Bell, BellOff, Printer, RefreshCw } from "lucide-react";
+import { Bell, BellOff, Download, History, Printer, RefreshCw } from "lucide-react";
 import {
   ORDER_BOARD_STAGES,
   canCancelOrder,
@@ -15,7 +15,7 @@ import {
   statusLabel,
   type OrderBoardStage,
 } from "@/lib/order-board";
-import { printKitchenOrderTicket } from "@/lib/kot-print";
+import { downloadKitchenOrderTicketPdf, printKitchenOrderTicket } from "@/lib/kot-print";
 import { orderLocationName } from "@/lib/service-location";
 
 function playNotificationChime() {
@@ -81,6 +81,8 @@ export default function OrdersManager({
   const [lineCancelReason, setLineCancelReason] = useState("");
   const [lineCancelConfirm, setLineCancelConfirm] = useState(false);
   const [lineCancelBusy, setLineCancelBusy] = useState(false);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [historyBusy, setHistoryBusy] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -94,12 +96,35 @@ export default function OrdersManager({
         );
       }
       for (const order of nextOrders) knownOrderIdsRef.add(order.id);
-      setOrders(nextOrders);
+      const liveIds = new Set(nextOrders.map((order) => order.id));
+      setOrders((current) => [
+        ...nextOrders,
+        ...current.filter((order) => !liveIds.has(order.id) && ["SERVED", "COMPLETED", "CANCELLED", "REJECTED", "REFUNDED"].includes(order.status)),
+      ]);
       setMessage("");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to refresh orders.");
     }
   }, [knownOrderIdsRef, soundEnabled]);
+
+  const loadDoneHistory = async () => {
+    setHistoryBusy(true);
+    setMessage("");
+    try {
+      const history = await api.getDoneOrderHistory();
+      setOrders((current) => {
+        const byId = new Map(current.map((order) => [order.id, order]));
+        for (const order of history) byId.set(order.id, order);
+        return [...byId.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      });
+      setHistoryLoaded(true);
+      setActiveStage("done");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to load completed order history.");
+    } finally {
+      setHistoryBusy(false);
+    }
+  };
 
   useEffect(() => {
     const timer = window.setInterval(() => void refresh(), 10000);
@@ -216,7 +241,6 @@ export default function OrdersManager({
               { id: "done" as const, count: doneCount },
             ] as const
           ).map((tab) => {
-            if (tab.id === "done" && tab.count === 0) return null;
             const active = activeStage === tab.id;
             const title = ORDER_BOARD_STAGES.find((stage) => stage.id === tab.id)!.title;
             return (
@@ -261,8 +285,23 @@ export default function OrdersManager({
       {message ? <p role="alert" className="text-sm text-rose-600">{message}</p> : null}
 
       <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-3">
-        <p className="text-sm font-semibold text-neutral-900">{stageMeta.title}</p>
-        <p className="text-xs text-neutral-500">{stageMeta.hint}</p>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-neutral-900">{stageMeta.title}</p>
+            <p className="text-xs text-neutral-500">{stageMeta.hint}</p>
+          </div>
+          {activeStage === "done" ? (
+            <button
+              type="button"
+              disabled={historyBusy}
+              onClick={() => void loadDoneHistory()}
+              className="inline-flex h-10 items-center gap-2 rounded-xl border border-neutral-300 px-3 text-xs font-semibold text-neutral-700 disabled:opacity-50"
+            >
+              <History className="h-4 w-4" />
+              {historyBusy ? "Loading history…" : historyLoaded ? "Refresh older orders" : "Load older done orders"}
+            </button>
+          ) : null}
+        </div>
       </div>
 
       {!orders.length ? (
@@ -338,13 +377,22 @@ export default function OrdersManager({
 
                   <div className="mt-3 flex flex-wrap gap-2 border-t border-neutral-100 pt-3">
                     {canReprintKot(order.status) ? (
-                      <button
-                        type="button"
-                        onClick={() => printKitchenOrderTicket(order, restaurantName)}
-                        className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-neutral-300 px-3 text-xs font-semibold text-neutral-700"
-                      >
-                        <Printer className="h-3.5 w-3.5" /> Print KOT
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => printKitchenOrderTicket(order, restaurantName)}
+                          className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-neutral-300 px-3 text-xs font-semibold text-neutral-700"
+                        >
+                          <Printer className="h-3.5 w-3.5" /> Print KOT
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => downloadKitchenOrderTicketPdf(order, restaurantName)}
+                          className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-neutral-300 px-3 text-xs font-semibold text-neutral-700"
+                        >
+                          <Download className="h-3.5 w-3.5" /> Save KOT PDF
+                        </button>
+                      </>
                     ) : null}
                     {order.status !== "CANCELLED" && !isPaid ? (
                       <button

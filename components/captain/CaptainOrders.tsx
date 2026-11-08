@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { OrderSummary, PaymentMethod } from "@/types";
-import { ChevronDown, ChevronUp, Printer, RefreshCw } from "lucide-react";
+import { ChevronDown, ChevronUp, Download, Printer, RefreshCw } from "lucide-react";
 import {
   ORDER_BOARD_STAGES,
   canCancelOrder,
@@ -14,7 +14,7 @@ import {
   statusLabel,
   type OrderBoardStage,
 } from "@/lib/order-board";
-import { printKitchenOrderTicket } from "@/lib/kot-print";
+import { downloadKitchenOrderTicketPdf, printKitchenOrderTicket } from "@/lib/kot-print";
 
 async function captainRequest<T>(url: string, init?: RequestInit) {
   const response = await fetch(url, {
@@ -291,13 +291,22 @@ export default function CaptainOrders({
 
                   <div className="mt-3 flex flex-wrap gap-2 border-t border-neutral-100 pt-3">
                     {canReprintKot(order.status) ? (
-                      <button
-                        type="button"
-                        onClick={() => printKitchenOrderTicket(order, restaurantName)}
-                        className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-neutral-300 px-3 text-xs font-semibold text-neutral-700"
-                      >
-                        <Printer className="h-3.5 w-3.5" /> Print KOT
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => printKitchenOrderTicket(order, restaurantName)}
+                          className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-neutral-300 px-3 text-xs font-semibold text-neutral-700"
+                        >
+                          <Printer className="h-3.5 w-3.5" /> Print KOT
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => downloadKitchenOrderTicketPdf(order, restaurantName)}
+                          className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-neutral-300 px-3 text-xs font-semibold text-neutral-700"
+                        >
+                          <Download className="h-3.5 w-3.5" /> Save PDF
+                        </button>
+                      </>
                     ) : null}
                     {order.status !== "CANCELLED" && !isPaid ? (
                       <button

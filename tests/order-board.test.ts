@@ -35,6 +35,9 @@ test("cancel and reprint rules", () => {
   assert.equal(canCancelOrder("PENDING"), true);
   assert.equal(canCancelOrder("PREPARING"), false);
   assert.equal(canReprintKot("PREPARING"), true);
+  assert.equal(canReprintKot("COMPLETED"), true);
+  assert.equal(canReprintKot("SERVED"), true);
+  assert.equal(canReprintKot("PENDING"), false);
   assert.equal(canReprintKot("PENDING"), false);
   assert.equal(statusLabel("PREPARING"), "Cooking");
 });
