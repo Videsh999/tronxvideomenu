@@ -363,6 +363,8 @@ export default function CaptainTableWorkspace({
         {bill ? (
           <div className="mt-4 grid gap-3 rounded-2xl bg-violet-50 p-4 sm:grid-cols-3">
             <div><p className="text-xs text-violet-700">Final bill</p><p className="font-bold">{bill.billNumber} · v{bill.version}</p></div>
+            <div><p className="text-xs text-violet-700">Subtotal</p><p className="font-bold">{money(bill.subtotal, currency)}</p></div>
+            <div><p className="text-xs text-violet-700">Charges & tax</p><p className="font-semibold">{bill.serviceCharge > 0 ? `Service ${money(bill.serviceCharge, currency)} · ` : ""}{bill.packagingCharge > 0 ? `Pack ${money(bill.packagingCharge, currency)} · ` : ""}GST {money(bill.taxAmount, currency)}</p><p className="text-xs text-neutral-500">CGST/SGST included where applicable</p></div>
             <div><p className="text-xs text-violet-700">Total / Paid</p><p className="font-bold">{money(bill.total, currency)} / {money(bill.amountPaid, currency)}</p></div>
             <div><p className="text-xs text-violet-700">Outstanding</p><p className="text-lg font-black">{money(bill.outstandingAmount, currency)}</p></div>
             {bill.outstandingAmount > 0 && upiSettings?.enabled && (upiSettings.upiId || upiSettings.staticQrUrl) ? <div className="sm:col-span-3"><UpiPaymentQr upiId={upiSettings.upiId} payeeName={upiSettings.payeeName} staticQrUrl={upiSettings.staticQrUrl} amount={bill.outstandingAmount} orderNumber={bill.billNumber} compact /></div> : null}

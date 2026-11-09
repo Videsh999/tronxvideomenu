@@ -3,8 +3,10 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { ArrowLeft, Minus, Plus, Search, ShoppingBag, Trash2, X } from "lucide-react";
-import type { CaptainPermissions, Category, Dish, PaymentMethod, RestaurantTable } from "@/types";
-import { computeBillTotals, lineItemTotal, roundMoney } from "@/lib/order-pricing";
+import type { CaptainPermissions, Category, Dish, PaymentMethod, RestaurantBillingSettings, RestaurantTable } from "@/types";
+import { lineItemTotal, roundMoney } from "@/lib/order-pricing";
+import { calculateRestaurantBill } from "@/lib/billing/calculate-bill";
+import { resolveLineTaxRate } from "@/lib/billing/resolve-line-tax-rate";
 import { resolveCaptainPermissions } from "@/lib/captain-permissions";
 import { locationName } from "@/lib/service-location";
 
@@ -37,6 +39,7 @@ type Props = {
   currency: string;
   taxRatePercent: number;
   taxLabel: string;
+  billing?: RestaurantBillingSettings;
   categories: Category[];
   dishes: Dish[];
   tables: RestaurantTable[];
@@ -70,6 +73,7 @@ export default function CaptainOrderPad({
   currency,
   taxRatePercent,
   taxLabel,
+  billing,
   categories,
   dishes,
   tables,
@@ -137,12 +141,16 @@ export default function CaptainOrderPad({
         itemDiscountAmount: line.itemDiscountAmount,
       }),
     );
-    return computeBillTotals({
-      lineTotals,
+    return calculateRestaurantBill({
+      lines: session.cart.map((line, index) => {
+        const dish = dishes.find((entry) => entry.id === line.dishId);
+        const category = dish ? categories.find((entry) => entry.id === dish.categoryId) : undefined;
+        return { lineTotal: lineTotals[index], quantity: line.quantity, gstRatePercent: resolveLineTaxRate({ dish, category, billing }).rate };
+      }),
       billDiscountAmount: session.billDiscount,
-      taxRatePercent,
+      billing: billing ?? { taxRatePercent, gstEnabled: taxRatePercent > 0, gstRatePercent: taxRatePercent, taxLabel },
     });
-  }, [session.cart, session.billDiscount, taxRatePercent]);
+  }, [billing, categories, dishes, session.cart, session.billDiscount, taxLabel, taxRatePercent]);
   const cartItemCount = session.cart.reduce((sum, line) => sum + line.quantity, 0);
 
   function dishNeedsCustomize(dish: Dish) {
@@ -698,12 +706,16 @@ export default function CaptainOrderPad({
                   <span>−{money(totals.billDiscount, currency)}</span>
                 </div>
               ) : null}
+              {totals.packagingCharge > 0 ? <div className="flex justify-between text-white/65"><span>Packaging</span><span>{money(totals.packagingCharge, currency)}</span></div> : null}
+              {totals.serviceCharge > 0 ? <div className="flex justify-between text-white/65"><span>Service charge</span><span>{money(totals.serviceCharge, currency)}</span></div> : null}
               <div className="flex justify-between text-white/65">
                 <span>
                   {taxLabel} ({taxRatePercent}%)
                 </span>
                 <span>{money(totals.taxAmount, currency)}</span>
               </div>
+              {totals.cgstAmount > 0 ? <div className="flex justify-between text-white/65"><span>CGST</span><span>{money(totals.cgstAmount, currency)}</span></div> : null}
+              {totals.sgstAmount > 0 ? <div className="flex justify-between text-white/65"><span>SGST</span><span>{money(totals.sgstAmount, currency)}</span></div> : null}
               <div className="flex justify-between text-lg font-bold">
                 <span>Total</span>
                 <span>{money(totals.total, currency)}</span>

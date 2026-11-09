@@ -832,7 +832,9 @@ export default function CustomerMenu({
                   <p>{t("subtotal")} <span className="ml-2 font-semibold tabular-nums text-[var(--restaurant-text)]">₹{cartBreakdown.itemsSubtotal.toFixed(2)}</span></p>
                   {cartBreakdown.packagingCharge > 0 ? <p>Packaging <span className="ml-2 font-semibold tabular-nums text-[var(--restaurant-text)]">₹{cartBreakdown.packagingCharge.toFixed(2)}</span></p> : null}
                   {cartBreakdown.serviceCharge > 0 ? <p>Service charge <span className="ml-2 font-semibold tabular-nums text-[var(--restaurant-text)]">₹{cartBreakdown.serviceCharge.toFixed(2)}</span></p> : null}
-                  {cartBreakdown.taxAmount > 0 ? <p>{cartBreakdown.taxLabel} ({cartBreakdown.gstRatePercent}%) <span className="ml-2 font-semibold tabular-nums text-[var(--restaurant-text)]">₹{cartBreakdown.taxAmount.toFixed(2)}</span></p> : null}
+                  {(cartBreakdown.taxAmount > 0 || menu.restaurant.billing?.gstEnabled) ? <p>{cartBreakdown.taxLabel} ({cartBreakdown.gstRatePercent}%) <span className="ml-2 font-semibold tabular-nums text-[var(--restaurant-text)]">₹{cartBreakdown.taxAmount.toFixed(2)}</span></p> : null}
+                  {cartBreakdown.cgstAmount > 0 ? <p>CGST ({(cartBreakdown.gstRatePercent / 2).toFixed(2)}%) <span className="ml-2 font-semibold tabular-nums text-[var(--restaurant-text)]">₹{cartBreakdown.cgstAmount.toFixed(2)}</span></p> : null}
+                  {cartBreakdown.sgstAmount > 0 ? <p>SGST ({(cartBreakdown.gstRatePercent / 2).toFixed(2)}%) <span className="ml-2 font-semibold tabular-nums text-[var(--restaurant-text)]">₹{cartBreakdown.sgstAmount.toFixed(2)}</span></p> : null}
                   <p className="pt-1 text-base font-bold text-[var(--restaurant-text)]">Total <span className="ml-2 tabular-nums">₹{cartBreakdown.total.toFixed(2)}</span></p>
                 </div>
               </div>
