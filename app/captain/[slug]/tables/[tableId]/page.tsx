@@ -46,7 +46,7 @@ export default async function CaptainTableWorkspacePage({
       initialSession={overview.session}
       initialBill={overview.bill}
       initialRequests={requests}
-      upiSettings={{ enabled: restaurant.billing?.upiEnabled === true, upiId: restaurant.billing?.upiId ?? "", payeeName: restaurant.billing?.upiPayeeName || restaurant.name }}
+      upiSettings={{ enabled: restaurant.billing?.upiEnabled === true, upiId: restaurant.billing?.upiId ?? "", payeeName: restaurant.billing?.upiPayeeName || restaurant.name, staticQrUrl: restaurant.billing?.upiStaticQrUrl }}
     />
   );
 }

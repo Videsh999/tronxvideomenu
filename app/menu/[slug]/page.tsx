@@ -64,6 +64,7 @@ export default async function RestaurantMenuPage({
           enabled: menu.restaurant.billing?.upiEnabled === true,
           upiId: menu.restaurant.billing?.upiId ?? "",
           payeeName: menu.restaurant.billing?.upiPayeeName || menu.restaurant.name,
+          staticQrUrl: menu.restaurant.billing?.upiStaticQrUrl,
         }}
       />
       </I18nProvider>

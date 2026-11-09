@@ -220,6 +220,7 @@ export type RestaurantBillingSettings = {
   upiEnabled?: boolean;
   upiId?: string;
   upiPayeeName?: string;
+  upiStaticQrUrl?: string;
 };
 
 export type BillBreakdown = {

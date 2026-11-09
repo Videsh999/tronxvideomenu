@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import type { BillBreakdown, RestaurantBillingSettings } from "@/types";
+import { api } from "@/lib/api";
 
 type AuditRow = {
   id: string;
@@ -53,6 +54,7 @@ export default function BillingSettingsForm({
   } | null>(null);
   const [replaceOverrides, setReplaceOverrides] = useState(false);
   const [audit, setAudit] = useState<AuditRow[]>([]);
+  const [qrUploadBusy, setQrUploadBusy] = useState(false);
 
   const dirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(saved), [draft, saved]);
 
@@ -295,6 +297,23 @@ export default function BillingSettingsForm({
                 Payee name
                 <input value={draft.upiPayeeName ?? ""} onChange={(event) => patch("upiPayeeName", event.target.value)} placeholder="Restaurant name" className="mt-1 min-h-11 w-full rounded-xl border border-neutral-200 px-3" />
               </label>
+            </div>
+            <div className="rounded-2xl border border-dashed border-neutral-300 p-4">
+              <p className="text-sm font-bold text-neutral-900">Optional uploaded bank QR</p>
+              <p className="mt-1 text-xs text-neutral-500">Use this only as a static merchant QR fallback. It cannot lock the bill amount or confirm payment.</p>
+              <input type="file" accept="image/png,image/jpeg,image/webp" disabled={qrUploadBusy} onChange={async (event) => {
+                const file = event.target.files?.[0];
+                if (!file) return;
+                setQrUploadBusy(true);
+                try {
+                  const media = await api.uploadMedia(file, restaurantId);
+                  setDraft((prev) => ({ ...prev, upiStaticQrUrl: media.url }));
+                  setMessage("Static merchant QR uploaded. Save configuration to enable it.");
+                } catch (error) {
+                  setMessage(error instanceof Error ? error.message : "QR upload failed");
+                } finally { setQrUploadBusy(false); event.target.value = ""; }
+              }} className="mt-3 block w-full text-sm" />
+              {draft.upiStaticQrUrl ? <img src={draft.upiStaticQrUrl} alt="Uploaded static merchant QR" className="mt-3 h-44 w-44 rounded-xl border object-contain" /> : null}
             </div>
             <p className="rounded-2xl bg-sky-50 px-4 py-3 text-sm text-sky-950">The QR includes the exact order total, order number, INR currency, and your payee details. TRONX does not automatically confirm bank settlement; staff must verify the payment before recording it.</p>
           </div>

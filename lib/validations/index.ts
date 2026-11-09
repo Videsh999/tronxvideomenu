@@ -96,6 +96,7 @@ export const restaurantBillingSettingsSchema = z
       "Enter a valid UPI ID, for example merchant@bank",
     ).optional(),
     upiPayeeName: z.string().trim().max(120).optional(),
+    upiStaticQrUrl: z.string().trim().url().max(2000).or(z.literal("")).optional(),
   })
   .strict();
 export type RestaurantBillingSettingsInput = z.infer<typeof restaurantBillingSettingsSchema>;

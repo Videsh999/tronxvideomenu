@@ -18,6 +18,7 @@ export default async function RestaurantOrdersPage({ params }: { params: Promise
       enabled: restaurant.billing?.upiEnabled === true,
       upiId: restaurant.billing?.upiId ?? "",
       payeeName: restaurant.billing?.upiPayeeName || restaurant.name,
+      staticQrUrl: restaurant.billing?.upiStaticQrUrl,
     }}
   />;
 }

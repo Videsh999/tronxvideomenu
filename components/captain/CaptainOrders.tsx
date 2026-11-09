@@ -41,7 +41,7 @@ export default function CaptainOrders({
 }: {
   initialOrders: OrderSummary[];
   restaurantName?: string;
-  upiSettings?: { enabled: boolean; upiId: string; payeeName: string };
+  upiSettings?: { enabled: boolean; upiId: string; payeeName: string; staticQrUrl?: string };
 }) {
   const [orders, setOrders] = useState(initialOrders);
   const [activeStage, setActiveStage] = useState<OrderBoardStage>(() => pickBusyStage(initialOrders));
@@ -368,7 +368,7 @@ export default function CaptainOrders({
               ))}
             </div>
             {selectedMethod === "UPI" && upiSettings?.enabled && upiSettings.upiId ? (
-              <UpiPaymentQr upiId={upiSettings.upiId} payeeName={upiSettings.payeeName} amount={paymentModalOrder.total} orderNumber={paymentModalOrder.orderNumber} compact />
+              <UpiPaymentQr upiId={upiSettings.upiId} payeeName={upiSettings.payeeName} staticQrUrl={upiSettings.staticQrUrl} amount={paymentModalOrder.total} orderNumber={paymentModalOrder.orderNumber} compact />
             ) : selectedMethod === "UPI" ? (
               <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">UPI QR is not configured for this restaurant.</p>
             ) : null}

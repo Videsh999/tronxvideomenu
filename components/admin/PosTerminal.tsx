@@ -38,7 +38,7 @@ type PosTerminalProps = {
   dishes: Dish[];
   tables: RestaurantTable[];
   initialShift: PosShift | null;
-  upiSettings?: { enabled: boolean; upiId: string; payeeName: string };
+  upiSettings?: { enabled: boolean; upiId: string; payeeName: string; staticQrUrl?: string };
 };
 
 function money(value: number, currency: string) {
@@ -365,6 +365,10 @@ export default function PosTerminal({
         setRedeemLoyaltyPoints(0);
         setPayAmount(order.total);
 
+        if (payMethod === "UPI") {
+          setMessage(`Order #${order.orderNumber} placed. Scan the UPI QR, then verify and tap Record.`);
+          return;
+        }
         const response = await fetch(`/api/orders/${order.id}/payment`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -372,15 +376,11 @@ export default function PosTerminal({
         });
         const json = await response.json();
         if (!json.success) {
-          setMessage(
-            `Order #${order.orderNumber} placed, but payment failed: ${json.error || "try Record"}.`,
-          );
+          setMessage(`Order #${order.orderNumber} placed, but payment failed: ${json.error || "try Record"}.`);
           return;
         }
         setPayAmount("");
-        setMessage(
-          `Order #${order.orderNumber} placed & ${json.data.payment.status} via ${payMethod} · ${money(order.total, currency)}`,
-        );
+        setMessage(`Order #${order.orderNumber} placed & ${json.data.payment.status} via ${payMethod} · ${money(order.total, currency)}`);
         if (json.data.payment.status === "PAID") setLastOrderId(null);
       } catch (error) {
         const text = error instanceof Error ? error.message : "Checkout failed";
@@ -891,10 +891,10 @@ export default function PosTerminal({
                   Record
                 </button>
               </div>
-              {payMethod === "UPI" && lastOrderId && lastOrderNumber != null && upiSettings?.enabled && upiSettings.upiId ? (
-                <UpiPaymentQr upiId={upiSettings.upiId} payeeName={upiSettings.payeeName} amount={Number(payAmount) || 0} orderNumber={lastOrderNumber} compact />
+              {payMethod === "UPI" && lastOrderId && lastOrderNumber != null && upiSettings?.enabled && (upiSettings.upiId || upiSettings.staticQrUrl) ? (
+                <UpiPaymentQr upiId={upiSettings.upiId} payeeName={upiSettings.payeeName} staticQrUrl={upiSettings.staticQrUrl} amount={Number(payAmount) || 0} orderNumber={lastOrderNumber} compact />
               ) : payMethod === "UPI" && lastOrderId ? (
-                <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">UPI QR is not configured. Add the UPI ID under Billing settings.</p>
+                <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">UPI QR is not configured. Add a UPI ID or upload a static QR under Billing settings.</p>
               ) : null}
             </div>
           </div>

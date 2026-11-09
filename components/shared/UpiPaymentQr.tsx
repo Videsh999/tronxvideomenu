@@ -12,12 +12,14 @@ export default function UpiPaymentQr({
   amount,
   orderNumber,
   compact = false,
+  staticQrUrl,
 }: {
   upiId: string;
   payeeName: string;
   amount: number;
   orderNumber: string | number;
   compact?: boolean;
+  staticQrUrl?: string;
 }) {
   const [src, setSrc] = useState("");
   const [copied, setCopied] = useState(false);
@@ -35,23 +37,23 @@ export default function UpiPaymentQr({
     return () => { active = false; };
   }, [compact, uri]);
 
-  if (!uri) return null;
+  if (!uri && !staticQrUrl) return null;
   return (
     <section className="rounded-2xl border border-neutral-200 bg-white p-4 text-center text-neutral-900">
       <p className="text-xs font-bold uppercase tracking-[0.14em] text-neutral-500">Scan and pay via UPI</p>
       <p className="mt-1 text-xl font-black tabular-nums">₹{amount.toFixed(2)}</p>
       <p className="text-xs text-neutral-500">Order #{orderNumber} · {payeeName}</p>
-      {src ? <Image src={src} alt={`UPI payment QR for order ${orderNumber}`} width={compact ? 176 : 224} height={compact ? 176 : 224} unoptimized className="mx-auto mt-3 max-w-full" /> : <div className="mx-auto mt-3 h-44 w-44 animate-pulse rounded-xl bg-neutral-100" />}
+      {src ? <Image src={src} alt={`UPI payment QR for order ${orderNumber}`} width={compact ? 176 : 224} height={compact ? 176 : 224} unoptimized className="mx-auto mt-3 max-w-full" /> : staticQrUrl ? <Image src={staticQrUrl} alt="Static merchant UPI QR" width={compact ? 176 : 224} height={compact ? 176 : 224} unoptimized className="mx-auto mt-3 max-w-full" /> : <div className="mx-auto mt-3 h-44 w-44 animate-pulse rounded-xl bg-neutral-100" />}
       <p className="mt-2 break-all font-mono text-xs text-neutral-600">{upiId}</p>
       <div className="mt-3 flex flex-wrap justify-center gap-2">
-        <a href={uri} className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-neutral-900 px-3 text-xs font-bold text-white">
+        {uri ? <a href={uri} className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-neutral-900 px-3 text-xs font-bold text-white">
           <ExternalLink className="h-3.5 w-3.5" /> Open UPI app
-        </a>
+        </a> : <span className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">STATIC MERCHANT QR · amount not locked</span>}
         <button type="button" onClick={() => void navigator.clipboard.writeText(upiId).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1500); })} className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-neutral-300 px-3 text-xs font-semibold">
           <Copy className="h-3.5 w-3.5" /> {copied ? "Copied" : "Copy UPI ID"}
         </button>
       </div>
-      <p className="mt-3 text-[11px] text-amber-700">Payment is marked paid only after restaurant staff verifies it.</p>
+      <p className="mt-3 text-[11px] text-amber-700">Payment is marked paid only after restaurant staff verifies it. Static QR payments do not lock the amount.</p>
     </section>
   );
 }

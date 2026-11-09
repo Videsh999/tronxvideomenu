@@ -119,6 +119,7 @@ const restaurantSchema = new Schema<Restaurant>(
       upiEnabled: { type: Boolean, default: false },
       upiId: { type: String, maxlength: 120 },
       upiPayeeName: { type: String, maxlength: 120 },
+      upiStaticQrUrl: { type: String, maxlength: 2000 },
     },
     organizationId: { type: String, index: true },
     inventorySettings: {

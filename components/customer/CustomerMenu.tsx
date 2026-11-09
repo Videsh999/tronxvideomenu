@@ -115,7 +115,7 @@ type CustomerMenuProps = {
   videoMenuEnabled?: boolean;
   tableOrderingEnabled?: boolean;
   loyaltyEnabled?: boolean;
-  upiSettings?: { enabled: boolean; upiId: string; payeeName: string };
+  upiSettings?: { enabled: boolean; upiId: string; payeeName: string; staticQrUrl?: string };
 };
 
 export default function CustomerMenu({
@@ -658,8 +658,8 @@ export default function CustomerMenu({
                 </div>
                 <OrderProgress status={order.status} />
                 {order.items && order.items.length > 0 && <ul className="mt-3 space-y-1.5 border-t border-dashed border-[var(--customer-border)] pt-3">{order.items.map((item, index) => <li key={`${item.dishId}-${index}`} className="text-sm"><div className="flex justify-between gap-3"><span className="font-medium text-[var(--restaurant-text)]"><span className="tabular-nums text-[var(--restaurant-text-muted)]">{item.quantity}×</span> {tc(item.dishNameSnapshot)}</span><span className="text-xs tabular-nums text-[var(--restaurant-text-muted)]">₹{item.itemTotal}</span></div>{item.addons.length > 0 && <p className="mt-0.5 pl-5 text-xs text-[var(--restaurant-text-muted)]">{item.addons.map((addon) => `${tc(addon.nameSnapshot)}${addon.quantity > 1 ? ` × ${addon.quantity}` : ""}`).join(" · ")}</p>}</li>)}</ul>}
-                {upiSettings?.enabled && upiSettings.upiId && !["PAID", "REFUNDED"].includes(order.payment?.status ?? "UNPAID") && !["CANCELLED", "REJECTED", "REFUNDED"].includes(order.status) ? (
-                  <div className="mt-3"><UpiPaymentQr upiId={upiSettings.upiId} payeeName={upiSettings.payeeName} amount={order.total} orderNumber={order.orderNumber} compact /></div>
+                {upiSettings?.enabled && (upiSettings.upiId || upiSettings.staticQrUrl) && !["PAID", "REFUNDED"].includes(order.payment?.status ?? "UNPAID") && !["CANCELLED", "REJECTED", "REFUNDED"].includes(order.status) ? (
+                  <div className="mt-3"><UpiPaymentQr upiId={upiSettings.upiId} payeeName={upiSettings.payeeName} staticQrUrl={upiSettings.staticQrUrl} amount={order.total} orderNumber={order.orderNumber} compact /></div>
                 ) : null}
               </article>)}
             </div>}
