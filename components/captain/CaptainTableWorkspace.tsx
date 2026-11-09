@@ -24,9 +24,12 @@ function money(value: number, currency = "INR") {
   return new Intl.NumberFormat(undefined, {
     style: "currency",
     currency,
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(value);
 }
+
+type HistoryFilter = "ALL" | OrderSummary["status"];
 
 const REQUEST_TYPES: { type: ServiceRequestType; label: string }[] = [
   { type: "WATER", label: "Water" },
@@ -72,6 +75,7 @@ export default function CaptainTableWorkspace({
   const [guestCount, setGuestCount] = useState(String(initialOrder?.guestCount ?? ""));
   const [note, setNote] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("ALL");
   const [pending, startTransition] = useTransition();
 
   const openRequests = useMemo(
@@ -80,6 +84,10 @@ export default function CaptainTableWorkspace({
   );
   const runningTotal = useMemo(() => orders.filter((row) => !["CANCELLED", "REJECTED", "REFUNDED"].includes(row.status)).reduce((sum, row) => sum + row.total, 0), [orders]);
   const previouslyPaid = useMemo(() => orders.reduce((sum, row) => sum + (row.payment?.amountPaid ?? 0), 0), [orders]);
+  const historyOrders = useMemo(
+    () => orders.filter((row) => historyFilter === "ALL" || row.status === historyFilter),
+    [historyFilter, orders],
+  );
 
   function runAction(action: string, body: Record<string, unknown> = {}) {
     startTransition(async () => {
@@ -364,6 +372,45 @@ export default function CaptainTableWorkspace({
             {bill.status === "PAID" && session ? <button type="button" disabled={pending} onClick={() => sessionBillingAction({ action: "CLOSE_SESSION", sessionId: session.id }, "Session closed · table sent to cleaning")} className="min-h-10 rounded-xl bg-emerald-700 px-4 text-sm font-bold text-white sm:col-span-3">Close paid session</button> : null}
           </div>
         ) : null}
+      </section>
+
+      <section aria-labelledby="complete-order-history" className="rounded-3xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-neutral-400">Session timeline</p>
+            <h2 id="complete-order-history" className="mt-1 text-xl font-black">Complete order history</h2>
+            <p className="mt-1 text-sm text-neutral-500">Every independent order stays visible for this session. Sorted oldest to newest.</p>
+          </div>
+          <span className="rounded-full bg-neutral-100 px-3 py-1 text-xs font-bold text-neutral-600">{orders.length} order{orders.length === 1 ? "" : "s"}</span>
+        </div>
+        <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+          {(["ALL", "PENDING", "ACCEPTED", "PREPARING", "READY", "SERVED", "CANCELLED"] as const).map((filter) => (
+            <button key={filter} type="button" onClick={() => setHistoryFilter(filter)} className={`min-h-9 shrink-0 rounded-full border px-3 text-xs font-bold ${historyFilter === filter ? "border-neutral-900 bg-neutral-900 text-white" : "border-neutral-200 text-neutral-600"}`}>
+              {filter === "ALL" ? "All orders" : filter[0] + filter.slice(1).toLowerCase()}
+            </button>
+          ))}
+        </div>
+        {historyOrders.length === 0 ? (
+          <p className="mt-4 rounded-2xl border border-dashed border-neutral-300 bg-neutral-50 p-5 text-center text-sm text-neutral-500">No orders match this filter.</p>
+        ) : (
+          <ol className="mt-4 space-y-3">
+            {historyOrders.map((row) => (
+              <li key={row.id} className={`rounded-2xl border p-4 ${order?.id === row.id ? "border-neutral-900 bg-neutral-50" : "border-neutral-200"}`}>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <button type="button" onClick={() => setOrder(row)} className="text-left">
+                    <p className="font-black">Order #{row.orderNumber}</p>
+                    <p className="mt-0.5 text-xs text-neutral-500">{new Date(row.createdAt).toLocaleString()} · {(row.source ?? row.channel ?? "ORDER").replace(/_/g, " ")}</p>
+                  </button>
+                  <div className="text-right"><p className="font-black tabular-nums">{money(row.total, currency)}</p><p className="text-xs text-neutral-500">{row.status} · {row.payment?.status ?? "UNPAID"}</p></div>
+                </div>
+                <div className="mt-3 divide-y divide-neutral-100 rounded-xl bg-white">
+                  {row.items.map((item, index) => <div key={item.lineId ?? `${row.id}-${index}`} className="flex items-start justify-between gap-3 px-3 py-2 text-sm"><span><strong>{item.quantity}× {item.dishNameSnapshot}</strong>{item.variantNameSnapshot ? ` · ${item.variantNameSnapshot}` : ""}<span className="block text-[11px] text-neutral-500">{(item.kitchenStation ?? "MAIN").toLowerCase()} · {item.preparationStatus ?? "QUEUED"}{item.note ? ` · ${item.note}` : ""}</span></span><span className="shrink-0 tabular-nums">{money(item.itemTotal, currency)}</span></div>)}
+                </div>
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-neutral-500"><span>KOT #{row.orderNumber} · Kitchen {row.status}</span><span>{row.payment?.amountPaid ? `Paid ${money(row.payment.amountPaid, currency)}` : "Payment unpaid"}</span></div>
+              </li>
+            ))}
+          </ol>
+        )}
       </section>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
