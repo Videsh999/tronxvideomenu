@@ -26,8 +26,8 @@ export default async function AdminBillingSettingsPage({
       initialBilling={{
         currency: restaurant.currency ?? "INR",
         priceMode: "EXCLUSIVE",
-        gstEnabled: true,
-        gstRatePercent: 5,
+        gstEnabled: false,
+        gstRatePercent: 0,
         supplyType: "INTRA_STATE",
         taxLabel: "GST",
         packagingEnabled: false,

@@ -466,7 +466,7 @@ export default function PosTerminal({
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {(["POS_DINE_IN", "POS_TAKEAWAY", "POS_DELIVERY"] as OrderChannel[]).map((value) => (
+          {(["POS_DINE_IN", "POS_TAKEAWAY"] as OrderChannel[]).map((value) => (
             <button
               key={value}
               type="button"
