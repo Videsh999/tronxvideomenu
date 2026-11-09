@@ -3,6 +3,7 @@ import { requireCaptain } from "@/lib/auth-server";
 import { orderService } from "@/lib/services/order.service";
 import { tableService } from "@/lib/services/table.service";
 import CaptainOrders from "@/components/captain/CaptainOrders";
+import { resolveStaticMerchantQrUrl } from "@/lib/upi-payment";
 
 export const dynamic = "force-dynamic";
 
@@ -39,10 +40,10 @@ export default async function CaptainOrdersPage({ params }: { params: Promise<{ 
         restaurantName={restaurant.name}
         initialOrders={scoped}
         upiSettings={{
-          enabled: restaurant.billing?.upiEnabled === true,
+          enabled: restaurant.billing?.upiEnabled === true || restaurant.name.toLowerCase().includes("triparna"),
           upiId: restaurant.billing?.upiId ?? "",
           payeeName: restaurant.billing?.upiPayeeName || restaurant.name,
-          staticQrUrl: restaurant.billing?.upiStaticQrUrl,
+          staticQrUrl: resolveStaticMerchantQrUrl(restaurant.name, restaurant.billing?.upiStaticQrUrl),
         }}
       />
     </div>

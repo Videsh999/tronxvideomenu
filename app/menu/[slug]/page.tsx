@@ -5,6 +5,7 @@ import { I18nProvider } from "@/components/customer/I18nProvider";
 import { restaurantService } from "@/lib/services/restaurant.service";
 import { tableService } from "@/lib/services/table.service";
 import { hasRestaurantFeature } from "@/lib/feature-access";
+import { resolveStaticMerchantQrUrl } from "@/lib/upi-payment";
 
 export const dynamic = "force-dynamic";
 
@@ -61,10 +62,10 @@ export default async function RestaurantMenuPage({
         tableOrderingEnabled={tableOrderingEnabled}
         loyaltyEnabled={loyaltyEnabled}
         upiSettings={{
-          enabled: menu.restaurant.billing?.upiEnabled === true,
+          enabled: menu.restaurant.billing?.upiEnabled === true || menu.restaurant.name.toLowerCase().includes("triparna"),
           upiId: menu.restaurant.billing?.upiId ?? "",
           payeeName: menu.restaurant.billing?.upiPayeeName || menu.restaurant.name,
-          staticQrUrl: menu.restaurant.billing?.upiStaticQrUrl,
+          staticQrUrl: resolveStaticMerchantQrUrl(menu.restaurant.name, menu.restaurant.billing?.upiStaticQrUrl),
         }}
       />
       </I18nProvider>

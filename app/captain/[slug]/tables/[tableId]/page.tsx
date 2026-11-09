@@ -5,6 +5,7 @@ import { tableRepository } from "@/lib/repositories/table.repository";
 import { serviceRequestService } from "@/lib/services/service-request.service";
 import CaptainTableWorkspace from "@/components/captain/CaptainTableWorkspace";
 import { tableSessionService } from "@/lib/services/table-session.service";
+import { resolveStaticMerchantQrUrl } from "@/lib/upi-payment";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +47,7 @@ export default async function CaptainTableWorkspacePage({
       initialSession={overview.session}
       initialBill={overview.bill}
       initialRequests={requests}
-      upiSettings={{ enabled: restaurant.billing?.upiEnabled === true, upiId: restaurant.billing?.upiId ?? "", payeeName: restaurant.billing?.upiPayeeName || restaurant.name, staticQrUrl: restaurant.billing?.upiStaticQrUrl }}
+      upiSettings={{ enabled: restaurant.billing?.upiEnabled === true || restaurant.name.toLowerCase().includes("triparna"), upiId: restaurant.billing?.upiId ?? "", payeeName: restaurant.billing?.upiPayeeName || restaurant.name, staticQrUrl: resolveStaticMerchantQrUrl(restaurant.name, restaurant.billing?.upiStaticQrUrl) }}
     />
   );
 }
