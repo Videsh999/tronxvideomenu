@@ -50,6 +50,7 @@ export default function CaptainOrders({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [paymentModalOrder, setPaymentModalOrder] = useState<OrderSummary | null>(null);
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>("CASH");
+  const [upiVerified, setUpiVerified] = useState(false);
   const [paymentBusy, setPaymentBusy] = useState(false);
   const [paymentError, setPaymentError] = useState("");
 
@@ -116,6 +117,10 @@ export default function CaptainOrders({
 
   const handleRecordPayment = async () => {
     if (!paymentModalOrder) return;
+    if (selectedMethod === "UPI" && !upiVerified) {
+      setPaymentError("Verify the payment in the restaurant's UPI account before recording it.");
+      return;
+    }
     setPaymentBusy(true);
     setPaymentError("");
     try {
@@ -317,6 +322,7 @@ export default function CaptainOrders({
                         onClick={() => {
                           setPaymentModalOrder(order);
                           setSelectedMethod("CASH");
+                          setUpiVerified(false);
                           setPaymentError("");
                         }}
                         className="h-10 rounded-xl border border-neutral-300 px-3 text-xs font-semibold text-neutral-700"
@@ -344,7 +350,7 @@ export default function CaptainOrders({
 
       {paymentModalOrder ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-900/40 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md space-y-4 rounded-2xl border border-neutral-200 bg-white p-6 shadow-2xl">
+          <div className="max-h-[calc(100dvh-2rem)] w-full max-w-lg space-y-4 overflow-y-auto rounded-2xl border border-neutral-200 bg-white p-5 shadow-2xl sm:p-6">
             <h3 className="text-lg font-bold">Record payment · #{paymentModalOrder.orderNumber}</h3>
             <p className="text-sm text-neutral-500">
               Table {paymentModalOrder.tableNumber} ·{" "}
@@ -356,7 +362,11 @@ export default function CaptainOrders({
                 <button
                   key={method}
                   type="button"
-                  onClick={() => setSelectedMethod(method)}
+                  onClick={() => {
+                    setSelectedMethod(method);
+                    setUpiVerified(false);
+                    setPaymentError("");
+                  }}
                   className={`rounded-xl border py-2.5 text-sm font-semibold ${
                     selectedMethod === method
                       ? "border-neutral-900 bg-neutral-900 text-white"
@@ -367,8 +377,14 @@ export default function CaptainOrders({
                 </button>
               ))}
             </div>
-            {selectedMethod === "UPI" && upiSettings?.enabled && upiSettings.upiId ? (
-              <UpiPaymentQr upiId={upiSettings.upiId} payeeName={upiSettings.payeeName} staticQrUrl={upiSettings.staticQrUrl} amount={paymentModalOrder.total} orderNumber={paymentModalOrder.orderNumber} compact />
+            {selectedMethod === "UPI" && upiSettings?.enabled && (upiSettings.upiId || upiSettings.staticQrUrl) ? (
+              <>
+                <UpiPaymentQr upiId={upiSettings.upiId} payeeName={upiSettings.payeeName} staticQrUrl={upiSettings.staticQrUrl} amount={paymentModalOrder.total} orderNumber={paymentModalOrder.orderNumber} compact />
+                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950">
+                  <input type="checkbox" checked={upiVerified} onChange={(event) => setUpiVerified(event.target.checked)} className="mt-0.5 h-4 w-4 accent-neutral-900" />
+                  <span><strong>I verified this payment</strong><br />Check the merchant UPI app/bank account and confirm the exact ₹{paymentModalOrder.total.toFixed(2)} received before recording.</span>
+                </label>
+              </>
             ) : selectedMethod === "UPI" ? (
               <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">UPI QR is not configured for this restaurant.</p>
             ) : null}
@@ -387,7 +403,7 @@ export default function CaptainOrders({
                 onClick={() => void handleRecordPayment()}
                 className="rounded-xl bg-neutral-900 px-5 py-2 text-sm font-bold text-white disabled:opacity-50"
               >
-                {paymentBusy ? "Saving…" : `Confirm ₹${paymentModalOrder.total}`}
+                {paymentBusy ? "Saving…" : selectedMethod === "UPI" ? `Record verified ₹${paymentModalOrder.total}` : `Confirm ₹${paymentModalOrder.total}`}
               </button>
             </div>
           </div>
