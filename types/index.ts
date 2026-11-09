@@ -566,6 +566,42 @@ export type PaymentSummary = {
   ledger?: PaymentLedgerEntry[];
 };
 
+export type DynamicPaymentRequestStatus =
+  | "CREATING"
+  | "PROCESSING"
+  | "PENDING"
+  | "PAID"
+  | "FAILED"
+  | "EXPIRED"
+  | "CANCELLED"
+  | "PARTIAL"
+  | "WRONG_AMOUNT";
+
+export type DynamicPaymentRequest = {
+  id: string;
+  restaurantId: string;
+  organizationId?: string;
+  outletId: string;
+  orderId: string;
+  tableSessionId?: string;
+  billId?: string;
+  billVersion?: number;
+  paymentReferenceId: string;
+  merchantAccountId: string;
+  provider: "RAZORPAY";
+  providerQrId: string;
+  qrImageUrl?: string;
+  amount: number;
+  currency: "INR";
+  status: DynamicPaymentRequestStatus;
+  expiresAt: string;
+  providerPaymentId?: string;
+  providerEventIds?: string[];
+  failureReason?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type CustomerPaymentSummary = {
   status: PaymentStatus;
   method?: PaymentMethod;

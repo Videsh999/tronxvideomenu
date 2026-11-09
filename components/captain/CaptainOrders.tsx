@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { OrderSummary, PaymentMethod } from "@/types";
+import type { DynamicPaymentRequest, OrderSummary, PaymentMethod } from "@/types";
 import { ChevronDown, ChevronUp, Download, Printer, RefreshCw } from "lucide-react";
 import {
   ORDER_BOARD_STAGES,
@@ -51,6 +51,8 @@ export default function CaptainOrders({
   const [paymentModalOrder, setPaymentModalOrder] = useState<OrderSummary | null>(null);
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>("CASH");
   const [upiVerified, setUpiVerified] = useState(false);
+  const [upiRequest, setUpiRequest] = useState<DynamicPaymentRequest | null>(null);
+  const [upiLoading, setUpiLoading] = useState(false);
   const [paymentBusy, setPaymentBusy] = useState(false);
   const [paymentError, setPaymentError] = useState("");
 
@@ -136,6 +138,40 @@ export default function CaptainOrders({
       setPaymentBusy(false);
     }
   };
+
+  const createUpiRequest = async (order: OrderSummary) => {
+    setUpiLoading(true);
+    setPaymentError("");
+    try {
+      const created = await captainRequest<DynamicPaymentRequest>(`/api/captain/orders/${order.id}/upi`, { method: "POST", body: "{}" });
+      setUpiRequest(created);
+    } catch (error) {
+      setUpiRequest(null);
+      setPaymentError(error instanceof Error ? error.message : "Unable to create dynamic UPI request.");
+    } finally {
+      setUpiLoading(false);
+    }
+  };
+
+  const refreshUpiRequest = async () => {
+    if (!paymentModalOrder || !upiRequest || ["PAID", "CANCELLED", "EXPIRED", "FAILED", "WRONG_AMOUNT"].includes(upiRequest.status)) return;
+    try {
+      const next = await captainRequest<DynamicPaymentRequest>(`/api/captain/orders/${paymentModalOrder.id}/upi/status`, { method: "GET" });
+      setUpiRequest(next);
+      if (next.status === "PAID") {
+        const updated = await captainRequest<OrderSummary[]>("/api/captain/orders");
+        setOrders(updated);
+      }
+    } catch (error) {
+      setPaymentError(error instanceof Error ? error.message : "Unable to refresh UPI status.");
+    }
+  };
+
+  useEffect(() => {
+    if (!paymentModalOrder || selectedMethod !== "UPI" || !upiRequest || upiRequest.status === "PAID") return;
+    const timer = window.setInterval(() => void refreshUpiRequest(), 5000);
+    return () => window.clearInterval(timer);
+  }, [paymentModalOrder, selectedMethod, upiRequest]);
 
   const toggleExpanded = (id: string) => {
     setExpandedIds((current) => {
@@ -323,6 +359,7 @@ export default function CaptainOrders({
                           setPaymentModalOrder(order);
                           setSelectedMethod("CASH");
                           setUpiVerified(false);
+                          setUpiRequest(null);
                           setPaymentError("");
                         }}
                         className="h-10 rounded-xl border border-neutral-300 px-3 text-xs font-semibold text-neutral-700"
@@ -365,7 +402,9 @@ export default function CaptainOrders({
                   onClick={() => {
                     setSelectedMethod(method);
                     setUpiVerified(false);
+                    setUpiRequest(null);
                     setPaymentError("");
+                    if (method === "UPI") void createUpiRequest(paymentModalOrder);
                   }}
                   className={`rounded-xl border py-2.5 text-sm font-semibold ${
                     selectedMethod === method
@@ -377,7 +416,19 @@ export default function CaptainOrders({
                 </button>
               ))}
             </div>
-            {selectedMethod === "UPI" && upiSettings?.enabled && (upiSettings.upiId || upiSettings.staticQrUrl) ? (
+            {selectedMethod === "UPI" && upiLoading ? (
+              <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-6 text-center text-sm text-neutral-600">Creating a secure, single-use payment request…</div>
+            ) : selectedMethod === "UPI" && upiRequest ? (
+              <section className="rounded-2xl border border-neutral-200 bg-white p-4 text-center">
+                <p className="text-xs font-bold uppercase tracking-[0.14em] text-neutral-500">Scan to pay · {upiRequest.status}</p>
+                {upiRequest.qrImageUrl ? <img src={upiRequest.qrImageUrl} alt={`Dynamic UPI QR for bill ${paymentModalOrder.orderNumber}`} className="mx-auto mt-3 h-64 w-64 max-w-full rounded-xl object-contain" /> : null}
+                <p className="mt-2 text-2xl font-black tabular-nums">₹{upiRequest.amount.toFixed(2)}</p>
+                <p className="text-xs text-neutral-500">{restaurantName} · Bill #{paymentModalOrder.orderNumber} · Table {paymentModalOrder.tableNumber}</p>
+                <p className="mt-2 break-all font-mono text-[11px] text-neutral-400">Ref {upiRequest.paymentReferenceId} · expires {new Date(upiRequest.expiresAt).toLocaleTimeString()}</p>
+                {upiRequest.status === "PAID" ? <p className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800">Payment verified and recorded.</p> : <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">Waiting for verified provider confirmation. Do not record from the Captain screen.</p>}
+                <div className="mt-3 flex justify-center gap-2"><button type="button" onClick={() => void refreshUpiRequest()} className="rounded-xl border border-neutral-300 px-3 py-2 text-xs font-semibold">Refresh status</button><button type="button" onClick={() => void captainRequest(`/api/captain/orders/${paymentModalOrder.id}/upi/cancel`, { method: "POST", body: "{}" }).then(() => setUpiRequest((current) => current ? { ...current, status: "CANCELLED" } : current))} className="rounded-xl border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-700">Cancel request</button></div>
+              </section>
+            ) : selectedMethod === "UPI" && upiSettings?.enabled && upiSettings.staticQrUrl ? (
               <>
                 <UpiPaymentQr upiId={upiSettings.upiId} payeeName={upiSettings.payeeName} staticQrUrl={upiSettings.staticQrUrl} amount={paymentModalOrder.total} orderNumber={paymentModalOrder.orderNumber} compact />
                 <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950">
@@ -391,7 +442,7 @@ export default function CaptainOrders({
             <div className="flex justify-end gap-2 pt-2">
               <button
                 type="button"
-                disabled={paymentBusy}
+                disabled={paymentBusy || selectedMethod === "UPI"}
                 onClick={() => setPaymentModalOrder(null)}
                 className="rounded-xl border border-neutral-300 px-4 py-2 text-sm"
               >
@@ -403,7 +454,7 @@ export default function CaptainOrders({
                 onClick={() => void handleRecordPayment()}
                 className="rounded-xl bg-neutral-900 px-5 py-2 text-sm font-bold text-white disabled:opacity-50"
               >
-                {paymentBusy ? "Saving…" : selectedMethod === "UPI" ? `Record verified ₹${paymentModalOrder.total}` : `Confirm ₹${paymentModalOrder.total}`}
+                {paymentBusy ? "Saving…" : selectedMethod === "UPI" ? "Awaiting provider confirmation" : `Confirm ₹${paymentModalOrder.total}`}
               </button>
             </div>
           </div>

@@ -15,6 +15,7 @@ import type {
   Reservation,
   TableSession,
   MasterBill,
+  DynamicPaymentRequest,
 } from "@/types";
 
 const baseOptions = {
@@ -1645,6 +1646,43 @@ export const DeviceConnectorModel =
 export const ConnectorPairingCodeModel =
   mongoose.models.ConnectorPairingCode ??
   mongoose.model("ConnectorPairingCode", connectorPairingCodeSchema);
+
+const dynamicPaymentRequestSchema = new Schema<DynamicPaymentRequest>(
+  {
+    id: { type: String, required: true, unique: true, index: true },
+    restaurantId: { type: String, required: true, index: true },
+    organizationId: { type: String, index: true },
+    outletId: { type: String, required: true, index: true },
+    orderId: { type: String, required: true, index: true },
+    tableSessionId: { type: String, index: true },
+    billId: { type: String, index: true },
+    billVersion: Number,
+    paymentReferenceId: { type: String, required: true, unique: true, index: true },
+    merchantAccountId: { type: String, required: true },
+    provider: { type: String, required: true, enum: ["RAZORPAY"] },
+    providerQrId: { type: String, required: true, unique: true, index: true },
+    qrImageUrl: String,
+    amount: { type: Number, required: true, min: 0.01 },
+    currency: { type: String, required: true, enum: ["INR"] },
+    status: {
+      type: String,
+      required: true,
+      enum: ["CREATING", "PROCESSING", "PENDING", "PAID", "FAILED", "EXPIRED", "CANCELLED", "PARTIAL", "WRONG_AMOUNT"],
+      index: true,
+    },
+    expiresAt: { type: String, required: true, index: true },
+    providerPaymentId: String,
+    providerEventIds: { type: [String], default: [] },
+    failureReason: String,
+    createdAt: { type: String, required: true, index: true },
+    updatedAt: { type: String, required: true },
+  },
+  { ...baseOptions, collection: "dynamicPaymentRequests" },
+);
+dynamicPaymentRequestSchema.index({ restaurantId: 1, orderId: 1, status: 1 });
+
+export const DynamicPaymentRequestModel =
+  mongoose.models.DynamicPaymentRequest ?? mongoose.model("DynamicPaymentRequest", dynamicPaymentRequestSchema);
 
 const hardwarePilotRunSchema = new Schema(
   {
