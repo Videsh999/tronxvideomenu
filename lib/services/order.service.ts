@@ -5,6 +5,8 @@ import { tableRepository } from "@/lib/repositories/table.repository";
 import { posShiftRepository } from "@/lib/repositories/pos-shift.repository";
 import { inventoryService } from "@/lib/services/inventory.service";
 import { crmService } from "@/lib/services/crm.service";
+import { tableSessionService } from "@/lib/services/table-session.service";
+import { tableSessionRepository } from "@/lib/repositories/table-session.repository";
 import { crmRepository } from "@/lib/repositories/crm.repository";
 import { redeemPointsValue, loyaltyRedeemKey, couponRedeemKey } from "@/lib/crm/loyalty";
 import { OrderLineCancellationModel } from "@/lib/db/models";
@@ -40,6 +42,7 @@ const staffOrderView = (order: RestaurantOrder) => ({
   orderNumber: order.orderNumber,
   tableNumber: order.tableNumber,
   tableId: order.tableId,
+  tableSessionId: order.tableSessionId,
   locationType: order.locationType,
   status: order.status,
   channel: order.channel ?? "QR",
@@ -71,6 +74,7 @@ const customerOrderView = (order: RestaurantOrder) => ({
   id: order.id,
   orderNumber: order.orderNumber,
   tableNumber: order.tableNumber,
+  tableSessionId: order.tableSessionId,
   locationType: order.locationType,
   status: order.status,
   items: order.items,
@@ -270,7 +274,17 @@ export class OrderService {
     if (!currentTable?.isActive || currentTable.status === "CLOSED") {
       throw new OrderServiceError("This table became unavailable. Please ask restaurant staff for help.");
     }
+    const existingSession = await tableSessionRepository.findActive(menu.restaurant.id, table.id);
+    if (existingSession && input.tableSessionId !== existingSession.id) {
+      throw new OrderServiceError("This table already has an active party. Ask the captain to join the existing bill or start a separate order.", 409);
+    }
     const customerToken = randomBytes(32).toString("base64url");
+    const tableSession = await tableSessionService.ensureActive({
+      restaurant: menu.restaurant,
+      table,
+      openedBy: { role: "CUSTOMER_QR", id: options?.loyaltyCustomerId ?? `guest:${input.idempotencyKey}` },
+      customerReference: options?.loyaltyCustomerId,
+    });
     const requiresCaptainApproval = menu.restaurant.orderSettings?.qrRequiresCaptainApproval !== false;
     const captainAuthorization = authorizationForCustomerQr(requiresCaptainApproval);
     const createdEvent = makeEvent("CREATED", requiresCaptainApproval
@@ -284,6 +298,7 @@ export class OrderService {
       restaurantId: menu.restaurant.id,
       tableId: table.id,
       tableNumber: table.tableNumber,
+      tableSessionId: tableSession.id,
       locationType: table.locationType ?? "TABLE",
       customerTokenHash: createHash("sha256").update(customerToken).digest("hex"),
       idempotencyKey: input.idempotencyKey,
@@ -341,6 +356,7 @@ export class OrderService {
     let tableId = `virtual-counter-${restaurantId}`;
     let tableNumber = 0;
     let locationType: RestaurantOrder["locationType"];
+    let serviceTable: Awaited<ReturnType<typeof tableRepository.findByRestaurantAndNumber>> = null;
     if (input.channel === "POS_DINE_IN") {
       const table = await tableRepository.findByRestaurantAndNumber(restaurantId, input.tableNumber!);
       if (!table || !table.isActive || table.status === "CLOSED" || table.status === "CLEANING") {
@@ -349,6 +365,7 @@ export class OrderService {
       tableId = table.id;
       tableNumber = table.tableNumber;
       locationType = table.locationType ?? "TABLE";
+      serviceTable = table;
     }
 
     const categoryStation = new Map(
@@ -572,11 +589,15 @@ export class OrderService {
         loyaltyApplied = true;
       }
 
+      const tableSession = serviceTable
+        ? await tableSessionService.ensureActive({ restaurant: menu.restaurant, table: serviceTable, openedBy: actor, guestCount: input.guestCount, customerReference: customerId })
+        : null;
       const created = await orderRepository.create({
         id: orderId,
         restaurantId,
         tableId,
         tableNumber,
+        tableSessionId: tableSession?.id,
         locationType,
         customerTokenHash: createHash("sha256").update(randomBytes(32)).digest("hex"),
         idempotencyKey: input.idempotencyKey,

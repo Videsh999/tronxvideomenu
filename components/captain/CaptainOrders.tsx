@@ -15,6 +15,7 @@ import {
   type OrderBoardStage,
 } from "@/lib/order-board";
 import { downloadKitchenOrderTicketPdf, printKitchenOrderTicket } from "@/lib/kot-print";
+import UpiPaymentQr from "@/components/shared/UpiPaymentQr";
 
 async function captainRequest<T>(url: string, init?: RequestInit) {
   const response = await fetch(url, {
@@ -36,9 +37,11 @@ function pickBusyStage(orders: OrderSummary[]): OrderBoardStage {
 export default function CaptainOrders({
   initialOrders,
   restaurantName,
+  upiSettings,
 }: {
   initialOrders: OrderSummary[];
   restaurantName?: string;
+  upiSettings?: { enabled: boolean; upiId: string; payeeName: string };
 }) {
   const [orders, setOrders] = useState(initialOrders);
   const [activeStage, setActiveStage] = useState<OrderBoardStage>(() => pickBusyStage(initialOrders));
@@ -364,6 +367,11 @@ export default function CaptainOrders({
                 </button>
               ))}
             </div>
+            {selectedMethod === "UPI" && upiSettings?.enabled && upiSettings.upiId ? (
+              <UpiPaymentQr upiId={upiSettings.upiId} payeeName={upiSettings.payeeName} amount={paymentModalOrder.total} orderNumber={paymentModalOrder.orderNumber} compact />
+            ) : selectedMethod === "UPI" ? (
+              <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">UPI QR is not configured for this restaurant.</p>
+            ) : null}
             <div className="flex justify-end gap-2 pt-2">
               <button
                 type="button"

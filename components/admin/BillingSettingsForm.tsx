@@ -16,6 +16,7 @@ const tabs = [
   "GST",
   "Packaging",
   "Service charge",
+  "UPI payments",
   "Bulk tax",
   "Preview",
   "Audit",
@@ -276,6 +277,26 @@ export default function BillingSettingsForm({
               Restaurant ID {restaurantId}. Changing settings never rewrites historical order
               snapshots.
             </p>
+          </div>
+        ) : null}
+
+        {tab === "UPI payments" ? (
+          <div className="space-y-4">
+            <label className="flex items-center justify-between gap-4 rounded-2xl border border-neutral-200 p-4 text-sm">
+              <span><strong className="block text-neutral-900">Enable dynamic UPI QR</strong><span className="text-neutral-500">Generate an amount-specific QR for every order.</span></span>
+              <input type="checkbox" checked={draft.upiEnabled ?? false} onChange={(event) => patch("upiEnabled", event.target.checked)} className="h-5 w-5" />
+            </label>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="text-sm">
+                UPI ID
+                <input value={draft.upiId ?? ""} onChange={(event) => patch("upiId", event.target.value)} placeholder="merchant@bank" autoCapitalize="none" spellCheck={false} className="mt-1 min-h-11 w-full rounded-xl border border-neutral-200 px-3 font-mono" />
+              </label>
+              <label className="text-sm">
+                Payee name
+                <input value={draft.upiPayeeName ?? ""} onChange={(event) => patch("upiPayeeName", event.target.value)} placeholder="Restaurant name" className="mt-1 min-h-11 w-full rounded-xl border border-neutral-200 px-3" />
+              </label>
+            </div>
+            <p className="rounded-2xl bg-sky-50 px-4 py-3 text-sm text-sky-950">The QR includes the exact order total, order number, INR currency, and your payee details. TRONX does not automatically confirm bank settlement; staff must verify the payment before recording it.</p>
           </div>
         ) : null}
 

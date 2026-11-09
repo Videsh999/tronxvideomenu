@@ -35,7 +35,15 @@ export default async function CaptainOrdersPage({ params }: { params: Promise<{ 
           Orders on your assigned tables only. Prefer the table workspace for add-items and bill handoff.
         </p>
       </header>
-      <CaptainOrders restaurantName={restaurant.name} initialOrders={scoped} />
+      <CaptainOrders
+        restaurantName={restaurant.name}
+        initialOrders={scoped}
+        upiSettings={{
+          enabled: restaurant.billing?.upiEnabled === true,
+          upiId: restaurant.billing?.upiId ?? "",
+          payeeName: restaurant.billing?.upiPayeeName || restaurant.name,
+        }}
+      />
     </div>
   );
 }

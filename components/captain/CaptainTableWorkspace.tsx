@@ -11,13 +11,14 @@ import {
   UtensilsCrossed,
   Wallet,
 } from "lucide-react";
-import type { OrderSummary, RestaurantTable } from "@/types";
+import type { MasterBill, OrderSummary, RestaurantTable, TableSession } from "@/types";
 import { locationName } from "@/lib/service-location";
 import type { ServiceRequest, ServiceRequestType } from "@/types/service-request";
 import { TABLE_STATUS_LABEL, TABLE_STATUS_STYLE } from "@/lib/captain-floor";
 import { isPendingCaptainApproval } from "@/lib/order-authorization";
 import { primaryFloorAction } from "@/lib/order-board";
 import { printKitchenOrderTicket } from "@/lib/kot-print";
+import UpiPaymentQr from "@/components/shared/UpiPaymentQr";
 
 function money(value: number, currency = "INR") {
   return new Intl.NumberFormat(undefined, {
@@ -44,17 +45,29 @@ export default function CaptainTableWorkspace({
   currency,
   initialTable,
   initialOrder,
+  initialOrders,
+  initialSession,
+  initialBill,
   initialRequests,
+  upiSettings,
 }: {
   slug: string;
   captainName: string;
   currency: string;
   initialTable: RestaurantTable;
   initialOrder: OrderSummary | null;
+  initialOrders: OrderSummary[];
+  initialSession: TableSession | null;
+  initialBill: MasterBill | null;
   initialRequests: ServiceRequest[];
+  upiSettings?: { enabled: boolean; upiId: string; payeeName: string };
 }) {
   const [table, setTable] = useState(initialTable);
   const [order, setOrder] = useState(initialOrder);
+  const [orders, setOrders] = useState(initialOrders);
+  const [session, setSession] = useState(initialSession);
+  const [bill, setBill] = useState(initialBill);
+  const [splitCount, setSplitCount] = useState(2);
   const [requests, setRequests] = useState(initialRequests);
   const [guestCount, setGuestCount] = useState(String(initialOrder?.guestCount ?? ""));
   const [note, setNote] = useState("");
@@ -65,6 +78,8 @@ export default function CaptainTableWorkspace({
     () => requests.filter((request) => !["DONE", "CANCELLED"].includes(request.status)),
     [requests],
   );
+  const runningTotal = useMemo(() => orders.filter((row) => !["CANCELLED", "REJECTED", "REFUNDED"].includes(row.status)).reduce((sum, row) => sum + row.total, 0), [orders]);
+  const previouslyPaid = useMemo(() => orders.reduce((sum, row) => sum + (row.payment?.amountPaid ?? 0), 0), [orders]);
 
   function runAction(action: string, body: Record<string, unknown> = {}) {
     startTransition(async () => {
@@ -84,6 +99,9 @@ export default function CaptainTableWorkspace({
         if (refreshed.success) {
           setTable(refreshed.data.table);
           setOrder(refreshed.data.activeOrder);
+          setOrders(refreshed.data.orders ?? []);
+          setSession(refreshed.data.session ?? null);
+          setBill(refreshed.data.bill ?? null);
           setRequests(refreshed.data.requests);
         }
       } catch (error) {
@@ -141,9 +159,47 @@ export default function CaptainTableWorkspace({
         if (refreshed.success) {
           setTable(refreshed.data.table);
           setOrder(refreshed.data.activeOrder);
+          setOrders(refreshed.data.orders ?? []);
+          setSession(refreshed.data.session ?? null);
+          setBill(refreshed.data.bill ?? null);
           setRequests(refreshed.data.requests);
         }
       });
+  }
+
+  function generateFinalBill(revise = false) {
+    if (!session) return;
+    startTransition(async () => {
+      setMessage(null);
+      try {
+        const response = await fetch(`/api/captain/tables/${table.id}/session`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "GENERATE_BILL", sessionId: session.id, revise }),
+        });
+        const json = await response.json();
+        if (!json.success) throw new Error(json.error || "Unable to generate final bill");
+        setBill(json.data);
+        setMessage(`Final bill ${json.data.billNumber} generated`);
+        await refreshTable();
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : "Unable to generate final bill");
+      }
+    });
+  }
+
+  function sessionBillingAction(body: Record<string, unknown>, success: string) {
+    startTransition(async () => {
+      setMessage(null);
+      try {
+        const response = await fetch(`/api/captain/tables/${table.id}/session`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+        const json = await response.json();
+        if (!json.success) throw new Error(json.error || "Billing action failed");
+        if (body.action === "SPLIT_BILL" || body.action === "RECORD_PAYMENT") setBill(json.data);
+        setMessage(success);
+        await refreshTable();
+      } catch (error) { setMessage(error instanceof Error ? error.message : "Billing action failed"); }
+    });
   }
 
   /** Approval clears the captain gate; a separate acceptance sends the order to kitchen. */
@@ -280,10 +336,40 @@ export default function CaptainTableWorkspace({
         </p>
       ) : null}
 
+      <section className="rounded-3xl border border-neutral-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-neutral-400">Table session</p>
+            <h2 className="mt-1 text-xl font-black">{session?.sessionNumber ?? "Starts with first order"}</h2>
+            <p className="mt-1 text-sm text-neutral-500">{orders.length} independent order{orders.length === 1 ? "" : "s"} · Running bill {money(runningTotal, currency)} · Paid {money(previouslyPaid, currency)}</p>
+          </div>
+          <button type="button" disabled={pending || !session || orders.length === 0} onClick={() => generateFinalBill(Boolean(bill))} className="min-h-11 rounded-xl bg-violet-700 px-4 text-sm font-bold text-white disabled:opacity-40">
+            {bill ? "Generate revised bill" : "Generate final bill"}
+          </button>
+        </div>
+        {orders.length ? (
+          <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+            {orders.map((row) => <button key={row.id} type="button" onClick={() => setOrder(row)} className={`min-w-36 rounded-xl border px-3 py-2 text-left text-xs ${order?.id === row.id ? "border-neutral-900 bg-neutral-900 text-white" : "border-neutral-200"}`}><strong className="block">Order #{row.orderNumber}</strong><span>{row.status} · {money(row.total, currency)}</span></button>)}
+          </div>
+        ) : null}
+        {bill ? (
+          <div className="mt-4 grid gap-3 rounded-2xl bg-violet-50 p-4 sm:grid-cols-3">
+            <div><p className="text-xs text-violet-700">Final bill</p><p className="font-bold">{bill.billNumber} · v{bill.version}</p></div>
+            <div><p className="text-xs text-violet-700">Total / Paid</p><p className="font-bold">{money(bill.total, currency)} / {money(bill.amountPaid, currency)}</p></div>
+            <div><p className="text-xs text-violet-700">Outstanding</p><p className="text-lg font-black">{money(bill.outstandingAmount, currency)}</p></div>
+            {bill.outstandingAmount > 0 && upiSettings?.enabled && upiSettings.upiId ? <div className="sm:col-span-3"><UpiPaymentQr upiId={upiSettings.upiId} payeeName={upiSettings.payeeName} amount={bill.outstandingAmount} orderNumber={bill.billNumber} compact /></div> : null}
+            {bill.outstandingAmount > 0 && bill.allocations.length === 0 ? <button type="button" disabled={pending} onClick={() => sessionBillingAction({ action: "RECORD_PAYMENT", billId: bill.id, amount: bill.outstandingAmount, method: "UPI", idempotencyKey: crypto.randomUUID() }, "UPI payment recorded after verification")} className="min-h-10 rounded-xl border border-violet-300 bg-white px-4 text-sm font-bold text-violet-900 sm:col-span-3">Verified payment received · record UPI</button> : null}
+            {bill.amountPaid === 0 ? <div className="flex flex-wrap items-center gap-2 sm:col-span-3"><label className="text-xs font-semibold">Equal split customers <input type="number" min={2} max={50} value={splitCount} onChange={(event) => setSplitCount(Math.max(2, Math.min(50, Number(event.target.value) || 2)))} className="ml-2 h-9 w-16 rounded-lg border border-violet-200 px-2" /></label><button type="button" disabled={pending} onClick={() => sessionBillingAction({ action: "SPLIT_BILL", billId: bill.id, version: bill.version, mode: "EQUAL", customers: splitCount }, "Bill split equally")} className="h-9 rounded-lg bg-violet-700 px-3 text-xs font-bold text-white">Split equally</button></div> : null}
+            {bill.allocations.length ? <div className="space-y-2 sm:col-span-3">{bill.allocations.map((allocation) => <div key={allocation.id} className="rounded-xl border border-violet-200 bg-white p-3"><div className="flex items-center justify-between gap-3"><span className="font-semibold">{allocation.label}</span><span className="font-bold">{money(allocation.amount - allocation.amountPaid, currency)} due</span></div>{allocation.amountPaid < allocation.amount && upiSettings?.enabled && upiSettings.upiId ? <div className="mt-2"><UpiPaymentQr upiId={upiSettings.upiId} payeeName={upiSettings.payeeName} amount={allocation.amount - allocation.amountPaid} orderNumber={`${bill.billNumber}-${allocation.id}`} compact /><button type="button" disabled={pending} onClick={() => sessionBillingAction({ action: "RECORD_PAYMENT", billId: bill.id, allocationId: allocation.id, amount: allocation.amount - allocation.amountPaid, method: "UPI", idempotencyKey: crypto.randomUUID() }, `${allocation.label} payment recorded`)} className="mt-2 min-h-9 w-full rounded-lg bg-violet-700 px-3 text-xs font-bold text-white">Verified · record UPI payment</button></div> : null}</div>)}</div> : null}
+            {bill.status === "PAID" && session ? <button type="button" disabled={pending} onClick={() => sessionBillingAction({ action: "CLOSE_SESSION", sessionId: session.id }, "Session closed · table sent to cleaning")} className="min-h-10 rounded-xl bg-emerald-700 px-4 text-sm font-bold text-white sm:col-span-3">Close paid session</button> : null}
+          </div>
+        ) : null}
+      </section>
+
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
         <section className="space-y-4 rounded-3xl border border-neutral-200 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between gap-2">
-            <h2 className="text-lg font-bold">Active order</h2>
+            <h2 className="text-lg font-bold">Selected order</h2>
             {order ? (
               <span className="text-xs font-semibold uppercase tracking-wide text-neutral-400">
                 #{order.orderNumber} · {order.status}

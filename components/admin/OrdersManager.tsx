@@ -17,6 +17,7 @@ import {
 } from "@/lib/order-board";
 import { downloadKitchenOrderTicketPdf, printKitchenOrderTicket } from "@/lib/kot-print";
 import { orderLocationName } from "@/lib/service-location";
+import UpiPaymentQr from "@/components/shared/UpiPaymentQr";
 
 function playNotificationChime() {
   try {
@@ -52,9 +53,11 @@ function playNotificationChime() {
 export default function OrdersManager({
   initialOrders,
   restaurantName,
+  upiSettings,
 }: {
   initialOrders: OrderSummary[];
   restaurantName?: string;
+  upiSettings?: { enabled: boolean; upiId: string; payeeName: string };
 }) {
   const [orders, setOrders] = useState(initialOrders);
   const [activeStage, setActiveStage] = useState<OrderBoardStage>(() => {
@@ -478,6 +481,11 @@ export default function OrdersManager({
                 </button>
               ))}
             </div>
+            {selectedMethod === "UPI" && upiSettings?.enabled && upiSettings.upiId ? (
+              <UpiPaymentQr upiId={upiSettings.upiId} payeeName={upiSettings.payeeName} amount={paymentModalOrder.total} orderNumber={paymentModalOrder.orderNumber} compact />
+            ) : selectedMethod === "UPI" ? (
+              <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">Configure the restaurant UPI ID under Settings → Billing & tax → UPI payments.</p>
+            ) : null}
             <div className="flex justify-end gap-2 pt-2">
               <button type="button" disabled={paymentBusy} onClick={() => setPaymentModalOrder(null)} className="rounded-xl border border-neutral-300 px-4 py-2 text-sm">
                 Cancel

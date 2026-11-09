@@ -11,5 +11,13 @@ export default async function RestaurantOrdersPage({ params }: { params: Promise
   const restaurant = await restaurantService.getBySlug(slug);
   if (!restaurant || !requireRestaurantFeature(restaurant, "ORDER_MANAGEMENT").allowed) notFound();
   const initialOrders = await orderService.listForRestaurant(restaurant.id);
-  return <OrdersManager restaurantName={restaurant.name} initialOrders={initialOrders} />;
+  return <OrdersManager
+    restaurantName={restaurant.name}
+    initialOrders={initialOrders}
+    upiSettings={{
+      enabled: restaurant.billing?.upiEnabled === true,
+      upiId: restaurant.billing?.upiId ?? "",
+      payeeName: restaurant.billing?.upiPayeeName || restaurant.name,
+    }}
+  />;
 }

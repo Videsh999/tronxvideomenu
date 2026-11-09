@@ -60,6 +60,11 @@ export default async function RestaurantMenuPage({
         videoMenuEnabled={videoMenuEnabled}
         tableOrderingEnabled={tableOrderingEnabled}
         loyaltyEnabled={loyaltyEnabled}
+        upiSettings={{
+          enabled: menu.restaurant.billing?.upiEnabled === true,
+          upiId: menu.restaurant.billing?.upiId ?? "",
+          payeeName: menu.restaurant.billing?.upiPayeeName || menu.restaurant.name,
+        }}
       />
       </I18nProvider>
     </ThemeProvider>

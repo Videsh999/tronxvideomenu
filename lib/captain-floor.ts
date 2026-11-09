@@ -44,7 +44,15 @@ export function enrichCaptainTables(
   return tables
     .filter((table) => assignedIds.has(table.id))
     .map((table) => {
-      const activeOrder = activeOrderForTable(orders, table.tableNumber);
-      return { table, activeOrder };
+      const activeOrders = orders.filter((order) => order.tableId === table.id && !["COMPLETED", "CANCELLED", "REJECTED", "REFUNDED"].includes(order.status));
+      const activeOrder = activeOrders[0] ?? activeOrderForTable(orders, table.tableNumber);
+      return {
+        table,
+        activeOrder,
+        activeOrders,
+        orderCount: activeOrders.length,
+        runningTotal: activeOrders.reduce((sum, order) => sum + order.total, 0),
+        amountPaid: activeOrders.reduce((sum, order) => sum + (order.payment?.amountPaid ?? 0), 0),
+      };
     });
 }

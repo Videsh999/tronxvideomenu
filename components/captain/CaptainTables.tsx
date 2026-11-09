@@ -104,7 +104,7 @@ export default function CaptainTables({
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {visibleRows.map(({ table, activeOrder }) => (
+        {visibleRows.map(({ table, activeOrder, orderCount, runningTotal, amountPaid }) => (
           <Link
             key={table.id}
             href={`/captain/${slug}/tables/${table.id}`}
@@ -143,12 +143,13 @@ export default function CaptainTables({
               </span>
               <span className="inline-flex items-center gap-1.5">
                 <IndianRupee className="h-3.5 w-3.5" />
-                {activeOrder ? money(activeOrder.total, currency) : "No bill"}
+                {orderCount ? money(runningTotal, currency) : "No bill"}
               </span>
               <span className="inline-flex items-center gap-1.5">
                 <Clock3 className="h-3.5 w-3.5" />
                 {activeOrder ? elapsed(activeOrder.createdAt) : "Idle"}
               </span>
+              {orderCount ? <span className="col-span-2 font-semibold text-neutral-800">{orderCount} order{orderCount === 1 ? "" : "s"} · Paid {money(amountPaid, currency)} · Due {money(Math.max(0, runningTotal - amountPaid), currency)}</span> : null}
             </div>
 
             {activeOrder ? (

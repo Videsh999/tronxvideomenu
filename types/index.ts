@@ -217,6 +217,9 @@ export type RestaurantBillingSettings = {
   effectiveFrom?: string;
   updatedAt?: string;
   updatedByEmail?: string;
+  upiEnabled?: boolean;
+  upiId?: string;
+  upiPayeeName?: string;
 };
 
 export type BillBreakdown = {
@@ -613,6 +616,8 @@ export type RestaurantOrder = {
   restaurantId: string;
   tableId: string;
   tableNumber: number;
+  /** Stable service visit. Legacy orders may not have one. */
+  tableSessionId?: string;
   locationType?: "TABLE" | "ROOM";
   orderNumber: number;
   customerTokenHash: string;
@@ -650,12 +655,91 @@ export type RestaurantOrder = {
   completedAt?: string;
 };
 
+export type TableSessionStatus = "ACTIVE" | "BILLING" | "PAYMENT_PENDING" | "CLOSED" | "CANCELLED";
+export type TableSessionBillingStatus = "OPEN" | "DRAFT" | "ISSUED" | "PARTIALLY_PAID" | "PAID" | "VOID";
+
+export type TableSession = {
+  id: string;
+  sessionNumber: string;
+  organizationId?: string;
+  restaurantId: string;
+  serviceLocationId: string;
+  tableNumberSnapshot: number;
+  locationType: "TABLE" | "ROOM";
+  status: TableSessionStatus;
+  billingStatus: TableSessionBillingStatus;
+  openedAt: string;
+  openedBy: PaymentAuditActor | { role: "CUSTOMER_QR"; id: string };
+  closedAt?: string;
+  closedBy?: PaymentAuditActor;
+  guestCount?: number;
+  customerReference?: string;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type MasterBillStatus = "ISSUED" | "PARTIALLY_PAID" | "PAID" | "VOID" | "SUPERSEDED";
+export type BillSplitMode = "NONE" | "EQUAL" | "ITEMS" | "CUSTOM";
+
+export type MasterBillLine = {
+  allocationKey: string;
+  orderId: string;
+  orderNumber: number;
+  lineId: string;
+  dishNameSnapshot: string;
+  quantity: number;
+  billableQuantity: number;
+  lineTotal: number;
+};
+
+export type BillAllocation = {
+  id: string;
+  label: string;
+  lineAllocations: { allocationKey: string; quantity: number; amount: number }[];
+  amount: number;
+  amountPaid: number;
+  status: "UNPAID" | "PARTIAL" | "PAID";
+};
+
+export type MasterBill = {
+  id: string;
+  billNumber: string;
+  organizationId?: string;
+  restaurantId: string;
+  tableSessionId: string;
+  serviceLocationId: string;
+  version: number;
+  status: MasterBillStatus;
+  orderIds: string[];
+  lines: MasterBillLine[];
+  subtotal: number;
+  discountAmount: number;
+  taxAmount: number;
+  packagingCharge: number;
+  serviceCharge: number;
+  tipAmount: number;
+  total: number;
+  amountPaid: number;
+  outstandingAmount: number;
+  fingerprint: string;
+  splitMode: BillSplitMode;
+  allocations: BillAllocation[];
+  paymentLedger: PaymentLedgerEntry[];
+  issuedAt: string;
+  issuedBy: PaymentAuditActor;
+  supersededAt?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type OrderSummary = Pick<
   RestaurantOrder,
   | "id"
   | "orderNumber"
   | "tableNumber"
   | "tableId"
+  | "tableSessionId"
   | "locationType"
   | "status"
   | "channel"

@@ -25,6 +25,11 @@ export default async function PosPage({ params }: { params: Promise<{ slug: stri
       dishes={menu.dishes}
       tables={tables.filter((table) => table.isActive && table.status !== "CLOSED")}
       initialShift={shift}
+      upiSettings={{
+        enabled: menu.restaurant.billing?.upiEnabled === true,
+        upiId: menu.restaurant.billing?.upiId ?? "",
+        payeeName: menu.restaurant.billing?.upiPayeeName || menu.restaurant.name,
+      }}
     />
   );
 }
