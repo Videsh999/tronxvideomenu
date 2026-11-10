@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { requireCaptain } from "@/lib/auth-server";
 import { orderService } from "@/lib/services/order.service";
-import { tableService } from "@/lib/services/table.service";
 import CaptainApprovals from "@/components/captain/CaptainApprovals";
 
 export const dynamic = "force-dynamic";
@@ -13,13 +12,9 @@ export default async function CaptainApprovalsPage({ params }: { params: Promise
   if (restaurant.slug !== slug) redirect(`/captain/${restaurant.slug}/approvals`);
 
   const assigned = new Set(captain.assignedTableIds ?? []);
-  const tables = await tableService.list(captain.restaurantId);
-  const tableNumbers = tables
-    .filter((table) => assigned.has(table.id))
-    .map((table) => table.tableNumber);
   const pending = await orderService.listPendingCaptainApprovals(
     captain.restaurantId,
-    tableNumbers,
+    [...assigned],
   );
 
   return (

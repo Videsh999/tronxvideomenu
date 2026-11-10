@@ -328,7 +328,7 @@ export default function CaptainTableWorkspace({
         </div>
         <div className="flex flex-wrap gap-2">
           <Link
-            href={`/captain/${slug}/take-order?table=${table.tableNumber}`}
+            href={`/captain/${slug}/take-order?table=${table.id}`}
             className="inline-flex min-h-11 items-center gap-2 rounded-full bg-neutral-900 px-4 text-sm font-bold text-white"
           >
             <UtensilsCrossed className="h-4 w-4" />
@@ -447,7 +447,7 @@ export default function CaptainTableWorkspace({
                 Take a verbal order — guest phone not required.
               </p>
               <Link
-                href={`/captain/${slug}/take-order?table=${table.tableNumber}`}
+                href={`/captain/${slug}/take-order?table=${table.id}`}
                 className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-full bg-neutral-900 px-4 text-sm font-bold text-white"
               >
                 <Plus className="h-4 w-4" /> Start ordering
@@ -518,7 +518,7 @@ export default function CaptainTableWorkspace({
                     );
                   })()}
                   <Link
-                    href={`/captain/${slug}/take-order?table=${table.tableNumber}`}
+                    href={`/captain/${slug}/take-order?table=${table.id}`}
                     className="inline-flex min-h-11 items-center gap-2 rounded-full border border-neutral-300 px-4 text-sm font-semibold"
                   >
                     <Plus className="h-4 w-4" /> Add items

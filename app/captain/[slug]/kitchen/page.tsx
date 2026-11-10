@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { requireCaptain } from "@/lib/auth-server";
 import { orderService } from "@/lib/services/order.service";
-import { tableService } from "@/lib/services/table.service";
 import CaptainKitchenBoard from "@/components/captain/CaptainKitchenBoard";
 
 export const dynamic = "force-dynamic";
@@ -13,14 +12,8 @@ export default async function CaptainKitchenPage({ params }: { params: Promise<{
   if (restaurant.slug !== slug) redirect(`/captain/${restaurant.slug}/kitchen`);
 
   const assigned = new Set(captain.assignedTableIds ?? []);
-  const [kitchen, tables] = await Promise.all([
-    orderService.listKitchen(captain.restaurantId),
-    tableService.list(captain.restaurantId),
-  ]);
-  const assignedNumbers = new Set(
-    tables.filter((table) => assigned.has(table.id)).map((table) => table.tableNumber),
-  );
-  const scoped = kitchen.filter((order) => assignedNumbers.has(order.tableNumber));
+  const kitchen = await orderService.listKitchen(captain.restaurantId);
+  const scoped = kitchen.filter((order) => assigned.has(order.tableId));
 
   return (
     <CaptainKitchenBoard

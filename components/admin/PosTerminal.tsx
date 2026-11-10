@@ -61,7 +61,8 @@ export default function PosTerminal({
   upiSettings,
 }: PosTerminalProps) {
   const [channel, setChannel] = useState<OrderChannel>("POS_DINE_IN");
-  const [tableNumber, setTableNumber] = useState<number | "">("");
+  const [tableId, setTableId] = useState("");
+  const selectedTable = tables.find((table) => table.id === tableId);
   const [categoryId, setCategoryId] = useState<string>("ALL");
   const [query, setQuery] = useState("");
   const [cart, setCart] = useState<CartLine[]>([]);
@@ -259,7 +260,7 @@ export default function PosTerminal({
   function canPlaceOrder() {
     if (!shift) return "Open a POS shift before taking orders.";
     if (cart.length === 0) return "Add at least one item.";
-    if (channel === "POS_DINE_IN" && (tableNumber === "" || Number(tableNumber) < 1)) {
+    if (channel === "POS_DINE_IN" && !selectedTable) {
       return "Select a table for dine-in orders.";
     }
     if (tables.length === 0 && channel === "POS_DINE_IN") {
@@ -297,7 +298,8 @@ export default function PosTerminal({
       })),
     };
     if (channel === "POS_DINE_IN") {
-      payload.tableNumber = Number(tableNumber);
+      payload.tableId = selectedTable!.id;
+      payload.tableNumber = selectedTable!.tableNumber;
     }
 
     const response = await fetch("/api/pos/orders", {
@@ -541,20 +543,18 @@ export default function PosTerminal({
           <div className="flex min-w-0 shrink-0 flex-wrap gap-2">
             {channel === "POS_DINE_IN" ? (
               <select
-                value={tableNumber}
-                onChange={(event) =>
-                  setTableNumber(event.target.value ? Number(event.target.value) : "")
-                }
-                aria-invalid={tableNumber === ""}
+                value={tableId}
+                onChange={(event) => setTableId(event.target.value)}
+                aria-invalid={!selectedTable}
                 className={`min-h-11 max-w-full rounded-lg border bg-white px-3 ${
-                  tableNumber === ""
+                  !selectedTable
                     ? "border-rose-400 ring-2 ring-rose-200"
                     : "border-neutral-200"
                 }`}
               >
                 <option value="">Select table (required)</option>
                 {tables.map((table) => (
-                  <option key={table.id} value={table.tableNumber}>
+                  <option key={table.id} value={table.id}>
                     {table.locationType === "ROOM" ? "Room" : "Table"} {table.tableNumber}
                     {table.label ? ` · ${table.label}` : ""}
                   </option>

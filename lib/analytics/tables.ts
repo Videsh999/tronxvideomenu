@@ -23,8 +23,9 @@ export function computeTablePerformance(
 ): TablePerformanceRow[] {
   const scoped = filterOrders(orders, from, to).filter(isActiveOrder);
   const byTable = new Map<
-    number,
+    string,
     {
+      tableNumber: number;
       tableId?: string;
       orderCount: number;
       grossSales: number;
@@ -37,7 +38,9 @@ export function computeTablePerformance(
 
   for (const order of scoped) {
     if (!order.tableNumber || order.tableNumber < 1) continue;
-    const entry = byTable.get(order.tableNumber) ?? {
+    const key = order.tableId || `legacy:${order.tableNumber}`;
+    const entry = byTable.get(key) ?? {
+      tableNumber: order.tableNumber,
       tableId: order.tableId,
       orderCount: 0,
       grossSales: 0,
@@ -70,11 +73,11 @@ export function computeTablePerformance(
       dish.qty += qty;
       entry.dishes.set(item.dishId, dish);
     }
-    byTable.set(order.tableNumber, entry);
+    byTable.set(key, entry);
   }
 
   const rows: TablePerformanceRow[] = [];
-  for (const [tableNumber, entry] of byTable) {
+  for (const entry of byTable.values()) {
     let topDishName: string | null = null;
     let topDishQuantity = 0;
     for (const dish of entry.dishes.values()) {
@@ -84,7 +87,7 @@ export function computeTablePerformance(
       }
     }
     rows.push({
-      tableNumber,
+      tableNumber: entry.tableNumber,
       tableId: entry.tableId,
       orderCount: entry.orderCount,
       grossSales: entry.grossSales,

@@ -43,7 +43,7 @@ type Props = {
   categories: Category[];
   dishes: Dish[];
   tables: RestaurantTable[];
-  initialTableNumber?: number | null;
+  initialTableId?: string | null;
   permissions?: CaptainPermissions | null;
 };
 
@@ -77,14 +77,12 @@ export default function CaptainOrderPad({
   categories,
   dishes,
   tables,
-  initialTableNumber = null,
+  initialTableId = null,
   permissions: rawPermissions,
 }: Props) {
   const permissions = resolveCaptainPermissions({ permissions: rawPermissions ?? undefined });
-  const [tableNumber, setTableNumber] = useState<number | "">(
-    initialTableNumber && tables.some((table) => table.tableNumber === initialTableNumber)
-      ? initialTableNumber
-      : "",
+  const [tableId, setTableId] = useState<string>(
+    initialTableId && tables.some((table) => table.id === initialTableId) ? initialTableId : "",
   );
   const [cartsByTable, setCartsByTable] = useState<Record<string, TableCartState>>({});
   const [categoryId, setCategoryId] = useState("ALL");
@@ -101,9 +99,9 @@ export default function CaptainOrderPad({
   const [cartOpen, setCartOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
 
-  const tableKey = tableNumber === "" ? "" : String(tableNumber);
+  const tableKey = tableId;
   const session = cartsByTable[tableKey] ?? emptyCartState();
-  const selectedLocation = tableNumber === "" ? null : tables.find((item) => item.tableNumber === tableNumber) ?? null;
+  const selectedLocation = tables.find((item) => item.id === tableId) ?? null;
   const selectedLocationName = selectedLocation ? locationName(selectedLocation) : "location not selected";
 
   function patchSession(patch: Partial<TableCartState>) {
@@ -225,7 +223,7 @@ export default function CaptainOrderPad({
   }
 
   function placeOrder(andPay: boolean) {
-    if (tableNumber === "" || Number(tableNumber) < 1) {
+    if (!selectedLocation) {
       setMessage("Select an assigned table or room first.");
       return;
     }
@@ -249,7 +247,8 @@ export default function CaptainOrderPad({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            tableNumber: Number(tableNumber),
+            tableId: selectedLocation.id,
+            tableNumber: selectedLocation.tableNumber,
             guestName: session.guestName.trim() || undefined,
             orderNote: session.orderNote.trim() || undefined,
             customerPhone: phone || undefined,
@@ -387,19 +386,19 @@ export default function CaptainOrderPad({
         <label className="text-sm font-medium text-neutral-700">
           Table
           <select
-            value={tableNumber}
+            value={tableId}
             onChange={(event) => {
-              setTableNumber(event.target.value ? Number(event.target.value) : "");
+              setTableId(event.target.value);
               setMessage(null);
               setLastOrderId(null);
             }}
             className={`mt-1 block min-h-12 w-full min-w-[11rem] rounded-xl border bg-white px-3 ${
-              tableNumber === "" ? "border-rose-400 ring-2 ring-rose-200" : "border-neutral-200"
+              !selectedLocation ? "border-rose-400 ring-2 ring-rose-200" : "border-neutral-200"
             }`}
           >
             <option value="">Select table</option>
             {tables.map((table) => (
-              <option key={table.id} value={table.tableNumber}>
+              <option key={table.id} value={table.id}>
                 {table.locationType === "ROOM" ? "Room" : "T"}{table.tableNumber}
                 {table.label ? ` · ${table.label}` : ""} · {table.status}
               </option>
@@ -426,8 +425,8 @@ export default function CaptainOrderPad({
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             <div className="inline-flex rounded-xl border border-neutral-200 bg-neutral-50 p-1">
               <span className="rounded-lg bg-neutral-900 px-3 py-2 text-xs font-bold text-white">Dine-in</span>
-              {tableNumber !== "" ? (
-                <span className="px-3 py-2 text-xs font-semibold text-neutral-700">{locationName(tables.find((item) => item.tableNumber === tableNumber)!)}</span>
+              {selectedLocation ? (
+                <span className="px-3 py-2 text-xs font-semibold text-neutral-700">{locationName(selectedLocation)}</span>
               ) : (
                 <span className="px-3 py-2 text-xs font-semibold text-rose-600">Pick a table</span>
               )}
@@ -518,7 +517,7 @@ export default function CaptainOrderPad({
             <div className="flex items-center justify-between gap-3">
             <h2 className="text-lg font-semibold">
               Current bill
-              {tableNumber !== "" ? (
+              {selectedLocation ? (
                 <span className="ml-2 text-sm font-normal text-white/60">· {selectedLocationName}</span>
               ) : null}
               <span className="ml-2 text-sm font-normal text-white/60">
@@ -725,7 +724,7 @@ export default function CaptainOrderPad({
             <div className="mt-2 space-y-1.5">
               <button
                 type="button"
-                disabled={pending || session.cart.length === 0 || tableNumber === ""}
+                disabled={pending || session.cart.length === 0 || !selectedLocation}
                 onClick={() => placeOrder(false)}
                 className="min-h-11 w-full rounded-xl bg-[#f59e0b] text-sm font-bold text-neutral-950 disabled:opacity-40"
               >
@@ -742,7 +741,7 @@ export default function CaptainOrderPad({
                   </button>
                   {checkoutOpen ? <><button
                     type="button"
-                    disabled={pending || tableNumber === ""}
+                    disabled={pending || !selectedLocation}
                     onClick={() => placeOrder(true)}
                     className="min-h-10 w-full rounded-xl bg-white text-sm font-bold text-neutral-900 disabled:opacity-40"
                   >

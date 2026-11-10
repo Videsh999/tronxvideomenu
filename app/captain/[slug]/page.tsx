@@ -35,10 +35,9 @@ export default async function CaptainDashboardPage({ params }: { params: Promise
   ]);
 
   const myTables = enrichCaptainTables(tables, orders, assignedIds);
-  const myTableNumbers = new Set(myTables.map((row) => row.table.tableNumber));
   const myOrders = orders.filter(
     (order) =>
-      myTableNumbers.has(order.tableNumber) &&
+      assignedIds.has(order.tableId) &&
       !["COMPLETED", "CANCELLED", "REJECTED"].includes(order.status),
   );
   const pendingApprovals = myOrders.filter((order) => isPendingCaptainApproval(order)).length;

@@ -8,6 +8,7 @@ import {
 import { buildWeekdayForecast, MIN_COMPLETE_DAYS } from "../lib/analytics/forecast";
 import { classifyMenuDishes } from "../lib/analytics/menu-intelligence";
 import { recommendIngredientReorder } from "../lib/analytics/inventory-intelligence";
+import { computeTablePerformance } from "../lib/analytics/tables";
 import {
   detectSalesDrop,
   detectHighCancelRate,
@@ -40,6 +41,16 @@ function order(partial: Partial<RestaurantOrder> & Pick<RestaurantOrder, "id" | 
     ...partial,
   } as RestaurantOrder;
 }
+
+test("table and room with the same number remain separate in performance reports", () => {
+  const createdAt = "2026-01-10T10:00:00.000Z";
+  const rows = computeTablePerformance([
+    order({ id: "table-order", tableId: "table-1", tableNumber: 1, total: 100, status: "COMPLETED", createdAt }),
+    order({ id: "room-order", tableId: "room-1", tableNumber: 1, locationType: "ROOM", total: 200, status: "COMPLETED", createdAt }),
+  ]);
+  assert.equal(rows.length, 2);
+  assert.deepEqual(new Set(rows.map((row) => row.tableId)), new Set(["table-1", "room-1"]));
+});
 
 test("sales summary excludes cancelled and computes net from ledger", () => {
   const orders = [

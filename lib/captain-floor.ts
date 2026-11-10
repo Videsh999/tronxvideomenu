@@ -26,16 +26,6 @@ export function canAddOrderToTable(status: TableStatus) {
   return status !== "CLOSED" && status !== "CLEANING";
 }
 
-export function activeOrderForTable(orders: OrderSummary[], tableNumber: number) {
-  return (
-    orders.find(
-      (order) =>
-        order.tableNumber === tableNumber &&
-        !["COMPLETED", "CANCELLED", "REJECTED", "SERVED"].includes(order.status),
-    ) ?? null
-  );
-}
-
 export function enrichCaptainTables(
   tables: RestaurantTable[],
   orders: OrderSummary[],
@@ -45,7 +35,7 @@ export function enrichCaptainTables(
     .filter((table) => assignedIds.has(table.id))
     .map((table) => {
       const activeOrders = orders.filter((order) => order.tableId === table.id && !["COMPLETED", "CANCELLED", "REJECTED", "REFUNDED"].includes(order.status));
-      const activeOrder = activeOrders[0] ?? activeOrderForTable(orders, table.tableNumber);
+      const activeOrder = activeOrders[0] ?? null;
       return {
         table,
         activeOrder,

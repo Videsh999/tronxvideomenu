@@ -2,7 +2,6 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireCaptain } from "@/lib/auth-server";
 import { orderService } from "@/lib/services/order.service";
-import { tableRepository } from "@/lib/repositories/table.repository";
 import { resolveCaptainPermissions } from "@/lib/captain-permissions";
 
 export const dynamic = "force-dynamic";
@@ -34,12 +33,8 @@ export default async function CaptainBillsPage({ params }: { params: Promise<{ s
   }
 
   const assigned = new Set(captain.assignedTableIds ?? []);
-  const tables = (await tableRepository.findByRestaurantId(captain.restaurantId)).filter((table) =>
-    assigned.has(table.id),
-  );
-  const tableNumbers = new Set(tables.map((table) => table.tableNumber));
   const orders = (await orderService.listForRestaurant(captain.restaurantId))
-    .filter((order) => tableNumbers.has(order.tableNumber))
+    .filter((order) => assigned.has(order.tableId))
     .filter((order) => !["CANCELLED", "REJECTED"].includes(order.status))
     .slice(0, 40);
 

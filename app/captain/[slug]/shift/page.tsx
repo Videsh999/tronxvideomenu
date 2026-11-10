@@ -25,10 +25,9 @@ export default async function CaptainShiftPage({ params }: { params: Promise<{ s
     tableService.list(captain.restaurantId),
   ]);
   const myTables = enrichCaptainTables(tables, orders, assigned);
-  const myNumbers = new Set(myTables.map((row) => row.table.tableNumber));
   const today = new Date().toISOString().slice(0, 10);
   const mineToday = orders.filter(
-    (order) => myNumbers.has(order.tableNumber) && order.createdAt.startsWith(today),
+    (order) => assigned.has(order.tableId) && order.createdAt.startsWith(today),
   );
   const paid = mineToday.filter((order) => order.payment?.status === "PAID");
   const sales = paid.reduce((sum, order) => sum + order.total, 0);

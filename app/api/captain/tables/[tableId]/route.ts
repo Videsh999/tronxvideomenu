@@ -92,7 +92,7 @@ export async function PATCH(
     return NextResponse.json({ success: false, error: "Table not found" }, { status: 404 });
   }
 
-  const active = await orderService.findActiveForTable(captain.restaurantId, table.tableNumber);
+  const active = await orderService.findActiveForTable(captain.restaurantId, table.id);
   let nextStatus: TableStatus | null = null;
 
   switch (parsed.data.action) {

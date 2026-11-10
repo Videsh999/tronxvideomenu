@@ -28,8 +28,7 @@ export default async function CaptainTakeOrderPage({
 
   const rawTable = (await searchParams).table;
   const tableValue = Array.isArray(rawTable) ? rawTable[0] : rawTable;
-  const initialTableNumber =
-    tableValue && /^\d{1,4}$/.test(tableValue) ? Number(tableValue) : null;
+  const initialTableId = tableValue && tables.some((table) => table.id === tableValue) ? tableValue : null;
 
   return (
     <CaptainOrderPad
@@ -45,7 +44,7 @@ export default async function CaptainTakeOrderPage({
       categories={menu.categories.filter((category) => category.isActive)}
       dishes={menu.dishes}
       tables={tables}
-      initialTableNumber={initialTableNumber}
+      initialTableId={initialTableId}
       permissions={captain.permissions}
     />
   );

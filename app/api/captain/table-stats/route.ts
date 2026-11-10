@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireCaptain } from "@/lib/auth-server";
 import { reportingService } from "@/lib/services/reporting.service";
-import { tableService } from "@/lib/services/table.service";
 
 /** Assigned-table order stats for captains — operational only, no guest PII. */
 export async function GET() {
@@ -9,14 +8,8 @@ export async function GET() {
   if (error) return error;
   try {
     const assigned = new Set(captain.assignedTableIds ?? []);
-    const [stats, tables] = await Promise.all([
-      reportingService.tablePerformance(captain.restaurantId),
-      tableService.list(captain.restaurantId),
-    ]);
-    const assignedNumbers = new Set(
-      tables.filter((table) => assigned.has(table.id)).map((table) => table.tableNumber),
-    );
-    const scoped = stats.tables.filter((row) => assignedNumbers.has(row.tableNumber));
+    const stats = await reportingService.tablePerformance(captain.restaurantId);
+    const scoped = stats.tables.filter((row) => row.tableId && assigned.has(row.tableId));
     return NextResponse.json({
       success: true,
       data: {

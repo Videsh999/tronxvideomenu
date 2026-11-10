@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { requireCaptain } from "@/lib/auth-server";
 import { orderService } from "@/lib/services/order.service";
-import { tableService } from "@/lib/services/table.service";
 import CaptainOrders from "@/components/captain/CaptainOrders";
 import { resolveStaticMerchantQrUrl } from "@/lib/upi-payment";
 
@@ -14,16 +13,10 @@ export default async function CaptainOrdersPage({ params }: { params: Promise<{ 
   if (restaurant.slug !== slug) redirect(`/captain/${restaurant.slug}`);
 
   const assigned = new Set(captain.assignedTableIds ?? []);
-  const [orders, tables] = await Promise.all([
-    orderService.listForRestaurant(captain.restaurantId),
-    tableService.list(captain.restaurantId),
-  ]);
-  const assignedNumbers = new Set(
-    tables.filter((table) => assigned.has(table.id)).map((table) => table.tableNumber),
-  );
+  const orders = await orderService.listForRestaurant(captain.restaurantId);
   const scoped = orders.filter(
     (order) =>
-      assignedNumbers.has(order.tableNumber) &&
+      assigned.has(order.tableId) &&
       !["COMPLETED", "CANCELLED", "REJECTED"].includes(order.status),
   );
 

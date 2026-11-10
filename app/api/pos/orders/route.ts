@@ -8,6 +8,7 @@ import { orderService, OrderServiceError } from "@/lib/services/order.service";
 import { restaurantService } from "@/lib/services/restaurant.service";
 import { requireRestaurantFeature } from "@/lib/feature-access";
 import { placePosOrderSchema } from "@/lib/validations";
+import { captainService } from "@/lib/services/captain.service";
 import type { PaymentAuditActor } from "@/types";
 
 export async function POST(request: Request) {
@@ -57,6 +58,15 @@ export async function POST(request: Request) {
         { success: false, error: message, details: parsed.error.issues },
         { status: 400 },
       );
+    }
+
+    if (captainResult?.captain && parsed.data.channel === "POS_DINE_IN") {
+      if (!parsed.data.tableId) return NextResponse.json({ success: false, error: "Select a specific assigned table or room." }, { status: 400 });
+      try {
+        await captainService.assertCaptainMayServeTable(captainResult.captain.id, restaurantId, parsed.data.tableId);
+      } catch {
+        return NextResponse.json({ success: false, error: "This location is not assigned to you." }, { status: 403 });
+      }
     }
 
     const order = await orderService.createPosOrder(

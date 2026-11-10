@@ -69,19 +69,20 @@ export class OrderRepository implements IOrderRepository {
     return orders.map((order) => this.mapOrder(order));
   }
 
-  async findPending(restaurantId: string, tableNumbers?: number[]) {
+  async findPending(restaurantId: string, tableIds?: string[]) {
     await connectToDatabase();
+    if (tableIds && tableIds.length === 0) return [];
     const filter: Record<string, unknown> = { restaurantId, status: "PENDING" };
-    if (tableNumbers && tableNumbers.length > 0) filter.tableNumber = { $in: tableNumbers };
+    if (tableIds) filter.tableId = { $in: tableIds };
     const orders = await OrderModel.find(filter).sort({ createdAt: -1 }).limit(200).lean();
     return orders.map((order) => this.mapOrder(order));
   }
 
-  async findActiveForTable(restaurantId: string, tableNumber: number) {
+  async findActiveForTable(restaurantId: string, tableId: string) {
     await connectToDatabase();
     const order = await OrderModel.findOne({
       restaurantId,
-      tableNumber,
+      tableId,
       status: { $in: ["PENDING", "ACCEPTED", "PREPARING", "READY"] },
     })
       .sort({ createdAt: -1 })

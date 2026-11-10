@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import CaptainNavigation from "@/components/captain/CaptainNavigation";
 import { requireCaptain } from "@/lib/auth-server";
 import { orderService } from "@/lib/services/order.service";
-import { tableService } from "@/lib/services/table.service";
 
 export const dynamic = "force-dynamic";
 
@@ -22,15 +21,9 @@ export default async function CaptainLayout({
   let pendingApprovals = 0;
   if (assigned.size > 0) {
     try {
-      const tables = await tableService.list(captain.restaurantId);
-      const tableNumbers = tables
-        .filter((table) => assigned.has(table.id))
-        .map((table) => table.tableNumber);
-      if (tableNumbers.length > 0) {
-        pendingApprovals = (
-          await orderService.listPendingCaptainApprovals(captain.restaurantId, tableNumbers)
-        ).length;
-      }
+      pendingApprovals = (
+        await orderService.listPendingCaptainApprovals(captain.restaurantId, [...assigned])
+      ).length;
     } catch {
       pendingApprovals = 0;
     }

@@ -56,9 +56,8 @@ export default function CaptainApprovals({
   }, [refresh]);
 
   const filtered = useMemo(() => {
-    const table = filterTable.trim();
-    if (!table) return orders;
-    return orders.filter((order) => String(order.tableNumber) === table);
+    if (!filterTable) return orders;
+    return orders.filter((order) => order.tableId === filterTable);
   }, [orders, filterTable]);
 
   async function decide(
@@ -110,13 +109,15 @@ export default function CaptainApprovals({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <label className="text-sm">
-            Table
-            <input
+            Location
+            <select
               value={filterTable}
               onChange={(event) => setFilterTable(event.target.value)}
-              placeholder="All"
-              className="ml-2 min-h-10 w-24 rounded-xl border border-neutral-200 px-2"
-            />
+              className="ml-2 min-h-10 rounded-xl border border-neutral-200 bg-white px-2"
+            >
+              <option value="">All locations</option>
+              {[...new Map(orders.map((order) => [order.tableId, order])).values()].map((order) => <option key={order.tableId} value={order.tableId}>{orderLocationName(order)}</option>)}
+            </select>
           </label>
           <button
             type="button"

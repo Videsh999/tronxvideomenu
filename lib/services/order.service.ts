@@ -135,8 +135,8 @@ export class OrderService {
       .map(staffOrderView);
   }
 
-  async listPendingCaptainApprovals(restaurantId: string, tableNumbers?: number[]) {
-    const orders = await orderRepository.findPending(restaurantId, tableNumbers);
+  async listPendingCaptainApprovals(restaurantId: string, tableIds?: string[]) {
+    const orders = await orderRepository.findPending(restaurantId, tableIds);
     return orders
       .filter((order) => resolveAuthorization(order).status === "PENDING_CAPTAIN_APPROVAL")
       .map(staffOrderView);
@@ -367,7 +367,12 @@ export class OrderService {
     let serviceTable: Awaited<ReturnType<typeof tableRepository.findByRestaurantAndNumber>> = null;
     const isCaptainActor = actor.role === "CAPTAIN";
     if (input.channel === "POS_DINE_IN") {
-      const table = await tableRepository.findByRestaurantAndNumber(restaurantId, input.tableNumber!);
+      const legacyMatches = input.tableId ? [] : (await tableRepository.findByRestaurantId(restaurantId)).filter((candidate) => candidate.tableNumber === input.tableNumber);
+      if (legacyMatches.length > 1) throw new OrderServiceError("This table number is shared by a table and room. Select a specific location.", 409);
+      const table = input.tableId
+        ? await tableRepository.findByRestaurantAndId(restaurantId, input.tableId)
+        : legacyMatches[0] ?? null;
+      if (table && input.tableNumber !== table.tableNumber) throw new OrderServiceError("Selected location changed. Refresh and try again.", 409);
       if (!table || !table.isActive || table.status === "CLOSED" || table.status === "CLEANING") {
         throw new OrderServiceError("Selected table is unavailable.");
       }
@@ -376,7 +381,7 @@ export class OrderService {
       locationType = table.locationType ?? "TABLE";
       serviceTable = table;
       if (isCaptainActor) {
-        const active = await orderRepository.findActiveForTable(restaurantId, table.tableNumber);
+        const active = await orderRepository.findActiveForTable(restaurantId, table.id);
         if (active && active.tableId === table.id && !["COMPLETED", "CANCELLED", "REJECTED", "REFUNDED"].includes(active.status)) {
           return this.appendItemsToOrder(restaurantId, restaurantSlug, active.id, {
             items: input.items,
@@ -966,8 +971,8 @@ export class OrderService {
     return staffOrderView(updated);
   }
 
-  async findActiveForTable(restaurantId: string, tableNumber: number) {
-    const match = await orderRepository.findActiveForTable(restaurantId, tableNumber);
+  async findActiveForTable(restaurantId: string, tableId: string) {
+    const match = await orderRepository.findActiveForTable(restaurantId, tableId);
     return match ? staffOrderView(match) : null;
   }
 

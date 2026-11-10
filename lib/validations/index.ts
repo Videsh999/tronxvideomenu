@@ -492,6 +492,7 @@ export const posOrderItemSchema = z.object({
 export const placePosOrderSchema = z
   .object({
     channel: z.enum(["POS_DINE_IN", "POS_TAKEAWAY", "POS_DELIVERY"]),
+    tableId: z.string().min(1).optional(),
     tableNumber: z.number().int().min(0).max(9999).optional(),
     guestCount: z.number().int().min(1).max(100).optional(),
     orderNote: z.string().trim().max(1000).optional(),
@@ -519,6 +520,7 @@ export type PlacePosOrderInput = z.infer<typeof placePosOrderSchema>;
 /** Captain floor order — same item shape as POS; dine-in table required; phone optional. */
 export const placeCaptainOrderSchema = z
   .object({
+    tableId: z.string().min(1),
     tableNumber: z.number().int().min(1).max(9999),
     guestCount: z.number().int().min(1).max(100).optional(),
     guestName: z.string().trim().max(80).optional(),

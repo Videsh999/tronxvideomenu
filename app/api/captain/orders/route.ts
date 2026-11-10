@@ -17,14 +17,8 @@ export async function GET() {
   if (error) return error;
   try {
     const assigned = new Set(captain.assignedTableIds ?? []);
-    const [orders, tables] = await Promise.all([
-      orderService.listForRestaurant(captain.restaurantId),
-      tableRepository.findByRestaurantId(captain.restaurantId),
-    ]);
-    const assignedNumbers = new Set(
-      tables.filter((table) => assigned.has(table.id)).map((table) => table.tableNumber),
-    );
-    const scoped = orders.filter((order) => assignedNumbers.has(order.tableNumber));
+    const orders = await orderService.listForRestaurant(captain.restaurantId);
+    const scoped = orders.filter((order) => assigned.has(order.tableId));
     return NextResponse.json({ success: true, data: scoped });
   } catch {
     return NextResponse.json({ success: false, error: "Unable to load orders" }, { status: 500 });
@@ -116,10 +110,8 @@ export async function POST(request: Request) {
       );
     }
 
-    const table = await tableRepository.findByRestaurantAndNumber(
-      captain.restaurantId,
-      parsed.data.tableNumber,
-    );
+    const table = await tableRepository.findByRestaurantAndId(captain.restaurantId, parsed.data.tableId);
+    if (table && table.tableNumber !== parsed.data.tableNumber) return NextResponse.json({ success: false, error: "Selected location changed. Refresh and try again." }, { status: 409 });
     if (!table || !table.isActive || table.status === "CLOSED") {
       return NextResponse.json({ success: false, error: "Selected table is unavailable." }, { status: 400 });
     }
@@ -150,6 +142,7 @@ export async function POST(request: Request) {
         restaurant.slug,
         {
           channel: "POS_DINE_IN",
+          tableId: table.id,
           tableNumber: parsed.data.tableNumber,
           guestCount: parsed.data.guestCount,
           orderNote: noteParts.length ? noteParts.join(" · ") : undefined,
