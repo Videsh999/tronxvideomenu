@@ -20,7 +20,11 @@ Legacy mixed-rate orders have no `gstRateSnapshot` on some lines. Recompute uses
 
 Legacy orders also have no `billingSettingsSnapshot`. Packaging and service charge are frozen as a fixed per-order amount equal to the amounts already stored on `billSnapshot`, with that snapshot's price mode and supply type. A later change to the outlet's packaging percent does not change an open legacy check.
 
+Approved product decision: a legacy order whose service charge was a percentage is frozen as the fixed amount already charged. Historical bills must not change when the outlet later edits its service-charge percent.
+
 `cancelledQuantity` was stripped by Mongoose strict mode before this wave. A line can have a lower `itemTotal` while `cancelledQuantity` is missing. Do not guess the quantity from the price. Compare `orderLineCancellations` for that order and line, sum `quantityCancelled` where `orderLineId` is the line, and set `cancelledQuantity` to that sum when the field is missing. Lines with no cancellation rows stay at 0.
+
+`scripts/reconcile-cancelled-quantity.ts` prints that plan and does not write. `--apply` writes on a loopback database. A production or other non-loopback database is not written unless `--allow-production` is passed as well. Deploy does not run this script.
 
 ## Captain table session
 
@@ -55,7 +59,9 @@ If either unique index is missing, stop and create it before serving writes. Do 
 
 ## Cancellation atomicity
 
-The marker is inserted or updated to `APPLIED` in the same MongoDB transaction as the order totals, line rows, and `CANCELLED` status. A crash after the totals statement and before commit aborts the transaction, so the totals are not visible. Inventory restore runs after that commit and is idempotent by movement key.
+The marker is inserted or updated to `APPLIED` in the same MongoDB transaction as the order totals, line rows, and `CANCELLED` status. A crash after the totals statement and before commit aborts the transaction, so the totals are not visible.
+
+Inventory restore runs after that commit. The marker is `PENDING` until the restore finishes, then `APPLIED` or `FAILED`. A full cancel also runs the whole-order restore. `POST /api/orders/:orderId/restore-inventory` retries `PENDING` and `FAILED` markers, and reading the cancellation list retries them too. Movement keys keep a retry from restoring the same stock twice. Old rows may still say `NONE`, `RESTORED`, or `BLOCKED`.
 
 ## What was not migrated
 
