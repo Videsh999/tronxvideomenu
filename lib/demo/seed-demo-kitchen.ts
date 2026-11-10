@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { readXlsxSheets } from "@/lib/spreadsheet";
 import { connectToDatabase } from "@/lib/db/mongodb";
 import { CategoryModel, DishModel, RestaurantModel, TableModel } from "@/lib/db/models";
+import { captainService } from "@/lib/services/captain.service";
 import { restaurantAdminService } from "@/lib/services/restaurant-admin.service";
 import { isLoopbackMongoUri } from "@/lib/security/mongo-target";
 
@@ -158,6 +159,7 @@ export async function seedTronxDemoKitchen() {
       restaurantId: RESTAURANT_ID,
       tableNumber: n,
       label: `Demo ${n}`,
+      area: n <= 4 ? "Indoor" : "Terrace",
       capacity: n <= 4 ? 2 : 4,
       isActive: true,
       status: "OPEN",
@@ -165,6 +167,29 @@ export async function seedTronxDemoKitchen() {
       createdAt: now,
     });
   }
+
+  const existingCaptains = await captainService.list(RESTAURANT_ID);
+  let demoCaptain = existingCaptains.find((captain) => captain.email === "captain@tronx.local");
+  if (!demoCaptain) {
+    demoCaptain = await captainService.create(RESTAURANT_ID, {
+      name: "Demo Captain",
+      email: "captain@tronx.local",
+      password: adminPassword,
+      employeeCode: "CAP-1",
+    });
+  }
+  await captainService.updateProfile(RESTAURANT_ID, demoCaptain.id, {
+    permissions: {
+      viewBill: true,
+      requestBill: true,
+      printReceipt: true,
+      recordCashPayment: false,
+      recordUpiPayment: false,
+      recordCardPayment: false,
+      applyCoupon: false,
+      applyDiscount: false,
+    },
+  });
 
   await restaurantAdminService.setCredentials(RESTAURANT_ID, {
     email: ADMIN_EMAIL,

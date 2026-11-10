@@ -36,6 +36,63 @@ export function activeOrderForTable(orders: OrderSummary[], tableNumber: number)
   );
 }
 
+/** Next kitchen ticket number. Lines with no number count as ticket 1. */
+export function nextKotNumber(items: { kotNumber?: number }[]) {
+  if (items.length === 0) return 1;
+  return items.reduce((max, item) => Math.max(max, item.kotNumber ?? 1), 1) + 1;
+}
+
+/** Live occupied time: minutes under an hour, otherwise h:mm. */
+export function formatOccupiedDuration(openedAt: string | undefined, now: number) {
+  if (!openedAt) return "—";
+  const start = new Date(openedAt).getTime();
+  if (!Number.isFinite(start)) return "—";
+  const minutes = Math.max(0, Math.floor((now - start) / 60000));
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return `${hours}:${String(rest).padStart(2, "0")}`;
+}
+
+/** Whole rupees for the floor cards. The amount is the server total. */
+export function formatRupeeTotal(amount: number) {
+  const rounded = Math.round(Number.isFinite(amount) ? amount : 0);
+  return `₹${new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(rounded)}`;
+}
+
+export function groupTablesBySection<T extends { area?: string; section?: string; tableNumber: number }>(
+  tables: T[],
+) {
+  const groups = new Map<string, T[]>();
+  for (const table of tables) {
+    const key = table.area?.trim() || table.section?.trim() || "Floor";
+    const list = groups.get(key) ?? [];
+    list.push(table);
+    groups.set(key, list);
+  }
+  return [...groups.entries()].map(([name, rows]) => ({
+    name,
+    tables: [...rows].sort((a, b) => a.tableNumber - b.tableNumber),
+  }));
+}
+
+/** Subtotal, tax, and total already stored by calculateRestaurantBill. */
+export function runningBillFromServer(order: {
+  subtotal: number;
+  taxAmount?: number;
+  cgstAmount?: number;
+  sgstAmount?: number;
+  igstAmount?: number;
+  total: number;
+}) {
+  const split = (order.cgstAmount ?? 0) + (order.sgstAmount ?? 0) + (order.igstAmount ?? 0);
+  return {
+    subtotal: order.subtotal,
+    tax: order.taxAmount ?? split,
+    total: order.total,
+  };
+}
+
 export function enrichCaptainTables(
   tables: RestaurantTable[],
   orders: OrderSummary[],

@@ -22,6 +22,7 @@ import {
   snapshotGstRate,
 } from "@/lib/billing/order-bill";
 import { resolveOrderedUnitPrice, VariantPriceError } from "@/lib/billing/price-line";
+import { nextKotNumber } from "@/lib/captain-floor";
 import type { OrderLineCancellation } from "@/types";
 import { canTransition } from "@/lib/order-transitions";
 import {
@@ -288,6 +289,7 @@ export class OrderService {
         addons,
         kitchenStation: resolveStation(dish.kitchenStation, categoryStation.get(dish.categoryId)),
         preparationStatus: "QUEUED" as const,
+        kotNumber: 1,
         itemTotal,
       };
     });
@@ -449,6 +451,7 @@ export class OrderService {
         note: requested.note,
         kitchenStation: resolveStation(dish.kitchenStation, categoryStation.get(dish.categoryId)),
         preparationStatus: "QUEUED" as const,
+        kotNumber: 1,
         itemTotal,
       };
     });
@@ -756,8 +759,10 @@ export class OrderService {
         throw new OrderServiceError("Cannot add items after full payment.", 409);
       }
 
-      // Existing lines keep unit price and gstRateSnapshot. Only the new lines are priced from the catalog.
-      const merged = [...current.items, ...snapshottedNew];
+      // Existing lines keep unit price, tax, and KOT number. New lines are the next ticket.
+      const kotNumber = nextKotNumber(current.items);
+      const stampedNew = snapshottedNew.map((item) => ({ ...item, kotNumber }));
+      const merged = [...current.items, ...stampedNew];
       const bill = billFromStoredLines({
         items: merged,
         billDiscountAmount: current.billDiscountAmount ?? 0,

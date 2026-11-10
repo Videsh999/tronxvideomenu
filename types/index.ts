@@ -424,8 +424,16 @@ export type RestaurantTable = {
   restaurantId: string;
   tableNumber: number;
   label?: string;
+  /** Floor area, when the outlet uses one. Optional on older documents. */
+  area?: string;
+  /** Alternate section label. Optional. */
+  section?: string;
   capacity?: number;
   reservationRevision?: number;
+  /** Guests seated on the current session. Cleared when the table is freed. */
+  guestCount?: number;
+  /** ISO time the current session started. Cleared when the table is freed. */
+  occupiedSince?: string;
   isActive: boolean;
   status: TableStatus;
   createdAt: string;
@@ -501,6 +509,8 @@ export type OrderItemSnapshot = {
   addons: OrderAddonSnapshot[];
   itemDiscountAmount?: number;
   note?: string;
+  /** Kitchen ticket this line was sent on. Existing lines keep their number. */
+  kotNumber?: number;
   kitchenStation?: KitchenStation;
   preparationStatus?: "QUEUED" | "PREPARING" | "READY";
   /** Cumulative quantity cancelled on this line (partial cancel). */

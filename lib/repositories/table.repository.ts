@@ -55,6 +55,7 @@ export class TableRepository implements ITableRepository {
 
   async markOccupiedForAcceptedOrder(restaurantId: string, id: string) {
     await connectToDatabase();
+    const now = new Date().toISOString();
     const result = await TableModel.updateOne(
       {
         restaurantId,
@@ -62,7 +63,15 @@ export class TableRepository implements ITableRepository {
         isActive: true,
         status: { $in: ["OPEN", "OCCUPIED", "BILL_REQUESTED", "PAYMENT_PENDING"] },
       },
-      { $set: { status: "OCCUPIED", updatedAt: new Date().toISOString() } },
+      [
+        {
+          $set: {
+            status: "OCCUPIED",
+            updatedAt: now,
+            occupiedSince: { $ifNull: ["$occupiedSince", now] },
+          },
+        },
+      ],
     );
     return result.matchedCount === 1;
   }
@@ -71,11 +80,20 @@ export class TableRepository implements ITableRepository {
     restaurantId: string,
     id: string,
     status: RestaurantTable["status"],
+    session?: { guestCount?: number; occupiedSince?: string },
   ) {
     await connectToDatabase();
+    const now = new Date().toISOString();
+    const set: Record<string, unknown> = { status, updatedAt: now };
+    if (session?.guestCount !== undefined) set.guestCount = session.guestCount;
+    if (session?.occupiedSince) set.occupiedSince = session.occupiedSince;
+    const update =
+      status === "OPEN"
+        ? { $set: set, $unset: { guestCount: "", occupiedSince: "" } }
+        : { $set: set };
     const table = await TableModel.findOneAndUpdate(
       { restaurantId, id, isActive: true },
-      { $set: { status, updatedAt: new Date().toISOString() } },
+      update,
       { new: true, runValidators: true },
     ).lean();
     return table ? tableToDomain(table) : null;

@@ -6,7 +6,6 @@ import {
   BellRing,
   ClipboardList,
   Flame,
-  LayoutDashboard,
   LogOut,
   ShieldCheck,
   Table2,
@@ -29,8 +28,7 @@ export default function CaptainNavigation({
   const pathname = usePathname();
   const root = `/captain/${slug}`;
   const links = [
-    { href: root, label: "Dashboard", icon: LayoutDashboard, exact: true },
-    { href: `${root}/tables`, label: "My Tables", icon: Table2, exact: false },
+    { href: root, label: "Tables", icon: Table2, exact: true },
     { href: `${root}/take-order`, label: "POS", icon: UtensilsCrossed, exact: false },
     {
       href: `${root}/approvals`,
@@ -126,7 +124,7 @@ export default function CaptainNavigation({
         aria-label="Captain navigation"
         className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-neutral-200 bg-white/95 px-1 pt-1.5 backdrop-blur-xl lg:hidden"
       >
-        <ul className="mx-auto grid max-w-3xl grid-cols-8 gap-0.5">
+        <ul className="mx-auto grid max-w-3xl grid-cols-7 gap-0.5">
           {links.map((link) => {
             const active = isActive(link.href, link.exact);
             const badge = "badge" in link ? link.badge : 0;

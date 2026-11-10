@@ -22,6 +22,10 @@ Legacy orders also have no `billingSettingsSnapshot`. Packaging and service char
 
 `cancelledQuantity` was stripped by Mongoose strict mode before this wave. A line can have a lower `itemTotal` while `cancelledQuantity` is missing. Do not guess the quantity from the price. Compare `orderLineCancellations` for that order and line, sum `quantityCancelled` where `orderLineId` is the line, and set `cancelledQuantity` to that sum when the field is missing. Lines with no cancellation rows stay at 0.
 
+## Captain table session
+
+`tables.guestCount`, `tables.occupiedSince`, `tables.area`, and `tables.section` are optional. `order.items.kotNumber` is optional. No collection is renamed, no document is rewritten, and no index is added. Opening a table writes the guest count and the time. Freeing a table removes those two fields. Older documents without them still load.
+
 ## Index check
 
 This wave does not create or drop indexes. Before deploy, confirm the existing unique indexes are present:

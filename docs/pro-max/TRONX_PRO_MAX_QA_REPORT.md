@@ -45,6 +45,20 @@ Re-run after the review changes, still on Node v22.23.4:
 
 `next` and `eslint-config-next` are 16.4.5. `source-map-js` is overridden to 1.2.2. `zod` is 4.6.7.
 
+## Captain tables
+
+Commands after the floor screen, on Node v22.23.4. No production database. The demo screenshots used a local in-memory replica set and the synthetic TRONX Demo Kitchen seed.
+
+| Command | Exit | Result |
+| --- | --- | --- |
+| `npm test` | 0 | **PASS**. `# tests 231`, `# pass 231`, `# fail 0`, `# skipped 0`. |
+| `npm run lint` | 0 | **PASS** for errors. `0 errors, 28 warnings`. |
+| `npx tsc --noEmit` | 0 | **PASS**. |
+| `npm run test:integration` | 0 | **PASS**. `# tests 16`, `# pass 16`, `# fail 0`, `# skipped 0`. |
+| `npm run build` | 0 | **PASS**. Next.js 16.4.5 compiled and finished TypeScript. 53 pages. |
+
+Signed-in browser check of the new captain home, order pad, and KOT sheet: **PASS** against the demo seed only. Hardware printing was not attempted.
+
 ## Known remaining issues
 
 - ExcelJS 4.4.0 still depends on `uuid` below 11.1.1. That advisory is accepted in `TRONX_PRO_MAX_ADVISORY_ALLOWLIST.md` because this app does not call `uuid` v3, v5, or v6 with a caller buffer. The audit's fix downgrades ExcelJS.
@@ -52,4 +66,4 @@ Re-run after the review changes, still on Node v22.23.4:
 - One restaurant admin per outlet, cashier logins, and kitchen logins are not in this wave.
 - Guest Wi-Fi reveal, login rate-limit fail-open, and order-number allocation outside the insert are unchanged.
 - `.xls` (BIFF) uploads are refused with an explicit error. `.xlsx` and `.csv` still import and export.
-- Browser end-to-end against a running outlet was not run.
+- Browser end-to-end of the admin POS was not run. The captain table, order, and KOT screens were checked on the demo seed.

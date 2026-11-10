@@ -279,7 +279,11 @@ const tableSchema = new Schema<RestaurantTable>(
     restaurantId: { type: String, required: true },
     tableNumber: { type: Number, required: true, min: 1 },
     label: String,
+    area: String,
+    section: String,
     capacity: { type: Number, min: 1 },
+    guestCount: { type: Number, min: 1, max: 100 },
+    occupiedSince: String,
     reservationRevision: { type: Number, min: 0, default: 0 },
     isActive: { type: Boolean, required: true, default: true },
     status: {
@@ -318,6 +322,7 @@ const orderItemSnapshotSchema = new Schema(
     addons: { type: [orderAddonSnapshotSchema], default: [] },
     itemDiscountAmount: { type: Number, min: 0 },
     note: { type: String, maxlength: 500 },
+    kotNumber: { type: Number, min: 1 },
     kitchenStation: {
       type: String,
       enum: ["MAIN", "BAR", "BAKERY", "DESSERT", "OTHER"],
