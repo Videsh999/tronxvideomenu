@@ -47,15 +47,17 @@ export async function GET(
   }
 
   let overview = await tableSessionService.overview(captain.restaurantId, table.id);
-  const legacyActiveOrder = await orderService.findActiveForTable(captain.restaurantId, table.id);
-  if (!overview.session && legacyActiveOrder) {
+  const tableOrders = (await orderService.listForRestaurant(captain.restaurantId)).filter((order) => order.tableId === table.id);
+  if (!overview.session && tableOrders.some((order) => !["COMPLETED", "CANCELLED", "REJECTED", "REFUNDED"].includes(order.status))) {
     await tableSessionService.ensureActive({ restaurant, table, openedBy: { role: "CAPTAIN", id: captain.id, name: captain.name, email: captain.email } });
     overview = await tableSessionService.overview(captain.restaurantId, table.id);
   }
+  const ordersById = new Map([...overview.orders, ...tableOrders].map((order) => [order.id, order]));
+  const orders = [...ordersById.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   const [requests] = await Promise.all([
     serviceRequestService.listForTable(captain.restaurantId, tableId),
   ]);
-  const activeOrder = [...overview.orders].reverse().find((order) => !["COMPLETED", "CANCELLED", "REJECTED", "REFUNDED"].includes(order.status)) ?? null;
+  const activeOrder = [...orders].reverse().find((order) => !["COMPLETED", "CANCELLED", "REJECTED", "REFUNDED"].includes(order.status)) ?? null;
 
   return NextResponse.json({
     success: true,
@@ -63,7 +65,7 @@ export async function GET(
       table,
       activeOrder,
       session: overview.session,
-      orders: overview.orders,
+      orders,
       bill: overview.bill,
       requests,
     },
