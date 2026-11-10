@@ -23,7 +23,7 @@ export function isTableSeatAvailable(status: TableStatus) {
 }
 
 export function canAddOrderToTable(status: TableStatus) {
-  return status !== "CLOSED" && status !== "CLEANING";
+  return status !== "CLOSED";
 }
 
 export function enrichCaptainTables(
@@ -35,7 +35,7 @@ export function enrichCaptainTables(
     .filter((table) => assignedIds.has(table.id))
     .map((table) => {
       const activeOrders = orders.filter((order) => order.tableId === table.id && !["COMPLETED", "CANCELLED", "REJECTED", "REFUNDED"].includes(order.status));
-      const activeOrder = activeOrders[0] ?? null;
+      const activeOrder = activeOrders.reduce<OrderSummary | null>((earliest, order) => !earliest || order.createdAt < earliest.createdAt ? order : earliest, null);
       return {
         table,
         activeOrder,

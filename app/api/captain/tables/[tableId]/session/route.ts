@@ -69,7 +69,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tab
     } else {
       if (parsed.data.action === "CLOSE_SESSION") {
         data = await tableSessionService.close(auth.captain.restaurantId, parsed.data.sessionId, actor);
-        await tableRepository.setFloorStatus(auth.captain.restaurantId, tableId, "CLEANING");
+        await tableRepository.setFloorStatus(auth.captain.restaurantId, tableId, "OPEN");
       } else if (parsed.data.action === "MOVE_TABLE") {
         await captainService.assertCaptainMayServeTable(auth.captain.id, auth.captain.restaurantId, parsed.data.destinationTableId);
         const destination = await tableRepository.findByRestaurantAndId(auth.captain.restaurantId, parsed.data.destinationTableId);

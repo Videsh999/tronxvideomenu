@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { createPortal } from "react-dom";
 import Image from "next/image";
 import type { RestaurantTable } from "@/types";
-import type { OrderSummary, TableStatus } from "@/types";
+import type { OrderSummary } from "@/types";
 import { api } from "@/lib/api";
 import { Copy, Download, ExternalLink, Pencil, Plus, Printer, QrCode, Trash2, Users } from "lucide-react";
 import QRCode from "qrcode";
@@ -20,15 +21,6 @@ type TablesManagerProps = {
   tableOrderingEnabled?: boolean;
 };
 
-const statusLabel: Record<TableStatus, string> = { OPEN: "Open", OCCUPIED: "Occupied", BILL_REQUESTED: "Bill requested", PAYMENT_PENDING: "Payment pending", CLEANING: "Cleaning", CLOSED: "Closed" };
-const statusStyle: Record<TableStatus, string> = {
-  OPEN: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-  OCCUPIED: "bg-amber-50 text-amber-700 ring-amber-200",
-  BILL_REQUESTED: "bg-violet-50 text-violet-700 ring-violet-200",
-  PAYMENT_PENDING: "bg-blue-50 text-blue-700 ring-blue-200",
-  CLEANING: "bg-neutral-100 text-neutral-700 ring-neutral-300",
-  CLOSED: "bg-neutral-100 text-neutral-600 ring-neutral-200",
-};
 const inputClass = "mt-1.5 h-11 w-full rounded-xl border border-neutral-300 bg-white px-3 text-sm text-neutral-900";
 const qrOptions = { width: 560, margin: 1, color: { dark: "#000000", light: "#ffffff" } };
 
@@ -96,9 +88,6 @@ export default function TablesManager({ initialTables, initialOrders = [], resta
 
   const visibleLocations = useMemo(() => tables.filter((table) => locationType(table) === activeKind), [activeKind, tables]);
   const counts = useMemo(() => ({
-    OPEN: visibleLocations.filter((table) => table.status === "OPEN").length,
-    OCCUPIED: visibleLocations.filter((table) => table.status === "OCCUPIED").length,
-    CLOSED: visibleLocations.filter((table) => table.status === "CLOSED").length,
     seats: visibleLocations.reduce((sum, table) => sum + (table.capacity ?? 0), 0),
   }), [visibleLocations]);
 
@@ -166,15 +155,6 @@ export default function TablesManager({ initialTables, initialOrders = [], resta
     } catch (error) { setMessage({ tone: "error", text: error instanceof Error ? error.message : "Unable to update table." }); }
   };
 
-  const setStatus = async (table: RestaurantTable, status: TableStatus) => {
-    if (table.status === status) return;
-    try {
-      const updated = await api.updateTable(table.id, { status });
-      setTables((current) => current.map((entry) => entry.id === table.id ? updated : entry));
-      setMessage({ tone: "ok", text: `Table ${table.tableNumber} is now ${statusLabel[status].toLowerCase()}.` });
-    } catch (error) { setMessage({ tone: "error", text: error instanceof Error ? error.message : "Unable to update table status." }); }
-  };
-
   const remove = async (table: RestaurantTable) => {
     if (!window.confirm(`Delete Table ${table.tableNumber}? Tables referenced by orders or reservations must be deactivated instead.`)) return;
     try {
@@ -223,7 +203,7 @@ export default function TablesManager({ initialTables, initialOrders = [], resta
 
     {tables.length > 0 ? (
       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {[{ label: activeKind === "ROOM" ? "Rooms" : "Tables", value: visibleLocations.length }, { label: "Open", value: counts.OPEN }, { label: "Occupied", value: counts.OCCUPIED }, { label: activeKind === "ROOM" ? "Guest capacity" : "Total seats", value: counts.seats }].map((item) => (
+        {[{ label: activeKind === "ROOM" ? "Rooms" : "Tables", value: visibleLocations.length }, { label: activeKind === "ROOM" ? "Guest capacity" : "Total seats", value: counts.seats }].map((item) => (
           <div key={item.label} className="rounded-2xl border border-neutral-200 bg-white p-4"><dt className="text-xs text-neutral-500">{item.label}</dt><dd className="mt-1 text-2xl font-bold tabular-nums">{item.value}</dd></div>
         ))}
       </dl>
@@ -265,7 +245,7 @@ export default function TablesManager({ initialTables, initialOrders = [], resta
     ) : (
       <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {visibleLocations.map((table) => {
-          const liveOrders = orders.filter((order) => order.tableNumber === table.tableNumber && order.status !== "SERVED" && order.status !== "CANCELLED");
+          const liveOrders = orders.filter((order) => order.tableId === table.id && !["COMPLETED", "CANCELLED", "REJECTED", "REFUNDED"].includes(order.status));
           const liveTotal = liveOrders.reduce((sum, order) => sum + order.total, 0);
           return <li key={table.id} className={`flex flex-col rounded-2xl border bg-white p-4 ${table.isActive ? "border-neutral-200" : "border-dashed border-neutral-300 opacity-75"}`}>
             <div className="flex items-start justify-between gap-3">
@@ -273,10 +253,7 @@ export default function TablesManager({ initialTables, initialOrders = [], resta
                 <p className="text-xs font-medium text-neutral-500">{table.label || locationName(table, false)}</p>
                 <h2 className="text-3xl font-bold tabular-nums text-neutral-900">{table.tableNumber}</h2>
               </div>
-              <div className="flex flex-col items-end gap-1.5">
-                <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ring-inset ${statusStyle[table.status]}`}>{statusLabel[table.status]}</span>
-                {!table.isActive ? <span className="rounded-full bg-neutral-100 px-2.5 py-1 text-[11px] font-semibold text-neutral-500">Inactive</span> : null}
-              </div>
+              {!table.isActive ? <span className="rounded-full bg-neutral-100 px-2.5 py-1 text-[11px] font-semibold text-neutral-500">Inactive</span> : null}
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-neutral-500">
               <span className="inline-flex items-center gap-1"><Users className="h-3.5 w-3.5" />{table.capacity ? `${table.capacity} seats` : "Seats not set"}</span>
@@ -285,13 +262,8 @@ export default function TablesManager({ initialTables, initialOrders = [], resta
               ) : null}
             </div>
 
-            <div role="radiogroup" aria-label={`Table ${table.tableNumber} status`} className="mt-4 grid grid-cols-3 gap-1 rounded-xl bg-neutral-100 p-1">
-              {(["OPEN", "OCCUPIED", "CLOSED"] as TableStatus[]).map((status) => (
-                <button key={status} type="button" role="radio" aria-checked={table.status === status} onClick={() => void setStatus(table, status)} className={`rounded-lg py-1.5 text-xs font-semibold transition ${table.status === status ? "bg-white text-neutral-900 shadow-sm" : "text-neutral-500 hover:text-neutral-900"}`}>{statusLabel[status]}</button>
-              ))}
-            </div>
-
             <div className="mt-3 flex flex-wrap gap-2">
+              {orderManagementEnabled && table.isActive && <Link href={`/admin/${encodeURIComponent(restaurantSlug)}/pos?table=${encodeURIComponent(table.id)}`} className="inline-flex h-9 items-center rounded-lg bg-neutral-900 px-3 text-xs font-semibold text-white">Take order</Link>}
               {tableOrderingEnabled && <>
                 <button type="button" onClick={() => setQrTable((current) => current === table.id ? null : table.id)} aria-expanded={qrTable === table.id} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-neutral-900 px-3 text-xs font-semibold text-white hover:bg-neutral-800"><QrCode className="h-3.5 w-3.5" />QR code</button>
                 <button type="button" onClick={() => void copy(table)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-neutral-300 px-3 text-xs font-semibold text-neutral-700 hover:bg-neutral-50"><Copy className="h-3.5 w-3.5" />Copy link</button>

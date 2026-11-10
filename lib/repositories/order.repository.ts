@@ -420,11 +420,11 @@ export class OrderRepository implements IOrderRepository {
     return order ? this.mapOrder(order) : null;
   }
 
-  async markKotSent(restaurantId: string, id: string, lineIds: string[], event: OrderEvent) {
+  async markKotSent(restaurantId: string, id: string, lineIds: string[], event: OrderEvent, expectedStatus: RestaurantOrder["status"]) {
     await connectToDatabase();
     const order = await OrderModel.findOneAndUpdate(
-      { restaurantId, id, status: { $nin: ["CANCELLED", "REJECTED", "REFUNDED", "COMPLETED"] }, kotLineIds: { $nin: lineIds } },
-      { $addToSet: { kotLineIds: { $each: lineIds } }, $set: { status: "PREPARING", updatedAt: new Date().toISOString() }, $push: { events: event } },
+      { restaurantId, id, status: expectedStatus, kotLineIds: { $nin: lineIds } },
+      { $addToSet: { kotLineIds: { $each: lineIds } }, $set: { status: expectedStatus === "PENDING" ? "ACCEPTED" : expectedStatus, updatedAt: new Date().toISOString() }, $push: { events: event } },
       { new: true, runValidators: true },
     ).lean();
     return order ? this.mapOrder(order) : null;

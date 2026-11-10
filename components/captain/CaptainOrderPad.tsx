@@ -192,7 +192,7 @@ export default function CaptainOrderPad({
 
   function beginCustomize(dish: Dish) {
     if (!tableKey) {
-      setMessage("Select an assigned table or room first.");
+      setMessage("Select a table or room first.");
       return;
     }
     if (!dishNeedsCustomize(dish)) {
@@ -281,7 +281,7 @@ export default function CaptainOrderPad({
 
   function placeOrder() {
     if (!selectedLocation) {
-      setMessage("Select an assigned table or room first.");
+      setMessage("Select a table or room first.");
       return;
     }
     if (session.cart.length === 0) {
@@ -313,7 +313,6 @@ export default function CaptainOrderPad({
             couponCode: session.couponCode.trim() || undefined,
             redeemLoyaltyPoints: session.redeemLoyaltyPoints || undefined,
             idempotencyKey: session.idempotencyKey,
-            sendToKitchen: false,
             items: session.cart.map((line) => ({
               dishId: line.dishId,
               variantId: line.variantId,
@@ -344,14 +343,18 @@ export default function CaptainOrderPad({
         setPayAmount(roundMoney(Math.max(0, (json.data?.total ?? totals.total) - (json.data?.payment?.amountPaid ?? 0))));
         setUpiRequest(null);
         setCartOpen(true);
-
         patchSession(emptyCartState());
-        const warning = json.meta?.warning ? ` · ${json.meta.warning}` : "";
-        setMessage(
-          `Order #${json.data.orderNumber} ${json.meta?.appended ? "updated" : "placed"} for ${selectedLocationName}${
-            json.meta?.sentToKitchen ? " · KOT sent to kitchen" : ""
-          }${warning}`,
-        );
+        try {
+          const kotResponse = await fetch(`/api/captain/orders/${encodeURIComponent(orderId ?? "")}/send-kot`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+          const kotJson = await kotResponse.json();
+          if (!kotResponse.ok || !kotJson.success) throw new Error(kotJson.error || "KOT was not sent.");
+          setLastSavedOrder(kotJson.data);
+          setKotSent(true);
+          printQueuedKitchenOrderTicket(kotJson.data, undefined, json.data.kotLineIds ?? []);
+          setMessage(`Order #${json.data.orderNumber} sent to kitchen · KOT ready to print.`);
+        } catch (kotError) {
+          setMessage(`Order #${json.data.orderNumber} saved, but KOT was not sent. Tap Send KOT to retry. ${kotError instanceof Error ? kotError.message : ""}`);
+        }
       } catch (error) {
         setMessage(error instanceof Error ? error.message : "Unable to place order");
       }
@@ -467,12 +470,12 @@ export default function CaptainOrderPad({
   if (tables.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-amber-300 bg-amber-50 p-8 text-center">
-        <h1 className="text-xl font-bold text-amber-950">No tables assigned</h1>
+        <h1 className="text-xl font-bold text-amber-950">No tables available</h1>
         <p className="mt-2 text-sm text-amber-900/80">
-          Ask a manager to assign tables before taking walk-in POS orders.
+          Ask a manager to add tables or rooms in the restaurant settings.
         </p>
         <Link href={`/captain/${slug}/tables`} className="mt-4 inline-flex text-sm font-semibold text-amber-950 underline">
-          View My Tables
+          View tables
         </Link>
       </div>
     );
@@ -489,11 +492,11 @@ export default function CaptainOrderPad({
             href={`/captain/${slug}/tables`}
             className="inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-900"
           >
-            <ArrowLeft className="h-4 w-4" /> My Tables
+            <ArrowLeft className="h-4 w-4" /> Tables
           </Link>
           <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Captain POS</h1>
           <p className="hidden text-sm text-neutral-500 sm:block">
-            Select a table, add menu items, then review and submit the order.
+            Select a table, add menu items, and send the KOT to the kitchen.
           </p>
         </div>
         <label className="text-sm font-medium text-neutral-700">
@@ -517,7 +520,7 @@ export default function CaptainOrderPad({
             {tables.map((table) => (
               <option key={table.id} value={table.id}>
                 {table.locationType === "ROOM" ? "Room" : "T"}{table.tableNumber}
-                {table.label ? ` · ${table.label}` : ""} · {table.status}
+                {table.label ? ` · ${table.label}` : ""}
               </option>
             ))}
           </select>
@@ -858,7 +861,7 @@ export default function CaptainOrderPad({
                 onClick={placeOrder}
                 className="min-h-11 w-full rounded-xl bg-[#f59e0b] text-sm font-bold text-neutral-950 disabled:opacity-40"
               >
-                {pending ? "Saving…" : "Save order"}
+                {pending ? "Sending…" : "Send order & print KOT"}
               </button>
               {lastOrderId ? (
                 <section className="space-y-2 rounded-xl border border-white/15 bg-white/5 p-3" aria-label="Saved order actions">

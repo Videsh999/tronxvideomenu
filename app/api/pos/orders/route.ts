@@ -61,11 +61,11 @@ export async function POST(request: Request) {
     }
 
     if (captainResult?.captain && parsed.data.channel === "POS_DINE_IN") {
-      if (!parsed.data.tableId) return NextResponse.json({ success: false, error: "Select a specific assigned table or room." }, { status: 400 });
+      if (!parsed.data.tableId) return NextResponse.json({ success: false, error: "Select a table or room." }, { status: 400 });
       try {
         await captainService.assertCaptainMayServeTable(captainResult.captain.id, restaurantId, parsed.data.tableId);
       } catch {
-        return NextResponse.json({ success: false, error: "This location is not assigned to you." }, { status: 403 });
+        return NextResponse.json({ success: false, error: "This location is unavailable." }, { status: 403 });
       }
     }
 
@@ -75,7 +75,10 @@ export async function POST(request: Request) {
       parsed.data,
       actor,
     );
-    return NextResponse.json({ success: true, data: order }, { status: 201 });
+    const sent = new Set(order.kotLineIds ?? []);
+    const hasNewItems = order.items.some((item) => item.lineId && !sent.has(item.lineId));
+    const readyOrder = hasNewItems ? await orderService.sendKot(restaurantId, order.id, actor) : order;
+    return NextResponse.json({ success: true, data: readyOrder }, { status: 201 });
   } catch (error) {
     if (error instanceof OrderServiceError) {
       return NextResponse.json(

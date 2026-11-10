@@ -8,7 +8,7 @@ import { resolveStaticMerchantQrUrl } from "@/lib/upi-payment";
 
 export const dynamic = "force-dynamic";
 
-export default async function PosPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function PosPage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ table?: string }> }) {
   const { slug } = await params;
   const menu = await restaurantService.getFullMenu(slug);
   if (!menu || !requireRestaurantFeature(menu.restaurant, "POS").allowed) notFound();
@@ -25,6 +25,7 @@ export default async function PosPage({ params }: { params: Promise<{ slug: stri
       categories={menu.categories.filter((category) => category.isActive)}
       dishes={menu.dishes}
       tables={tables.filter((table) => table.isActive && table.status !== "CLOSED")}
+      initialTableId={(await searchParams).table}
       initialShift={shift}
       upiSettings={{
         enabled: menu.restaurant.billing?.upiEnabled === true || menu.restaurant.name.toLowerCase().includes("triparna"),

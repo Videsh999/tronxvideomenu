@@ -6,8 +6,6 @@ import { usePathname } from "next/navigation";
 import {
   BellRing,
   ClipboardList,
-  Flame,
-  LayoutDashboard,
   LogOut,
   Menu,
   ShieldCheck,
@@ -32,9 +30,10 @@ export default function CaptainNavigation({
   const [moreOpen, setMoreOpen] = useState(false);
   const root = `/captain/${slug}`;
   const links = [
-    { href: root, label: "Dashboard", icon: LayoutDashboard, exact: true },
-    { href: `${root}/tables`, label: "My Tables", icon: Table2, exact: false },
-    { href: `${root}/take-order`, label: "POS", icon: UtensilsCrossed, exact: false },
+    { href: `${root}/tables`, label: "Tables", icon: Table2, exact: false },
+    { href: `${root}/take-order`, label: "New order", icon: UtensilsCrossed, exact: false },
+    { href: `${root}/orders`, label: "Orders", icon: ClipboardList, exact: false },
+    { href: `${root}/bills`, label: "Bills", icon: Wallet, exact: false },
     {
       href: `${root}/approvals`,
       label: "Approvals",
@@ -42,15 +41,12 @@ export default function CaptainNavigation({
       exact: false,
       badge: pendingApprovals,
     },
-    { href: `${root}/orders`, label: "Active", icon: ClipboardList, exact: false },
-    { href: `${root}/kitchen`, label: "Kitchen", icon: Flame, exact: false },
-    { href: `${root}/bills`, label: "Bills", icon: Wallet, exact: false },
     { href: `${root}/requests`, label: "Requests", icon: BellRing, exact: false },
   ] as const;
   const isActive = (href: string, exact: boolean) =>
     exact ? pathname === href : pathname.startsWith(href);
-  const primaryLinks = [links[0], links[1], links[2], links[4]];
-  const moreLinks = [links[3], links[5], links[6], links[7]];
+  const primaryLinks = [links[0], links[1], links[2], links[3]];
+  const moreLinks = [links[4], links[5]];
   const logout = async () => {
     await fetch("/api/captain/logout", { method: "POST" });
     window.location.replace(`/menu/${slug}/captain`);

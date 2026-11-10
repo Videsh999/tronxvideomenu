@@ -14,7 +14,6 @@ import {
 import type { MasterBill, OrderSummary, RestaurantTable, TableSession } from "@/types";
 import { locationName } from "@/lib/service-location";
 import type { ServiceRequest, ServiceRequestType } from "@/types/service-request";
-import { TABLE_STATUS_LABEL, TABLE_STATUS_STYLE } from "@/lib/captain-floor";
 import { isPendingCaptainApproval } from "@/lib/order-authorization";
 import { primaryFloorAction } from "@/lib/order-board";
 import { printQueuedKitchenOrderTicket, printSessionKitchenTicket } from "@/lib/kot-print";
@@ -37,7 +36,6 @@ const REQUEST_TYPES: { type: ServiceRequestType; label: string }[] = [
   { type: "CUTLERY", label: "Cutlery" },
   { type: "NAPKINS", label: "Napkins" },
   { type: "ASSISTANCE", label: "Assistance" },
-  { type: "CLEANING", label: "Cleaning" },
   { type: "BILL", label: "Bill" },
   { type: "OTHER", label: "Other" },
 ];
@@ -312,15 +310,10 @@ export default function CaptainTableWorkspace({
             href={`/captain/${slug}/tables`}
             className="inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-900"
           >
-            <ArrowLeft className="h-4 w-4" /> My Tables
+            <ArrowLeft className="h-4 w-4" /> Tables
           </Link>
           <div className="mt-2 flex flex-wrap items-center gap-3">
             <h1 className="text-4xl font-black tracking-tight">{locationName(table)}</h1>
-            <span
-              className={`rounded-full border px-3 py-1 text-xs font-bold ${TABLE_STATUS_STYLE[table.status]}`}
-            >
-              {TABLE_STATUS_LABEL[table.status]}
-            </span>
           </div>
           <p className="mt-1 text-sm text-neutral-500">
             {table.label || "Dining table"} · {table.capacity ?? "—"} seats · Captain {captainName}
@@ -385,7 +378,7 @@ export default function CaptainTableWorkspace({
             {bill.outstandingAmount > 0 && bill.allocations.length === 0 ? <div className="flex flex-wrap gap-2 sm:col-span-3">{(["CASH", "CARD"] as const).map((method) => <button key={method} type="button" disabled={pending} onClick={() => { if (window.confirm(`Confirm ${method} payment of ${money(bill.outstandingAmount, currency)} was received?`)) sessionBillingAction({ action: "RECORD_PAYMENT", billId: bill.id, amount: bill.outstandingAmount, method, idempotencyKey: crypto.randomUUID() }, `${method} payment recorded`); }} className="min-h-10 rounded-xl border border-violet-300 bg-white px-4 text-sm font-bold text-violet-900">Record {method} received</button>)}</div> : null}
             {bill.amountPaid === 0 ? <div className="flex flex-wrap items-center gap-2 sm:col-span-3"><label className="text-xs font-semibold">Equal split customers <input type="number" min={2} max={50} value={splitCount} onChange={(event) => setSplitCount(Math.max(2, Math.min(50, Number(event.target.value) || 2)))} className="ml-2 h-9 w-16 rounded-lg border border-violet-200 px-2" /></label><button type="button" disabled={pending} onClick={() => sessionBillingAction({ action: "SPLIT_BILL", billId: bill.id, version: bill.version, mode: "EQUAL", customers: splitCount }, "Bill split equally")} className="h-9 rounded-lg bg-violet-700 px-3 text-xs font-bold text-white">Split equally</button></div> : null}
             {bill.allocations.length ? <div className="space-y-2 sm:col-span-3">{bill.allocations.map((allocation) => <div key={allocation.id} className="rounded-xl border border-violet-200 bg-white p-3"><div className="flex items-center justify-between gap-3"><span className="font-semibold">{allocation.label}</span><span className="font-bold">{money(allocation.amount - allocation.amountPaid, currency)} due</span></div>{allocation.amountPaid < allocation.amount && upiSettings?.enabled && upiSettings.upiId ? <div className="mt-2"><UpiPaymentQr upiId={upiSettings.upiId} payeeName={upiSettings.payeeName} amount={allocation.amount - allocation.amountPaid} orderNumber={`${bill.billNumber}-${allocation.id}`} compact /></div> : null}{allocation.amountPaid < allocation.amount ? <div className="mt-2 flex flex-wrap gap-2">{(["CASH", "CARD"] as const).map((method) => <button key={method} type="button" disabled={pending} onClick={() => { const due = Math.round((allocation.amount - allocation.amountPaid) * 100) / 100; if (window.confirm(`Confirm ${method} payment of ${money(due, currency)} was received for ${allocation.label}?`)) sessionBillingAction({ action: "RECORD_PAYMENT", billId: bill.id, allocationId: allocation.id, amount: due, method, idempotencyKey: crypto.randomUUID() }, `${allocation.label} ${method} payment recorded`); }} className="min-h-9 rounded-lg border border-violet-300 px-3 text-xs font-bold">Record {method}</button>)}</div> : null}</div>)}</div> : null}
-            {bill.status === "PAID" && session ? <button type="button" disabled={pending} onClick={() => sessionBillingAction({ action: "CLOSE_SESSION", sessionId: session.id }, "Session closed · table sent to cleaning")} className="min-h-10 rounded-xl bg-emerald-700 px-4 text-sm font-bold text-white sm:col-span-3">Close paid session</button> : null}
+            {bill.status === "PAID" && session ? <button type="button" disabled={pending} onClick={() => sessionBillingAction({ action: "CLOSE_SESSION", sessionId: session.id }, "Bill closed · table ready for the next order")} className="min-h-10 rounded-xl bg-emerald-700 px-4 text-sm font-bold text-white sm:col-span-3">Close paid bill</button> : null}
           </div>
         ) : null}
       </section>
@@ -623,22 +616,6 @@ export default function CaptainTableWorkspace({
                 className="rounded-full border border-neutral-300 px-3 py-2 text-xs font-semibold"
               >
                 Save note
-              </button>
-              <button
-                type="button"
-                disabled={pending}
-                onClick={() => runAction("REQUEST_CLEANING")}
-                className="rounded-full border border-neutral-300 px-3 py-2 text-xs font-semibold"
-              >
-                Request cleaning
-              </button>
-              <button
-                type="button"
-                disabled={pending}
-                onClick={() => runAction("COMPLETE_CLEANING")}
-                className="rounded-full bg-emerald-600 px-3 py-2 text-xs font-bold text-white"
-              >
-                Mark available
               </button>
             </div>
           </div>

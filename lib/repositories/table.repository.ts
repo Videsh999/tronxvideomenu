@@ -67,7 +67,7 @@ export class TableRepository implements ITableRepository {
         restaurantId,
         id,
         isActive: true,
-        status: { $in: ["OPEN", "OCCUPIED", "BILL_REQUESTED", "PAYMENT_PENDING"] },
+        status: { $in: ["OPEN", "OCCUPIED", "BILL_REQUESTED", "PAYMENT_PENDING", "CLEANING"] },
       },
       { $set: { status: "OCCUPIED", updatedAt: new Date().toISOString() } },
     );

@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 export default async function CaptainTablesPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const { captain, restaurant, error } = await requireCaptain("TABLE_MANAGEMENT");
+  const { captain, restaurant, error } = await requireCaptain("ORDER_MANAGEMENT");
   if (error || !captain || !restaurant) redirect(`/captain/${slug}`);
   if (restaurant.slug !== slug) redirect(`/captain/${restaurant.slug}`);
 
@@ -20,7 +20,6 @@ export default async function CaptainTablesPage({ params }: { params: Promise<{ 
   return (
     <CaptainTables
       slug={slug}
-      captainName={captain.name}
       initialTables={tables}
       initialOrders={orders}
       assignedTableIds={captain.assignedTableIds ?? []}

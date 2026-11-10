@@ -1,174 +1,81 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Clock3, IndianRupee, Users, UtensilsCrossed } from "lucide-react";
+import Image from "next/image";
+import { Clock3, QrCode, Search, UtensilsCrossed } from "lucide-react";
+import QRCode from "qrcode";
 import type { OrderSummary, RestaurantTable } from "@/types";
-import {
-  TABLE_STATUS_LABEL,
-  TABLE_STATUS_STYLE,
-  enrichCaptainTables,
-} from "@/lib/captain-floor";
-import CaptainTableStats from "@/components/captain/CaptainTableStats";
-import { locationName, locationType } from "@/lib/service-location";
+import { enrichCaptainTables } from "@/lib/captain-floor";
+import { locationMenuUrl, locationName, locationType } from "@/lib/service-location";
 
-function money(value: number, currency = "INR") {
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 0,
-  }).format(value);
+function money(value: number, currency: string) {
+  return new Intl.NumberFormat(undefined, { style: "currency", currency, maximumFractionDigits: 0 }).format(value);
 }
 
-function elapsed(iso?: string) {
-  if (!iso) return "—";
-  const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
-  if (mins < 60) return `${mins}m`;
-  return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+function elapsed(iso: string | undefined, now: number) {
+  if (!iso || !now) return null;
+  const minutes = Math.max(0, Math.floor((now - new Date(iso).getTime()) / 60000));
+  return minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)} hr ${minutes % 60} min`;
 }
 
-export default function CaptainTables({
-  slug,
-  captainName,
-  initialTables,
-  initialOrders,
-  assignedTableIds,
-  currency = "INR",
-}: {
+export default function CaptainTables({ slug, initialTables, initialOrders, assignedTableIds, currency = "INR" }: {
   slug: string;
-  captainName: string;
   initialTables: RestaurantTable[];
   initialOrders: OrderSummary[];
   assignedTableIds: string[];
   currency?: string;
 }) {
-  const assigned = new Set(assignedTableIds);
-  const rows = enrichCaptainTables(initialTables, initialOrders, assigned);
-  const [activeKind, setActiveKind] = useState<"TABLE" | "ROOM">("TABLE");
-  const visibleRows = rows.filter(({ table }) => locationType(table) === activeKind);
-  const counts = {
-    available: rows.filter((row) => row.table.status === "OPEN").length,
-    occupied: rows.filter((row) =>
-      ["OCCUPIED", "BILL_REQUESTED", "PAYMENT_PENDING"].includes(row.table.status),
-    ).length,
-    cleaning: rows.filter((row) => row.table.status === "CLEANING").length,
-  };
+  const [kind, setKind] = useState<"TABLE" | "ROOM">("TABLE");
+  const [area, setArea] = useState("ALL");
+  const [search, setSearch] = useState("");
+  const [qrTableId, setQrTableId] = useState<string | null>(null);
+  const [qrImage, setQrImage] = useState("");
+  const [origin, setOrigin] = useState("");
+  const [now, setNow] = useState(0);
 
-  if (assigned.size === 0) {
-    return (
-      <div className="rounded-3xl border border-amber-200 bg-amber-50 p-8 text-center">
-        <h1 className="text-2xl font-bold text-amber-950">No tables assigned</h1>
-        <p className="mt-2 text-sm text-amber-900/80">
-          Ask your manager to assign tables under Admin → Captains. You cannot run floor service until then.
-        </p>
-      </div>
-    );
-  }
+  useEffect(() => {
+    setOrigin(window.location.origin);
+    setNow(Date.now());
+    const timer = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
-  return (
-    <div className="space-y-6">
-      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-neutral-400">Floor</p>
-          <h1 className="mt-1 text-3xl font-bold tracking-tight">My Tables &amp; Rooms</h1>
-          <p className="mt-1 text-sm text-neutral-500">
-            Only tables your manager assigned to you. Tap a table to take a walk-in order, or check Approvals for QR
-            orders waiting your tick.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800">
-            Available {counts.available}
-          </span>
-          <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-900">
-            In service {counts.occupied}
-          </span>
-          <span className="rounded-full border border-neutral-200 bg-neutral-50 px-3 py-1 text-xs font-semibold text-neutral-700">
-            Cleaning {counts.cleaning}
-          </span>
-          <Link
-            href={`/captain/${slug}/take-order`}
-            className="inline-flex min-h-10 items-center gap-2 rounded-full bg-neutral-900 px-4 text-xs font-bold text-white"
-          >
-            <UtensilsCrossed className="h-3.5 w-3.5" /> New order
-          </Link>
-        </div>
-      </header>
+  const rows = useMemo(() => enrichCaptainTables(initialTables, initialOrders, new Set(assignedTableIds)), [initialTables, initialOrders, assignedTableIds]);
+  const kindRows = rows.filter(({ table }) => locationType(table) === kind);
+  const areas = [...new Set(kindRows.map(({ table }) => table.label?.trim() || (kind === "ROOM" ? "Rooms" : "Main floor")))].sort();
+  const visibleRows = kindRows.filter(({ table }) => {
+    const tableArea = table.label?.trim() || (kind === "ROOM" ? "Rooms" : "Main floor");
+    const query = search.trim().toLowerCase();
+    return (area === "ALL" || area === tableArea) && (!query || String(table.tableNumber).includes(query) || tableArea.toLowerCase().includes(query));
+  });
 
-      <div role="tablist" aria-label="Assigned service locations" className="grid grid-cols-2 rounded-2xl bg-neutral-200/70 p-1 sm:max-w-md">
-        {(["TABLE", "ROOM"] as const).map((kind) => (
-          <button key={kind} type="button" role="tab" aria-selected={activeKind === kind} onClick={() => setActiveKind(kind)} className={`min-h-11 rounded-xl text-sm font-bold ${activeKind === kind ? "bg-white shadow-sm" : "text-neutral-500"}`}>
-            {kind === "TABLE" ? "Tables" : "Rooms"} ({rows.filter(({ table }) => locationType(table) === kind).length})
-          </button>
-        ))}
-      </div>
+  useEffect(() => {
+    const table = initialTables.find((row) => row.id === qrTableId);
+    if (!table || !origin) return;
+    let live = true;
+    void QRCode.toDataURL(locationMenuUrl(origin, slug, table), { width: 560, margin: 2 })
+      .then((url) => { if (live) setQrImage(url); })
+      .catch(() => { if (live) setQrImage(""); });
+    return () => { live = false; };
+  }, [initialTables, origin, qrTableId, slug]);
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {visibleRows.map(({ table, activeOrder, orderCount, runningTotal, amountPaid, unsentItems }) => (
-          <Link
-            key={table.id}
-            href={`/captain/${slug}/tables/${table.id}`}
-            className="group relative overflow-hidden rounded-3xl border border-neutral-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-neutral-900 hover:shadow-md"
-          >
-            <span
-              className={`absolute inset-x-0 top-0 h-1.5 ${
-                table.status === "OPEN"
-                  ? "bg-emerald-400"
-                  : table.status === "CLEANING"
-                    ? "bg-neutral-400"
-                    : table.status === "BILL_REQUESTED" || table.status === "PAYMENT_PENDING"
-                      ? "bg-violet-500"
-                      : "bg-amber-400"
-              }`}
-            />
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-4xl font-black tabular-nums tracking-tight">{table.tableNumber}</p>
-                <p className="mt-1 text-sm text-neutral-500">{table.label || locationName(table)}</p>
-              </div>
-              <span
-                className={`rounded-full border px-2.5 py-1 text-[11px] font-bold ${TABLE_STATUS_STYLE[table.status]}`}
-              >
-                {TABLE_STATUS_LABEL[table.status]}
-              </span>
-            </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-2 text-xs text-neutral-600">
-              <span className="inline-flex items-center gap-1.5">
-                <Users className="h-3.5 w-3.5" />
-                {table.capacity ? `${table.capacity} seats` : "— seats"}
-              </span>
-              <span className="inline-flex items-center gap-1.5 truncate">
-                Cap. {captainName.split(" ")[0]}
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <IndianRupee className="h-3.5 w-3.5" />
-                {orderCount ? money(runningTotal, currency) : "No bill"}
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <Clock3 className="h-3.5 w-3.5" />
-                {activeOrder ? elapsed(activeOrder.createdAt) : "Idle"}
-              </span>
-              {orderCount ? <span className="col-span-2 font-semibold text-neutral-800">{orderCount} order{orderCount === 1 ? "" : "s"} · Paid {money(amountPaid, currency)} · Due {money(Math.max(0, runningTotal - amountPaid), currency)}</span> : null}
-              {unsentItems > 0 ? <span className="col-span-2 rounded-lg bg-amber-50 px-2 py-1 font-bold text-amber-900">{unsentItems} item{unsentItems === 1 ? "" : "s"} waiting for KOT</span> : null}
-            </div>
-
-            {activeOrder ? (
-              <p className="mt-4 rounded-2xl bg-neutral-50 px-3 py-2 text-xs text-neutral-700">
-                    Order #{activeOrder.orderNumber} · {activeOrder.status.replace(/_/g, " ")} ·{" "}
-                {activeOrder.payment?.status ?? "UNPAID"}
-              </p>
-            ) : (
-              <p className="mt-4 text-xs font-semibold text-emerald-700 group-hover:underline">
-                Open workspace to start service →
-              </p>
-            )}
-          </Link>
-        ))}
-        {visibleRows.length === 0 ? <p className="col-span-full rounded-3xl border border-dashed border-neutral-300 p-10 text-center text-sm text-neutral-500">No {activeKind === "ROOM" ? "rooms" : "tables"} assigned to you.</p> : null}
-      </div>
-
-      <CaptainTableStats />
+  return <div className="space-y-5">
+    <header><h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Tables &amp; rooms</h1><p className="mt-1 text-sm text-neutral-500">Choose the guest’s location, add items, then send the KOT to the kitchen.</p></header>
+    <div className="flex flex-wrap items-center gap-2">
+      {(["TABLE", "ROOM"] as const).map((value) => <button key={value} type="button" onClick={() => { setKind(value); setArea("ALL"); setQrTableId(null); }} className={`min-h-11 rounded-xl px-4 text-sm font-bold ${kind === value ? "bg-neutral-900 text-white" : "border border-neutral-200 bg-white text-neutral-700"}`}>{value === "TABLE" ? "Tables" : "Rooms"} ({rows.filter(({ table }) => locationType(table) === value).length})</button>)}
+      <label className="relative min-w-48 flex-1 sm:max-w-72"><Search className="absolute left-3 top-3.5 h-4 w-4 text-neutral-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Find table or area" className="min-h-11 w-full rounded-xl border border-neutral-200 bg-white pl-9 pr-3 text-sm" /></label>
     </div>
-  );
+    <nav aria-label="Areas" className="flex gap-2 overflow-x-auto pb-1">{["ALL", ...areas].map((value) => <button key={value} type="button" onClick={() => setArea(value)} className={`min-h-10 shrink-0 rounded-full px-4 text-sm font-semibold ${area === value ? "bg-neutral-900 text-white" : "border border-neutral-200 bg-white text-neutral-700"}`}>{value === "ALL" ? "All areas" : value}</button>)}</nav>
+    {visibleRows.length ? <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{visibleRows.map(({ table, activeOrder, runningTotal, unsentItems }) => {
+      const timer = elapsed(activeOrder?.createdAt, now);
+      return <section key={table.id} className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm">
+        <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wide text-neutral-400">{table.label?.trim() || (kind === "ROOM" ? "Rooms" : "Main floor")}</p><h2 className="mt-1 text-2xl font-black">{locationName(table)}</h2></div>{activeOrder ? <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-900">Order #{activeOrder.orderNumber}</span> : null}</div>
+        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-neutral-600"><span>{activeOrder ? money(runningTotal, currency) : "No order yet"}</span>{timer ? <span className="inline-flex items-center gap-1"><Clock3 className="h-4 w-4" />{timer} since first order</span> : null}</div>
+        {unsentItems > 0 ? <p className="mt-2 text-xs font-semibold text-amber-800">{unsentItems} new item{unsentItems === 1 ? "" : "s"} waiting for KOT</p> : null}
+        <div className="mt-4 grid grid-cols-2 gap-2"><Link href={`/captain/${slug}/take-order?table=${encodeURIComponent(table.id)}`} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-neutral-900 px-3 text-sm font-bold text-white"><UtensilsCrossed className="h-4 w-4" />{activeOrder ? "Add items" : "Take order"}</Link><button type="button" onClick={() => { setQrTableId((current) => current === table.id ? null : table.id); setQrImage(""); }} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-neutral-200 px-3 text-sm font-bold"><QrCode className="h-4 w-4" />{qrTableId === table.id ? "Hide QR" : "Show QR"}</button></div>
+        {qrTableId === table.id ? <div className="mt-4 rounded-xl bg-neutral-50 p-3 text-center">{qrImage ? <Image unoptimized src={qrImage} width={240} height={240} alt={`Menu QR for ${locationName(table)}`} className="mx-auto h-60 w-60 max-w-full rounded-lg bg-white p-2" /> : <p className="py-12 text-sm text-neutral-500">Generating QR…</p>}<p className="mt-2 text-xs text-neutral-500">Guests can scan to view this location’s menu.</p></div> : null}
+      </section>;
+    })}</div> : <p className="rounded-2xl border border-dashed border-neutral-300 bg-white p-8 text-center text-sm text-neutral-500">No {kind === "ROOM" ? "rooms" : "tables"} match. Add locations in Admin → Tables &amp; QR.</p>}
+  </div>;
 }

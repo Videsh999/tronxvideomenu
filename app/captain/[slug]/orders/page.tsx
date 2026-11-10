@@ -26,7 +26,7 @@ export default async function CaptainOrdersPage({ params }: { params: Promise<{ 
         <p className="text-xs font-bold uppercase tracking-[0.18em] text-neutral-400">Service</p>
         <h1 className="mt-1 text-3xl font-bold tracking-tight">Active orders</h1>
         <p className="mt-1 text-sm text-neutral-500">
-          Orders on your assigned tables only. Prefer the table workspace for add-items and bill handoff.
+          All restaurant tables are available. Open a table to add items and send its KOT.
         </p>
       </header>
       <CaptainOrders

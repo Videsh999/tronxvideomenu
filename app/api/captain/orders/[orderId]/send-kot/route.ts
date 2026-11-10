@@ -13,7 +13,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ or
     try {
       await captainService.assertCaptainMayServeTable(auth.captain.id, auth.captain.restaurantId, current.tableId);
     } catch {
-      return NextResponse.json({ success: false, error: "This table is not assigned to you." }, { status: 403 });
+      return NextResponse.json({ success: false, error: "This location is unavailable." }, { status: 403 });
     }
     const actor = { role: "CAPTAIN" as const, id: auth.captain.id, email: auth.captain.email, name: auth.captain.name };
     const order = await orderService.sendKot(auth.captain.restaurantId, orderId, actor);

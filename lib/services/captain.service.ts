@@ -131,11 +131,8 @@ export class CaptainService {
     if (!captain || captain.restaurantId !== restaurantId || !captain.isActive) {
       throw new Error("Captain not authorized.");
     }
-    const assigned = captain.assignedTableIds ?? [];
-    // Empty assignment = no tables yet (must be assigned by manager).
-    if (!assigned.includes(tableId)) {
-      throw new Error("This table is not assigned to you.");
-    }
+    const table = await tableRepository.findByRestaurantAndId(restaurantId, tableId);
+    if (!table || !table.isActive || table.status === "CLOSED") throw new Error("This location is unavailable to your outlet.");
     return captain;
   }
 

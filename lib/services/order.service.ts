@@ -374,7 +374,7 @@ export class OrderService {
         ? await tableRepository.findByRestaurantAndId(restaurantId, input.tableId)
         : legacyMatches[0] ?? null;
       if (table && input.tableNumber !== table.tableNumber) throw new OrderServiceError("Selected location changed. Refresh and try again.", 409);
-      if (!table || !table.isActive || table.status === "CLOSED" || table.status === "CLEANING") {
+      if (!table || !table.isActive || table.status === "CLOSED") {
         throw new OrderServiceError("Selected table is unavailable.");
       }
       tableId = table.id;
@@ -880,7 +880,7 @@ export class OrderService {
     const pendingLineIds = current.items.map((item) => item.lineId).filter((id): id is string => typeof id === "string" && !sent.has(id));
     if (!pendingLineIds.length) throw new OrderServiceError("There are no new items waiting for a KOT.", 409);
     const event = makeEvent("STATUS_CHANGED", `KOT sent for ${pendingLineIds.length} new line(s)`, actor, { kotLineIds: pendingLineIds });
-    const updated = await orderRepository.markKotSent(restaurantId, orderId, pendingLineIds, event);
+    const updated = await orderRepository.markKotSent(restaurantId, orderId, pendingLineIds, event, current.status);
     if (!updated) throw new OrderServiceError("Unable to send KOT. Refresh the table and try again.", 409);
     void this.enqueueAdditionalKot(updated, actor.id, pendingLineIds);
     return staffOrderView(updated);

@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 import { CAPTAIN_SESSION_COOKIE, RESTAURANT_ADMIN_SESSION_COOKIE, SUPER_ADMIN_SESSION_COOKIE, readAdminSession } from "@/lib/auth-core";
 import { restaurantService } from "@/lib/services/restaurant.service";
 import { captainService } from "@/lib/services/captain.service";
+import { tableService } from "@/lib/services/table.service";
 import { requireRestaurantFeature } from "@/lib/feature-access";
 import { restaurantAdminService } from "@/lib/services/restaurant-admin.service";
 import { restaurantAdminRepository } from "@/lib/repositories/restaurant-admin.repository";
@@ -74,7 +75,10 @@ const loadCaptainSession = cache(async () => {
   if (!restaurant || restaurant.isActive === false || restaurant.slug !== session.restaurantSlug) {
     return { status: "forbidden" as const };
   }
-  return { status: "ok" as const, captain, restaurant };
+  // Floor staff serve any active location in their outlet; stale manual assignments must not hide tables.
+  const locations = await tableService.list(captain.restaurantId);
+  const accessibleIds = locations.filter((location) => location.isActive && location.status !== "CLOSED").map((location) => location.id);
+  return { status: "ok" as const, captain: { ...captain, assignedTableIds: accessibleIds }, restaurant };
 });
 
 export async function requireCaptain(requiredFeature?: FeatureKey) {

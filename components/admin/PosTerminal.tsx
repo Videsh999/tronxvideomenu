@@ -37,6 +37,7 @@ type PosTerminalProps = {
   categories: Category[];
   dishes: Dish[];
   tables: RestaurantTable[];
+  initialTableId?: string;
   initialShift: PosShift | null;
   upiSettings?: { enabled: boolean; upiId: string; payeeName: string; staticQrUrl?: string };
 };
@@ -57,11 +58,12 @@ export default function PosTerminal({
   categories,
   dishes,
   tables,
+  initialTableId,
   initialShift,
   upiSettings,
 }: PosTerminalProps) {
   const [channel, setChannel] = useState<OrderChannel>("POS_DINE_IN");
-  const [tableId, setTableId] = useState("");
+  const [tableId, setTableId] = useState(initialTableId && tables.some((table) => table.id === initialTableId) ? initialTableId : "");
   const selectedTable = tables.find((table) => table.id === tableId);
   const [categoryId, setCategoryId] = useState<string>("ALL");
   const [query, setQuery] = useState("");
@@ -553,11 +555,12 @@ export default function PosTerminal({
                 }`}
               >
                 <option value="">Select table (required)</option>
-                {tables.map((table) => (
-                  <option key={table.id} value={table.id}>
-                    {table.locationType === "ROOM" ? "Room" : "Table"} {table.tableNumber}
-                    {table.label ? ` · ${table.label}` : ""}
-                  </option>
+                {[...new Set(tables.map((table) => table.label?.trim() || (table.locationType === "ROOM" ? "Rooms" : "Main floor")))].sort().map((area) => (
+                  <optgroup key={area} label={area}>
+                    {tables.filter((table) => (table.label?.trim() || (table.locationType === "ROOM" ? "Rooms" : "Main floor")) === area).map((table) => (
+                      <option key={table.id} value={table.id}>{table.locationType === "ROOM" ? "Room" : "Table"} {table.tableNumber}</option>
+                    ))}
+                  </optgroup>
                 ))}
               </select>
             ) : null}
