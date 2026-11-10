@@ -1,6 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import { requireCaptain } from "@/lib/auth-server";
 import { captainService } from "@/lib/services/captain.service";
+import { resolveStaticMerchantQrUrl } from "@/lib/upi-payment";
 import { tableRepository } from "@/lib/repositories/table.repository";
 import { orderService } from "@/lib/services/order.service";
 import CaptainTableService from "@/components/captain/CaptainTableService";
@@ -34,11 +35,18 @@ export default async function CaptainTableWorkspacePage({
   }
   const ordersById = new Map([...overview.orders, ...tableOrders].map((order) => [order.id, order]));
   const orders = [...ordersById.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const isTriparna = restaurant.name.toLowerCase().includes("triparna");
   return (
     <CaptainTableService
       slug={slug}
       restaurantName={restaurant.name}
       currency={restaurant.currency ?? restaurant.billing?.currency ?? "INR"}
+      upiSettings={{
+        enabled: restaurant.billing?.upiEnabled === true || isTriparna,
+        upiId: restaurant.billing?.upiId || (isTriparna ? "9133110805@okbizaxis" : ""),
+        payeeName: restaurant.billing?.upiPayeeName || restaurant.name,
+        staticQrUrl: resolveStaticMerchantQrUrl(restaurant.name, restaurant.billing?.upiStaticQrUrl),
+      }}
       table={table}
       initialOrders={orders}
       initialSession={overview.session}
