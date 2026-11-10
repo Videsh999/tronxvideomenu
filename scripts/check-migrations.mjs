@@ -12,7 +12,11 @@ for (const heading of required) {
   }
 }
 
-const diff = spawnSync("git", ["diff", "--name-only", `${base}...HEAD`], { encoding: "utf8" });
+let diff = spawnSync("git", ["diff", "--name-only", `${base}...HEAD`], { encoding: "utf8" });
+if (diff.status !== 0) {
+  // A shallow checkout has no merge base. Compare the two trees directly.
+  diff = spawnSync("git", ["diff", "--name-only", base, "HEAD"], { encoding: "utf8" });
+}
 if (diff.status !== 0) {
   console.error(diff.stderr || "Unable to diff against the release branch.");
   process.exit(1);
