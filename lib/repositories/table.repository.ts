@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { ClientSession } from "mongoose";
 import type { RestaurantTable } from "@/types";
 import type { ITableRepository } from "./types";
 import { connectToDatabase } from "@/lib/db/mongodb";
@@ -80,13 +81,14 @@ export class TableRepository implements ITableRepository {
     restaurantId: string,
     id: string,
     status: RestaurantTable["status"],
-    session?: { guestCount?: number; occupiedSince?: string },
+    floor?: { guestCount?: number; occupiedSince?: string },
+    db?: ClientSession,
   ) {
     await connectToDatabase();
     const now = new Date().toISOString();
     const set: Record<string, unknown> = { status, updatedAt: now };
-    if (session?.guestCount !== undefined) set.guestCount = session.guestCount;
-    if (session?.occupiedSince) set.occupiedSince = session.occupiedSince;
+    if (floor?.guestCount !== undefined) set.guestCount = floor.guestCount;
+    if (floor?.occupiedSince) set.occupiedSince = floor.occupiedSince;
     const update =
       status === "OPEN"
         ? { $set: set, $unset: { guestCount: "", occupiedSince: "" } }
@@ -94,7 +96,7 @@ export class TableRepository implements ITableRepository {
     const table = await TableModel.findOneAndUpdate(
       { restaurantId, id, isActive: true },
       update,
-      { new: true, runValidators: true },
+      { new: true, runValidators: true, session: db },
     ).lean();
     return table ? tableToDomain(table) : null;
   }

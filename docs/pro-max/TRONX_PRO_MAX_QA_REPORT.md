@@ -51,10 +51,10 @@ Commands after the floor screen, on Node v22.23.4. No production database. The d
 
 | Command | Exit | Result |
 | --- | --- | --- |
-| `npm test` | 0 | **PASS**. `# tests 231`, `# pass 231`, `# fail 0`, `# skipped 0`. |
+| `npm test` | 0 | **PASS**. `# tests 234`, `# pass 234`, `# fail 0`, `# skipped 0`. |
 | `npm run lint` | 0 | **PASS** for errors. `0 errors, 28 warnings`. |
 | `npx tsc --noEmit` | 0 | **PASS**. |
-| `npm run test:integration` | 0 | **PASS**. `# tests 16`, `# pass 16`, `# fail 0`, `# skipped 0`. |
+| `npm run test:integration` | 0 | **PASS**. `# tests 21`, `# pass 21`, `# fail 0`, `# skipped 0`. |
 | `npm run build` | 0 | **PASS**. Next.js 16.4.5 compiled and finished TypeScript. 53 pages. |
 
 Signed-in browser check of the new captain home, order pad, and KOT sheet: **PASS** against the demo seed only. Hardware printing was not attempted.

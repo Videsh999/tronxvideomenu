@@ -7,8 +7,11 @@ import {
   formatOccupiedDuration,
   formatRupeeTotal,
   groupTablesBySection,
+  isRunningOrder,
+  kotItemStatus,
   runningBillFromServer,
 } from "@/lib/captain-floor";
+import CaptainTableMenu from "@/components/captain/CaptainTableMenu";
 import { captainMayRecordPayment, resolveCaptainPermissions } from "@/lib/captain-permissions";
 import { browserPaymentStore, clearPaymentAttempt, paymentAttemptKey } from "@/lib/payments/payment-attempt";
 
@@ -58,15 +61,11 @@ const LABEL: Record<TableStatus, string> = {
   CLOSED: "Closed",
 };
 
-function activeOrder(orders: OrderSummary[], tableNumber: number) {
-  return (
-    orders.find(
-      (order) =>
-        order.tableNumber === tableNumber &&
-        !["COMPLETED", "CANCELLED", "REJECTED"].includes(order.status),
-    ) ?? null
-  );
+function runningOrders(orders: OrderSummary[], tableNumber: number) {
+  return orders.filter((order) => order.tableNumber === tableNumber && isRunningOrder(order.status));
 }
+
+const KOT_STATUS_LABEL = { sent: "Sent", preparing: "Preparing", ready: "Ready", served: "Served" };
 
 export default function CaptainFloor({
   slug,
@@ -104,6 +103,7 @@ export default function CaptainFloor({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [sendKey, setSendKey] = useState<string | null>(null);
+  const [menuTableId, setMenuTableId] = useState<string | null>(null);
 
   useEffect(() => {
     const clock = window.setInterval(() => setNow(Date.now()), 30000);
@@ -303,7 +303,9 @@ export default function CaptainFloor({
   });
 
   const currentTable = view.kind === "grid" ? null : tableOf(view.tableId);
-  const currentOrder = currentTable ? activeOrder(orders, currentTable.tableNumber) : null;
+  const currentOrders = currentTable ? runningOrders(orders, currentTable.tableNumber) : [];
+  const currentOrder = currentOrders[0] ?? null;
+  const menuTable = menuTableId ? tableOf(menuTableId) : null;
   const canPay = (["CASH", "UPI", "CARD"] as const).filter((method) => captainMayRecordPayment(gates, method));
 
   return (
@@ -342,32 +344,46 @@ export default function CaptainFloor({
               <h2 className="mb-2 text-sm font-bold uppercase tracking-widest text-neutral-500">{group.name}</h2>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 {group.tables.map((table) => {
-                  const order = activeOrder(orders, table.tableNumber);
+                  const tableOrders = runningOrders(orders, table.tableNumber);
+                  const order = tableOrders[0];
+                  const total = tableOrders.reduce((sum, entry) => sum + entry.total, 0);
                   const occupied = table.status !== "OPEN" && table.status !== "CLEANING" && table.status !== "CLOSED";
                   const since = table.occupiedSince || order?.createdAt;
                   return (
-                    <button
-                      key={table.id}
-                      type="button"
-                      onClick={() => openTable(table)}
-                      className={`min-h-36 rounded-3xl border p-4 text-left ${CARD[table.status]}`}
-                    >
-                      <div className="flex items-start justify-between">
-                        <span className="text-4xl font-black tabular-nums">{table.tableNumber}</span>
-                        <span className="text-xs font-bold uppercase">{LABEL[table.status]}</span>
-                      </div>
-                      {occupied ? (
-                        <p className="mt-3 text-sm font-semibold leading-5">
-                          {table.guestCount ?? order?.guestCount ?? "—"} guests
-                          <br />
-                          {order ? formatRupeeTotal(order.total) : "₹—"}
-                          <br />
-                          {formatOccupiedDuration(since, now)}
-                        </p>
-                      ) : (
-                        <p className="mt-3 text-sm font-semibold">Tap to open</p>
-                      )}
-                    </button>
+                    <div key={table.id} className={`min-h-36 rounded-3xl border p-4 text-left ${CARD[table.status]}`}>
+                      <button
+                        type="button"
+                        onClick={() => openTable(table)}
+                        onContextMenu={(event) => {
+                          event.preventDefault();
+                          setMenuTableId(table.id);
+                        }}
+                        className="w-full text-left"
+                      >
+                        <div className="flex items-start justify-between">
+                          <span className="text-4xl font-black tabular-nums">{table.tableNumber}</span>
+                          <span className="text-xs font-bold uppercase">{LABEL[table.status]}</span>
+                        </div>
+                        {occupied ? (
+                          <p className="mt-3 text-sm font-semibold leading-5">
+                            {table.guestCount ?? order?.guestCount ?? "—"} guests
+                            <br />
+                            {order ? formatRupeeTotal(total) : "₹—"}
+                            <br />
+                            {formatOccupiedDuration(since, now)}
+                          </p>
+                        ) : (
+                          <p className="mt-3 text-sm font-semibold">Tap to open</p>
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMenuTableId(table.id)}
+                        className="mt-3 min-h-12 w-full rounded-2xl bg-white/80 text-sm font-black"
+                      >
+                        More
+                      </button>
+                    </div>
                   );
                 })}
               </div>
@@ -603,34 +619,39 @@ export default function CaptainFloor({
               {formatOccupiedDuration(currentTable.occupiedSince || currentOrder?.createdAt, now)}
             </p>
           </div>
-          {currentOrder ? (
+          {currentOrders.length ? (
             <>
-              {Object.entries(
-                currentOrder.items.reduce<Record<string, typeof currentOrder.items>>((groups, item) => {
-                  const key = String(item.kotNumber ?? 1);
-                  groups[key] = [...(groups[key] ?? []), item];
-                  return groups;
-                }, {}),
-              ).map(([kot, lines]) => (
-                <div key={kot} className="rounded-3xl bg-white p-4">
-                  <p className="font-black">KOT {kot}</p>
-                  {lines.map((line) => (
-                    <p key={line.lineId ?? line.dishNameSnapshot} className="text-sm">
-                      {line.quantity} × {line.dishNameSnapshot}
-                      {line.note ? ` — ${line.note}` : ""}
-                    </p>
+              {currentOrders.map((order) => (
+                <div key={order.id} className="space-y-2">
+                  {Object.entries(
+                    order.items.reduce<Record<string, typeof order.items>>((groups, item) => {
+                      const key = String(item.kotNumber ?? 1);
+                      groups[key] = [...(groups[key] ?? []), item];
+                      return groups;
+                    }, {}),
+                  ).map(([kot, lines]) => (
+                    <div key={`${order.id}-${kot}`} className="rounded-3xl bg-white p-4">
+                      <p className="font-black">KOT {kot}</p>
+                      {lines.map((line) => (
+                        <p key={line.lineId ?? line.dishNameSnapshot} className="text-sm">
+                          {line.quantity} × {line.dishNameSnapshot}
+                          {line.note ? ` — ${line.note}` : ""}
+                          <span className="ml-2 font-bold">{KOT_STATUS_LABEL[kotItemStatus(line, order.status)]}</span>
+                        </p>
+                      ))}
+                    </div>
                   ))}
+                  {gates.viewBill ? (
+                    <div className="rounded-3xl bg-white p-4 text-lg">
+                      <p>Subtotal {formatRupeeTotal(runningBillFromServer(order).subtotal)}</p>
+                      <p>Tax {formatRupeeTotal(runningBillFromServer(order).tax)}</p>
+                      <p className="text-2xl font-black">Total {formatRupeeTotal(runningBillFromServer(order).total)}</p>
+                    </div>
+                  ) : (
+                    <p className="rounded-3xl bg-white p-4 font-bold">Bill is hidden for this captain.</p>
+                  )}
                 </div>
               ))}
-              {gates.viewBill ? (
-                <div className="rounded-3xl bg-white p-4 text-lg">
-                  <p>Subtotal {formatRupeeTotal(runningBillFromServer(currentOrder).subtotal)}</p>
-                  <p>Tax {formatRupeeTotal(runningBillFromServer(currentOrder).tax)}</p>
-                  <p className="text-2xl font-black">Total {formatRupeeTotal(runningBillFromServer(currentOrder).total)}</p>
-                </div>
-              ) : (
-                <p className="rounded-3xl bg-white p-4 font-bold">Bill is hidden for this captain.</p>
-              )}
             </>
           ) : (
             <p className="rounded-3xl bg-white p-4">No running order.</p>
@@ -727,6 +748,18 @@ export default function CaptainFloor({
         </section>
       ) : null}
 
+      {menuTable ? (
+        <CaptainTableMenu
+          table={menuTable}
+          tables={tables}
+          orders={orders}
+          onClose={() => setMenuTableId(null)}
+          onDone={() => {
+            setMenuTableId(null);
+            void refresh();
+          }}
+        />
+      ) : null}
       {error ? <p className="no-print rounded-2xl bg-rose-50 p-3 text-sm font-semibold text-rose-800">{error}</p> : null}
       <p className="sr-only">Outlet {slug}</p>
     </div>

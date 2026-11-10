@@ -582,7 +582,10 @@ export type OrderEventType =
   | "RECEIPT_REPRINT"
   | "REFUND"
   | "LINE_CANCELLED"
-  | "CAPTAIN_AUTHORIZATION";
+  | "CAPTAIN_AUTHORIZATION"
+  | "TABLE_MOVED"
+  | "TABLES_MERGED"
+  | "BILL_SPLIT";
 
 /** Captain gate — separate from kitchen OrderStatus. QR must stay pending until approved. */
 export type CaptainAuthorizationStatus =

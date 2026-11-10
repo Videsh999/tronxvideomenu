@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  equalSplitAmounts,
   formatOccupiedDuration,
   formatRupeeTotal,
   groupTablesBySection,
+  kotItemStatus,
   nextKotNumber,
+  partitionBillItems,
   runningBillFromServer,
 } from "../lib/captain-floor";
 
@@ -47,4 +50,33 @@ test("tables group by area and new KOT numbers follow the previous ticket", () =
   assert.equal(nextKotNumber([]), 1);
   assert.equal(nextKotNumber([{ kotNumber: 1 }, { kotNumber: 2 }]), 3);
   assert.equal(nextKotNumber([{}]), 2);
+});
+
+test("KOT status comes from kitchen data and stays sent until the kitchen moves it", () => {
+  assert.equal(kotItemStatus({}), "sent");
+  assert.equal(kotItemStatus({ preparationStatus: "QUEUED" }), "sent");
+  assert.equal(kotItemStatus({ preparationStatus: "PREPARING" }), "preparing");
+  assert.equal(kotItemStatus({ preparationStatus: "READY" }), "ready");
+  assert.equal(kotItemStatus({ preparationStatus: "READY" }, "SERVED"), "served");
+});
+
+test("equal shares add back to the server total", () => {
+  const shares = equalSplitAmounts(100, 3);
+  assert.deepEqual(shares, [33.34, 33.33, 33.33]);
+  assert.equal(
+    shares.reduce((sum, share) => sum + share, 0).toFixed(2),
+    "100.00",
+  );
+  assert.throws(() => equalSplitAmounts(10, 1), /2 to 20/);
+});
+
+test("an item split keeps items on both bills", () => {
+  const items = [
+    { lineId: "a", quantity: 1, cancelledQuantity: 0 },
+    { lineId: "b", quantity: 2, cancelledQuantity: 0 },
+  ];
+  const parts = partitionBillItems(items, ["b"]);
+  assert.deepEqual(parts.moving.map((item) => item.lineId), ["b"]);
+  assert.deepEqual(parts.staying.map((item) => item.lineId), ["a"]);
+  assert.throws(() => partitionBillItems(items, ["a", "b"]), /at least one item/);
 });

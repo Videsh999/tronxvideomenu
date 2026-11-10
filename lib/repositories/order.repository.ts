@@ -26,7 +26,7 @@ function amountPaidClause(expectedAmountPaid: number): Record<string, unknown> {
 }
 
 export class OrderRepository implements IOrderRepository {
-  async create(data: Omit<RestaurantOrder, "orderNumber" | "createdAt" | "updatedAt">) {
+  async create(data: Omit<RestaurantOrder, "orderNumber" | "createdAt" | "updatedAt">, session?: ClientSession) {
     await connectToDatabase();
     const now = new Date().toISOString();
     try {
@@ -43,12 +43,15 @@ export class OrderRepository implements IOrderRepository {
       { $inc: { value: 1 } },
       { new: true },
     ).lean();
-    const created = await OrderModel.create({
+    const doc = {
       ...data,
       orderNumber: Number(counter?.value ?? 1001),
       createdAt: now,
       updatedAt: now,
-    });
+    };
+    const created = session
+      ? (await OrderModel.create([doc], { session }))[0]!
+      : await OrderModel.create(doc);
     return this.mapOrder(created.toObject());
   }
 
@@ -84,6 +87,53 @@ export class OrderRepository implements IOrderRepository {
     if (tableNumbers && tableNumbers.length > 0) filter.tableNumber = { $in: tableNumbers };
     const orders = await OrderModel.find(filter).sort({ createdAt: -1 }).limit(200).lean();
     return orders.map((order) => this.mapOrder(order));
+  }
+
+  async findRunningForTable(restaurantId: string, tableNumber: number, session?: ClientSession) {
+    await connectToDatabase();
+    const orders = await OrderModel.find({
+      restaurantId,
+      tableNumber,
+      status: { $in: ["PENDING", "ACCEPTED", "PREPARING", "READY", "SERVED"] },
+    })
+      .session(session ?? null)
+      .sort({ createdAt: 1 })
+      .lean();
+    return orders.map((order) => this.mapOrder(order));
+  }
+
+  async findByFloorActionKey(restaurantId: string, key: string) {
+    await connectToDatabase();
+    const order = await OrderModel.findOne({
+      restaurantId,
+      "events.meta.floorActionKey": key,
+    }).lean();
+    return order ? this.mapOrder(order) : null;
+  }
+
+  async relocate(
+    restaurantId: string,
+    id: string,
+    table: { tableId: string; tableNumber: number },
+    event: OrderEvent,
+    expectedVersion: number,
+    session?: ClientSession,
+  ) {
+    await connectToDatabase();
+    const order = await OrderModel.findOneAndUpdate(
+      { $and: [{ restaurantId, id }, versionClause(expectedVersion)] },
+      {
+        $set: {
+          tableId: table.tableId,
+          tableNumber: table.tableNumber,
+          version: expectedVersion + 1,
+          updatedAt: new Date().toISOString(),
+        },
+        $push: { events: event },
+      },
+      { new: true, runValidators: true, session },
+    ).lean();
+    return order ? this.mapOrder(order) : null;
   }
 
   async findActiveForTable(restaurantId: string, tableNumber: number) {

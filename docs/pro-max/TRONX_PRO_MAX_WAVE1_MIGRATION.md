@@ -24,7 +24,7 @@ Legacy orders also have no `billingSettingsSnapshot`. Packaging and service char
 
 ## Captain table session
 
-`tables.guestCount`, `tables.occupiedSince`, `tables.area`, and `tables.section` are optional. `order.items.kotNumber` is optional. No collection is renamed, no document is rewritten, and no index is added. Opening a table writes the guest count and the time. Freeing a table removes those two fields. Older documents without them still load.
+`tables.guestCount`, `tables.occupiedSince`, `tables.area`, and `tables.section` are optional. `order.items.kotNumber` is optional. Order events may also be `TABLE_MOVED`, `TABLES_MERGED`, or `BILL_SPLIT`. No collection is renamed, no document is rewritten, and no index is added. Opening a table writes the guest count and the time. Freeing a table removes those two fields. Older documents without them still load.
 
 ## Index check
 
