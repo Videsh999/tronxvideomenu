@@ -5,6 +5,7 @@ import { orderRepository } from "@/lib/repositories/order.repository";
 import { orderService, OrderServiceError } from "@/lib/services/order.service";
 import { restaurantService } from "@/lib/services/restaurant.service";
 import { requireRestaurantFeature } from "@/lib/feature-access";
+import { sessionOwnsOutlet } from "@/lib/security/outlet-scope";
 
 const statusSchema = z.object({
   status: z.enum([
@@ -48,7 +49,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
       admin.restaurantId,
       orderId,
     );
-    if (!order)
+    if (!order || !sessionOwnsOutlet(admin.restaurantId, order.restaurantId))
       return NextResponse.json(
         { success: false, error: "Order not found." },
         { status: 404 },

@@ -635,6 +635,8 @@ export type RestaurantOrder = {
   igstAmount?: number;
   /** Immutable financial breakdown captured at create/append time. */
   billSnapshot?: BillBreakdown;
+  /** Outlet billing settings frozen when the order was opened. */
+  billingSettingsSnapshot?: RestaurantBillingSettings;
   total: number;
   payment: PaymentSummary;
   events?: OrderEvent[];
