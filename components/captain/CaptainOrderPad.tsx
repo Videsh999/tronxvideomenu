@@ -9,7 +9,6 @@ import { calculateRestaurantBill } from "@/lib/billing/calculate-bill";
 import { resolveLineTaxRate } from "@/lib/billing/resolve-tax-rate";
 import { resolveCaptainPermissions } from "@/lib/captain-permissions";
 import { locationName } from "@/lib/service-location";
-import { printQueuedKitchenOrderTicket } from "@/lib/kot-print";
 
 type CartLine = {
   key: string;
@@ -342,19 +341,9 @@ export default function CaptainOrderPad({
         setKotSent(false);
         setPayAmount(roundMoney(Math.max(0, (json.data?.total ?? totals.total) - (json.data?.payment?.amountPaid ?? 0))));
         setUpiRequest(null);
-        setCartOpen(true);
+        setCartOpen(false);
         patchSession(emptyCartState());
-        try {
-          const kotResponse = await fetch(`/api/captain/orders/${encodeURIComponent(orderId ?? "")}/send-kot`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-          const kotJson = await kotResponse.json();
-          if (!kotResponse.ok || !kotJson.success) throw new Error(kotJson.error || "KOT was not sent.");
-          setLastSavedOrder(kotJson.data);
-          setKotSent(true);
-          printQueuedKitchenOrderTicket(kotJson.data, undefined, json.data.kotLineIds ?? []);
-          setMessage(`Order #${json.data.orderNumber} sent to kitchen · KOT ready to print.`);
-        } catch (kotError) {
-          setMessage(`Order #${json.data.orderNumber} saved, but KOT was not sent. Tap Send KOT to retry. ${kotError instanceof Error ? kotError.message : ""}`);
-        }
+        setMessage(`Items saved to ${selectedLocationName}. Add anything else, then open the table to send one KOT when the guest is finished ordering.`);
       } catch (error) {
         setMessage(error instanceof Error ? error.message : "Unable to place order");
       }
@@ -861,13 +850,13 @@ export default function CaptainOrderPad({
                 onClick={placeOrder}
                 className="min-h-11 w-full rounded-xl bg-[#f59e0b] text-sm font-bold text-neutral-950 disabled:opacity-40"
               >
-                {pending ? "Sending…" : "Send order & print KOT"}
+                {pending ? "Saving items…" : "Save items to table"}
               </button>
               {lastOrderId ? (
                 <section className="space-y-2 rounded-xl border border-white/15 bg-white/5 p-3" aria-label="Saved order actions">
                   <div className="flex items-center justify-between gap-2 text-xs"><strong>Saved order #{lastOrderNumber}</strong><span className="text-white/70">{selectedLocationName}</span></div>
                   {selectedLocation ? <Link href={`/captain/${slug}/tables/${encodeURIComponent(selectedLocation.id)}`} className="flex min-h-11 items-center justify-center rounded-lg border border-white/30 bg-white/10 px-3 text-sm font-bold">View all table items &amp; bill</Link> : null}
-                  <div className="flex gap-2"><button type="button" disabled={kotPending || savedUnsentCount === 0} onClick={sendKot} className="min-h-10 flex-1 rounded-lg bg-amber-500 px-3 text-xs font-bold text-neutral-950 disabled:opacity-50">{kotPending ? "Sending KOT…" : savedUnsentCount > 0 ? `Send ${savedUnsentCount} new item${savedUnsentCount === 1 ? "" : "s"} to kitchen` : "All items sent"}</button>{kotSent && lastSavedOrder ? <button type="button" onClick={() => printQueuedKitchenOrderTicket(lastSavedOrder, undefined, previousKotLineIds)} className="min-h-10 rounded-lg border border-white/30 px-3 text-xs font-bold">Print KOT copy</button> : null}</div>
+                  <p className="text-xs text-white/60">Saved on the table. KOT prints once when the guest finishes ordering.</p>
                   {canRecordAny ? <>
                   <div className="grid grid-cols-3 gap-1.5">
                     {(["CASH", "UPI", "CARD"] as PaymentMethod[]).map((method) => {

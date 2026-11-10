@@ -13,20 +13,22 @@ export default async function CaptainOrdersPage({ params }: { params: Promise<{ 
   if (restaurant.slug !== slug) redirect(`/captain/${restaurant.slug}`);
 
   const assigned = new Set(captain.assignedTableIds ?? []);
-  const orders = await orderService.listForRestaurant(captain.restaurantId);
+  const [activeOrders, doneOrders] = await Promise.all([
+    orderService.listForRestaurant(captain.restaurantId),
+    orderService.listDoneHistory(captain.restaurantId, 500),
+  ]);
+  const orders = [...activeOrders, ...doneOrders];
   const scoped = orders.filter(
-    (order) =>
-      assigned.has(order.tableId) &&
-      !["COMPLETED", "CANCELLED", "REJECTED"].includes(order.status),
+    (order) => assigned.has(order.tableId),
   );
 
   return (
     <div className="space-y-4">
       <header>
         <p className="text-xs font-bold uppercase tracking-[0.18em] text-neutral-400">Service</p>
-        <h1 className="mt-1 text-3xl font-bold tracking-tight">Active orders</h1>
+        <h1 className="mt-1 text-3xl font-bold tracking-tight">Orders</h1>
         <p className="mt-1 text-sm text-neutral-500">
-          All restaurant tables are available. Open a table to add items and send its KOT.
+          Full table order history, items, status and visit duration.
         </p>
       </header>
       <CaptainOrders

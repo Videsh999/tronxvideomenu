@@ -28,7 +28,7 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ tableId: string }> },
 ) {
-  const { captain, error } = await requireCaptain("ORDER_MANAGEMENT");
+  const { captain, restaurant, error } = await requireCaptain("ORDER_MANAGEMENT");
   if (error) return error;
   const { tableId } = await params;
 
@@ -46,8 +46,13 @@ export async function GET(
     return NextResponse.json({ success: false, error: "Table not found" }, { status: 404 });
   }
 
-  const [overview, requests] = await Promise.all([
-    tableSessionService.overview(captain.restaurantId, table.id),
+  let overview = await tableSessionService.overview(captain.restaurantId, table.id);
+  const legacyActiveOrder = await orderService.findActiveForTable(captain.restaurantId, table.id);
+  if (!overview.session && legacyActiveOrder) {
+    await tableSessionService.ensureActive({ restaurant, table, openedBy: { role: "CAPTAIN", id: captain.id, name: captain.name, email: captain.email } });
+    overview = await tableSessionService.overview(captain.restaurantId, table.id);
+  }
+  const [requests] = await Promise.all([
     serviceRequestService.listForTable(captain.restaurantId, tableId),
   ]);
   const activeOrder = [...overview.orders].reverse().find((order) => !["COMPLETED", "CANCELLED", "REJECTED", "REFUNDED"].includes(order.status)) ?? null;

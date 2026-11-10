@@ -17,7 +17,11 @@ export async function GET() {
   if (error) return error;
   try {
     const assigned = new Set(captain.assignedTableIds ?? []);
-    const orders = await orderService.listForRestaurant(captain.restaurantId);
+    const [activeOrders, doneOrders] = await Promise.all([
+      orderService.listForRestaurant(captain.restaurantId),
+      orderService.listDoneHistory(captain.restaurantId, 500),
+    ]);
+    const orders = [...activeOrders, ...doneOrders];
     const scoped = orders.filter((order) => assigned.has(order.tableId));
     return NextResponse.json({ success: true, data: scoped });
   } catch {

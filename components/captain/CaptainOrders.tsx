@@ -282,6 +282,7 @@ export default function CaptainOrders({
                       {formatOrderClock(order.createdAt)} · {statusLabel(order.status)}
                       {isPaid ? ` · Paid ${order.payment?.method}` : " · Unpaid"}
                     </p>
+                    {order.completedAt ? <p className="mt-1 text-xs font-semibold text-neutral-500">Guest visit · {Math.max(1, Math.round((new Date(order.completedAt).getTime() - new Date(order.createdAt).getTime()) / 60000))} min</p> : null}
                     <p className="mt-1 text-base font-bold tabular-nums">₹{order.total}</p>
                   </div>
 
