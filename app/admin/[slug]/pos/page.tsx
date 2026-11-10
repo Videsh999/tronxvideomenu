@@ -4,6 +4,7 @@ import { restaurantService } from "@/lib/services/restaurant.service";
 import { tableRepository } from "@/lib/repositories/table.repository";
 import { posShiftService } from "@/lib/services/pos-shift.service";
 import { requireRestaurantFeature } from "@/lib/feature-access";
+import { resolveStaticMerchantQrUrl } from "@/lib/upi-payment";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,12 @@ export default async function PosPage({ params }: { params: Promise<{ slug: stri
       dishes={menu.dishes}
       tables={tables.filter((table) => table.isActive && table.status !== "CLOSED")}
       initialShift={shift}
+      upiSettings={{
+        enabled: menu.restaurant.billing?.upiEnabled === true || menu.restaurant.name.toLowerCase().includes("triparna"),
+        upiId: menu.restaurant.billing?.upiId ?? "",
+        payeeName: menu.restaurant.billing?.upiPayeeName || menu.restaurant.name,
+        staticQrUrl: resolveStaticMerchantQrUrl(menu.restaurant.name, menu.restaurant.billing?.upiStaticQrUrl),
+      }}
     />
   );
 }

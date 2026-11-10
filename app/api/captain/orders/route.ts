@@ -145,28 +145,7 @@ export async function POST(request: Request) {
       name: captain.name,
     };
 
-    const active = await orderService.findActiveForTable(
-      captain.restaurantId,
-      parsed.data.tableNumber,
-    );
-
-    let order;
-    let appended = false;
-    if (active && !["SERVED"].includes(active.status)) {
-      order = await orderService.appendItemsToOrder(
-        captain.restaurantId,
-        restaurant.slug,
-        active.id,
-        {
-          items: parsed.data.items,
-          idempotencyKey: parsed.data.idempotencyKey,
-          orderNote: noteParts.length ? noteParts.join(" · ") : undefined,
-        },
-        actor,
-      );
-      appended = true;
-    } else {
-      order = await orderService.createPosOrder(
+    const order = await orderService.createPosOrder(
         captain.restaurantId,
         restaurant.slug,
         {
@@ -183,17 +162,12 @@ export async function POST(request: Request) {
         },
         actor,
       );
-    }
-
-    // New captain-entered orders always remain in New until explicitly accepted from Orders.
-    // Items appended to an order already in production are sent by appendItemsToOrder.
-    const sentToKitchen = appended && ["ACCEPTED", "PREPARING", "READY"].includes(order.status);
 
     return NextResponse.json(
       {
         success: true,
         data: order,
-        meta: { sentToKitchen, appended, source: "CAPTAIN_DIRECT" },
+        meta: { sentToKitchen: false, appended: false, source: "CAPTAIN_DIRECT", tableSessionId: order.tableSessionId },
       },
       { status: 201 },
     );

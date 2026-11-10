@@ -90,6 +90,13 @@ export const restaurantBillingSettingsSchema = z
     serviceChargeAmount: z.number().min(0).max(1_000_000).optional(),
     serviceChargePercent: z.number().min(0).max(100).optional(),
     effectiveFrom: z.string().trim().max(40).optional(),
+    upiEnabled: z.boolean().optional(),
+    upiId: z.string().trim().max(120).refine(
+      (value) => value === "" || /^[A-Za-z0-9._-]{2,256}@[A-Za-z][A-Za-z0-9.-]{1,64}$/.test(value),
+      "Enter a valid UPI ID, for example merchant@bank",
+    ).optional(),
+    upiPayeeName: z.string().trim().max(120).optional(),
+    upiStaticQrUrl: z.string().trim().url().max(2000).or(z.literal("")).optional(),
   })
   .strict();
 export type RestaurantBillingSettingsInput = z.infer<typeof restaurantBillingSettingsSchema>;
@@ -300,6 +307,7 @@ export const placeOrderSchema = z.object({
   slug: z.string().min(1),
   locationType: z.enum(["TABLE", "ROOM"]).default("TABLE"),
   tableNumber: z.number().int().min(1),
+  tableSessionId: z.string().trim().min(1).max(120).optional(),
   idempotencyKey: z.string().uuid(),
   items: z
     .array(

@@ -11,21 +11,25 @@ import {
   UtensilsCrossed,
   Wallet,
 } from "lucide-react";
-import type { OrderSummary, RestaurantTable } from "@/types";
+import type { MasterBill, OrderSummary, RestaurantTable, TableSession } from "@/types";
 import { locationName } from "@/lib/service-location";
 import type { ServiceRequest, ServiceRequestType } from "@/types/service-request";
 import { TABLE_STATUS_LABEL, TABLE_STATUS_STYLE } from "@/lib/captain-floor";
 import { isPendingCaptainApproval } from "@/lib/order-authorization";
 import { primaryFloorAction } from "@/lib/order-board";
-import { printKitchenOrderTicket } from "@/lib/kot-print";
+import { printQueuedKitchenOrderTicket, printSessionKitchenTicket } from "@/lib/kot-print";
+import UpiPaymentQr from "@/components/shared/UpiPaymentQr";
 
 function money(value: number, currency = "INR") {
   return new Intl.NumberFormat(undefined, {
     style: "currency",
     currency,
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(value);
 }
+
+type HistoryFilter = "ALL" | OrderSummary["status"];
 
 const REQUEST_TYPES: { type: ServiceRequestType; label: string }[] = [
   { type: "WATER", label: "Water" },
@@ -40,30 +44,55 @@ const REQUEST_TYPES: { type: ServiceRequestType; label: string }[] = [
 
 export default function CaptainTableWorkspace({
   slug,
+  restaurantName,
   captainName,
   currency,
   initialTable,
+  availableTables,
   initialOrder,
+  initialOrders,
+  initialSession,
+  initialBill,
   initialRequests,
+  upiSettings,
 }: {
   slug: string;
+  restaurantName?: string;
   captainName: string;
   currency: string;
   initialTable: RestaurantTable;
+  availableTables: RestaurantTable[];
   initialOrder: OrderSummary | null;
+  initialOrders: OrderSummary[];
+  initialSession: TableSession | null;
+  initialBill: MasterBill | null;
   initialRequests: ServiceRequest[];
+  upiSettings?: { enabled: boolean; upiId: string; payeeName: string; staticQrUrl?: string };
 }) {
   const [table, setTable] = useState(initialTable);
   const [order, setOrder] = useState(initialOrder);
+  const [orders, setOrders] = useState(initialOrders);
+  const [session, setSession] = useState(initialSession);
+  const [bill, setBill] = useState(initialBill);
+  const [splitCount, setSplitCount] = useState(2);
   const [requests, setRequests] = useState(initialRequests);
   const [guestCount, setGuestCount] = useState(String(initialOrder?.guestCount ?? ""));
   const [note, setNote] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("ALL");
+  const [billServiceCharge, setBillServiceCharge] = useState("0");
+  const [destinationTableId, setDestinationTableId] = useState("");
   const [pending, startTransition] = useTransition();
 
   const openRequests = useMemo(
     () => requests.filter((request) => !["DONE", "CANCELLED"].includes(request.status)),
     [requests],
+  );
+  const runningTotal = useMemo(() => orders.filter((row) => !["CANCELLED", "REJECTED", "REFUNDED"].includes(row.status)).reduce((sum, row) => sum + row.total, 0), [orders]);
+  const previouslyPaid = useMemo(() => orders.reduce((sum, row) => sum + (row.payment?.amountPaid ?? 0), 0), [orders]);
+  const historyOrders = useMemo(
+    () => orders.filter((row) => historyFilter === "ALL" || row.status === historyFilter),
+    [historyFilter, orders],
   );
 
   function runAction(action: string, body: Record<string, unknown> = {}) {
@@ -84,6 +113,9 @@ export default function CaptainTableWorkspace({
         if (refreshed.success) {
           setTable(refreshed.data.table);
           setOrder(refreshed.data.activeOrder);
+          setOrders(refreshed.data.orders ?? []);
+          setSession(refreshed.data.session ?? null);
+          setBill(refreshed.data.bill ?? null);
           setRequests(refreshed.data.requests);
         }
       } catch (error) {
@@ -141,9 +173,54 @@ export default function CaptainTableWorkspace({
         if (refreshed.success) {
           setTable(refreshed.data.table);
           setOrder(refreshed.data.activeOrder);
+          setOrders(refreshed.data.orders ?? []);
+          setSession(refreshed.data.session ?? null);
+          setBill(refreshed.data.bill ?? null);
           setRequests(refreshed.data.requests);
         }
       });
+  }
+
+  function generateFinalBill(revise = false) {
+    if (!session) return;
+    startTransition(async () => {
+      setMessage(null);
+      try {
+        const response = await fetch(`/api/captain/tables/${table.id}/session`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "GENERATE_BILL", sessionId: session.id, revise, tipAmount: Number(billServiceCharge) || 0 }),
+        });
+        const json = await response.json();
+        if (!json.success) throw new Error(json.error || "Unable to generate final bill");
+        setBill(json.data);
+        setMessage(`Final bill ${json.data.billNumber} generated`);
+        await refreshTable();
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : "Unable to generate final bill");
+      }
+    });
+  }
+
+  function sessionBillingAction(body: Record<string, unknown>, success: string) {
+    startTransition(async () => {
+      setMessage(null);
+      try {
+        const response = await fetch(`/api/captain/tables/${table.id}/session`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+        const json = await response.json();
+        if (!json.success) throw new Error(json.error || "Billing action failed");
+        if (body.action === "SPLIT_BILL" || body.action === "RECORD_PAYMENT") setBill(json.data);
+        setMessage(success);
+        await refreshTable();
+      } catch (error) { setMessage(error instanceof Error ? error.message : "Billing action failed"); }
+    });
+  }
+
+  function moveOrMerge(action: "MOVE_TABLE" | "MERGE_TABLE") {
+    if (!session || !destinationTableId) return;
+    const destination = availableTables.find((row) => row.id === destinationTableId);
+    if (!destination) return;
+    sessionBillingAction(action === "MOVE_TABLE" ? { action, sessionId: session.id, destinationTableId: destination.id, destinationTableNumber: destination.tableNumber, destinationLocationType: destination.locationType ?? "TABLE" } : { action, sessionId: session.id, destinationSessionId: destinationTableId }, action === "MOVE_TABLE" ? `Moved session to ${locationName(destination)}` : `Merged into ${locationName(destination)}`);
   }
 
   /** Approval clears the captain gate; a separate acceptance sends the order to kitchen. */
@@ -167,16 +244,17 @@ export default function CaptainTableWorkspace({
           setOrder(json.data);
           setMessage(`Order #${order.orderNumber} approved · now waiting in New orders`);
         } else {
-          const response = await fetch(`/api/captain/orders/${order.id}`, {
-            method: "PATCH",
+          const sentBefore = order.kotLineIds ?? [];
+          const response = await fetch(`/api/captain/orders/${order.id}/send-kot`, {
+            method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ status: "PREPARING" }),
+            body: "{}",
           });
           const json = await response.json();
           if (!json.success) throw new Error(json.error || "Unable to send to kitchen");
           setOrder(json.data);
+          printQueuedKitchenOrderTicket(json.data, restaurantName, sentBefore);
           setMessage(`Order #${order.orderNumber} sent to kitchen`);
-          printKitchenOrderTicket(json.data);
         }
         await refreshTable();
       } catch (error) {
@@ -280,10 +358,80 @@ export default function CaptainTableWorkspace({
         </p>
       ) : null}
 
+      <section className="rounded-3xl border border-neutral-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-neutral-400">Table session</p>
+            <h2 className="mt-1 text-xl font-black">{session?.sessionNumber ?? "Starts with first order"}</h2>
+            <p className="mt-1 text-sm text-neutral-500">{orders.length} independent order{orders.length === 1 ? "" : "s"} · Running bill {money(runningTotal, currency)} · Paid {money(previouslyPaid, currency)}</p>
+          </div>
+          <div className="flex flex-wrap items-end gap-2"><label className="text-xs font-semibold text-neutral-600">Service charge / tip<input type="number" min="0" step="0.01" value={billServiceCharge} onChange={(event) => setBillServiceCharge(event.target.value)} className="mt-1 block h-10 w-32 rounded-lg border border-neutral-300 px-2 text-sm" /></label><button type="button" disabled={pending || !session || orders.length === 0} onClick={() => generateFinalBill(Boolean(bill))} className="min-h-11 rounded-xl bg-violet-700 px-4 text-sm font-bold text-white disabled:opacity-40">{bill ? "Generate revised bill" : "Finalize bill"}</button><button type="button" disabled={orders.length === 0} onClick={() => printSessionKitchenTicket(orders.filter((row) => !["CANCELLED", "REJECTED", "REFUNDED"].includes(row.status)), restaurantName, locationName(table))} className="min-h-11 rounded-xl border border-neutral-300 px-4 text-sm font-bold">Print session KOT</button></div>
+        </div>
+        {orders.length ? (
+          <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+            {orders.map((row) => <button key={row.id} type="button" onClick={() => setOrder(row)} className={`min-w-36 rounded-xl border px-3 py-2 text-left text-xs ${order?.id === row.id ? "border-neutral-900 bg-neutral-900 text-white" : "border-neutral-200"}`}><strong className="block">Order #{row.orderNumber}</strong><span>{row.status} · {money(row.total, currency)}</span></button>)}
+          </div>
+        ) : null}
+        {session ? <div className="mt-4 flex flex-wrap items-end gap-2 rounded-2xl border border-neutral-200 bg-neutral-50 p-3"><label className="text-xs font-semibold text-neutral-600">Table tools<select value={destinationTableId} onChange={(event) => setDestinationTableId(event.target.value)} className="mt-1 block h-10 rounded-lg border border-neutral-300 bg-white px-2 text-sm"><option value="">Select destination</option>{availableTables.filter((row) => row.id !== table.id && row.isActive && row.status !== "CLOSED").map((row) => <option key={row.id} value={row.id}>{locationName(row)}</option>)}</select></label><button type="button" disabled={!destinationTableId || pending} onClick={() => moveOrMerge("MOVE_TABLE")} className="h-10 rounded-lg border border-neutral-300 px-3 text-xs font-bold">Move table</button><button type="button" disabled={!destinationTableId || pending} onClick={() => moveOrMerge("MERGE_TABLE")} className="h-10 rounded-lg border border-amber-300 bg-amber-50 px-3 text-xs font-bold text-amber-900">Merge tables</button></div> : null}
+        {bill ? (
+          <div className="mt-4 grid gap-3 rounded-2xl bg-violet-50 p-4 sm:grid-cols-3">
+            <div><p className="text-xs text-violet-700">Final bill</p><p className="font-bold">{bill.billNumber} · v{bill.version}</p></div>
+            <div><p className="text-xs text-violet-700">Subtotal</p><p className="font-bold">{money(bill.subtotal, currency)}</p></div>
+            <div><p className="text-xs text-violet-700">Charges & tax</p><p className="font-semibold">{bill.serviceCharge > 0 ? `Service ${money(bill.serviceCharge, currency)} · ` : ""}{bill.packagingCharge > 0 ? `Pack ${money(bill.packagingCharge, currency)} · ` : ""}GST {money(bill.taxAmount, currency)}</p><p className="text-xs text-neutral-500">CGST/SGST included where applicable</p></div>
+            <div><p className="text-xs text-violet-700">Total / Paid</p><p className="font-bold">{money(bill.total, currency)} / {money(bill.amountPaid, currency)}</p></div>
+            <div><p className="text-xs text-violet-700">Outstanding</p><p className="text-lg font-black">{money(bill.outstandingAmount, currency)}</p></div>
+            {bill.outstandingAmount > 0 && upiSettings?.enabled && (upiSettings.upiId || upiSettings.staticQrUrl) ? <div className="sm:col-span-3"><UpiPaymentQr upiId={upiSettings.upiId} payeeName={upiSettings.payeeName} staticQrUrl={upiSettings.staticQrUrl} amount={bill.outstandingAmount} orderNumber={bill.billNumber} compact /></div> : null}
+            {bill.outstandingAmount > 0 && bill.allocations.length === 0 ? <button type="button" disabled={pending} onClick={() => sessionBillingAction({ action: "RECORD_PAYMENT", billId: bill.id, amount: bill.outstandingAmount, method: "UPI", idempotencyKey: crypto.randomUUID() }, "UPI payment recorded after verification")} className="min-h-10 rounded-xl border border-violet-300 bg-white px-4 text-sm font-bold text-violet-900 sm:col-span-3">Verified payment received · record UPI</button> : null}
+            {bill.amountPaid === 0 ? <div className="flex flex-wrap items-center gap-2 sm:col-span-3"><label className="text-xs font-semibold">Equal split customers <input type="number" min={2} max={50} value={splitCount} onChange={(event) => setSplitCount(Math.max(2, Math.min(50, Number(event.target.value) || 2)))} className="ml-2 h-9 w-16 rounded-lg border border-violet-200 px-2" /></label><button type="button" disabled={pending} onClick={() => sessionBillingAction({ action: "SPLIT_BILL", billId: bill.id, version: bill.version, mode: "EQUAL", customers: splitCount }, "Bill split equally")} className="h-9 rounded-lg bg-violet-700 px-3 text-xs font-bold text-white">Split equally</button></div> : null}
+            {bill.allocations.length ? <div className="space-y-2 sm:col-span-3">{bill.allocations.map((allocation) => <div key={allocation.id} className="rounded-xl border border-violet-200 bg-white p-3"><div className="flex items-center justify-between gap-3"><span className="font-semibold">{allocation.label}</span><span className="font-bold">{money(allocation.amount - allocation.amountPaid, currency)} due</span></div>{allocation.amountPaid < allocation.amount && upiSettings?.enabled && upiSettings.upiId ? <div className="mt-2"><UpiPaymentQr upiId={upiSettings.upiId} payeeName={upiSettings.payeeName} amount={allocation.amount - allocation.amountPaid} orderNumber={`${bill.billNumber}-${allocation.id}`} compact /><button type="button" disabled={pending} onClick={() => sessionBillingAction({ action: "RECORD_PAYMENT", billId: bill.id, allocationId: allocation.id, amount: allocation.amount - allocation.amountPaid, method: "UPI", idempotencyKey: crypto.randomUUID() }, `${allocation.label} payment recorded`)} className="mt-2 min-h-9 w-full rounded-lg bg-violet-700 px-3 text-xs font-bold text-white">Verified · record UPI payment</button></div> : null}</div>)}</div> : null}
+            {bill.status === "PAID" && session ? <button type="button" disabled={pending} onClick={() => sessionBillingAction({ action: "CLOSE_SESSION", sessionId: session.id }, "Session closed · table sent to cleaning")} className="min-h-10 rounded-xl bg-emerald-700 px-4 text-sm font-bold text-white sm:col-span-3">Close paid session</button> : null}
+          </div>
+        ) : null}
+      </section>
+
+      <section aria-labelledby="complete-order-history" className="rounded-3xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-neutral-400">Session timeline</p>
+            <h2 id="complete-order-history" className="mt-1 text-xl font-black">Complete order history</h2>
+            <p className="mt-1 text-sm text-neutral-500">Every independent order stays visible for this session. Sorted oldest to newest.</p>
+          </div>
+          <span className="rounded-full bg-neutral-100 px-3 py-1 text-xs font-bold text-neutral-600">{orders.length} order{orders.length === 1 ? "" : "s"}</span>
+        </div>
+        <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+          {(["ALL", "PENDING", "ACCEPTED", "PREPARING", "READY", "SERVED", "CANCELLED"] as const).map((filter) => (
+            <button key={filter} type="button" onClick={() => setHistoryFilter(filter)} className={`min-h-9 shrink-0 rounded-full border px-3 text-xs font-bold ${historyFilter === filter ? "border-neutral-900 bg-neutral-900 text-white" : "border-neutral-200 text-neutral-600"}`}>
+              {filter === "ALL" ? "All orders" : filter[0] + filter.slice(1).toLowerCase()}
+            </button>
+          ))}
+        </div>
+        {historyOrders.length === 0 ? (
+          <p className="mt-4 rounded-2xl border border-dashed border-neutral-300 bg-neutral-50 p-5 text-center text-sm text-neutral-500">No orders match this filter.</p>
+        ) : (
+          <ol className="mt-4 space-y-3">
+            {historyOrders.map((row) => (
+              <li key={row.id} className={`rounded-2xl border p-4 ${order?.id === row.id ? "border-neutral-900 bg-neutral-50" : "border-neutral-200"}`}>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <button type="button" onClick={() => setOrder(row)} className="text-left">
+                    <p className="font-black">Order #{row.orderNumber}</p>
+                    <p className="mt-0.5 text-xs text-neutral-500">{new Date(row.createdAt).toLocaleString()} · {(row.source ?? row.channel ?? "ORDER").replace(/_/g, " ")}</p>
+                  </button>
+                  <div className="text-right"><p className="font-black tabular-nums">{money(row.total, currency)}</p><p className="text-xs text-neutral-500">{row.status} · {row.payment?.status ?? "UNPAID"}</p></div>
+                </div>
+                <div className="mt-3 divide-y divide-neutral-100 rounded-xl bg-white">
+                  {row.items.map((item, index) => <div key={item.lineId ?? `${row.id}-${index}`} className="flex items-start justify-between gap-3 px-3 py-2 text-sm"><span><strong>{item.quantity}× {item.dishNameSnapshot}</strong>{item.variantNameSnapshot ? ` · ${item.variantNameSnapshot}` : ""}<span className="block text-[11px] text-neutral-500">{(item.kitchenStation ?? "MAIN").toLowerCase()} · {item.preparationStatus ?? "QUEUED"}{item.note ? ` · ${item.note}` : ""}</span></span><span className="shrink-0 tabular-nums">{money(item.itemTotal, currency)}</span></div>)}
+                </div>
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-neutral-500"><span>KOT #{row.orderNumber} · Kitchen {row.status}</span><span>{row.payment?.amountPaid ? `Paid ${money(row.payment.amountPaid, currency)}` : "Payment unpaid"}</span></div>
+              </li>
+            ))}
+          </ol>
+        )}
+      </section>
+
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
         <section className="space-y-4 rounded-3xl border border-neutral-200 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between gap-2">
-            <h2 className="text-lg font-bold">Active order</h2>
+            <h2 className="text-lg font-bold">Selected order</h2>
             {order ? (
               <span className="text-xs font-semibold uppercase tracking-wide text-neutral-400">
                 #{order.orderNumber} · {order.status}

@@ -13,6 +13,9 @@ import type {
   Captain,
   RestaurantAdminAccount,
   Reservation,
+  TableSession,
+  MasterBill,
+  DynamicPaymentRequest,
 } from "@/types";
 
 const baseOptions = {
@@ -114,6 +117,10 @@ const restaurantSchema = new Schema<Restaurant>(
       effectiveFrom: String,
       updatedAt: String,
       updatedByEmail: String,
+      upiEnabled: { type: Boolean, default: false },
+      upiId: { type: String, maxlength: 120 },
+      upiPayeeName: { type: String, maxlength: 120 },
+      upiStaticQrUrl: { type: String, maxlength: 2000 },
     },
     organizationId: { type: String, index: true },
     inventorySettings: {
@@ -134,6 +141,7 @@ const restaurantSchema = new Schema<Restaurant>(
       enabled: { type: Boolean, default: false },
     },
     orderSettings: {
+      customerOrderingMode: { type: String, enum: ["OFF", "CAPTAIN_APPROVAL", "AUTOMATIC"], default: "CAPTAIN_APPROVAL" },
       qrRequiresCaptainApproval: { type: Boolean, default: true },
     },
   },
@@ -433,6 +441,7 @@ const orderSchema = new Schema<RestaurantOrder>(
     restaurantId: { type: String, required: true },
     tableId: { type: String, required: true },
     tableNumber: { type: Number, required: true },
+    tableSessionId: { type: String, index: true },
     locationType: { type: String, enum: ["TABLE", "ROOM"] },
     orderNumber: { type: Number, required: true },
     customerTokenHash: { type: String, required: true, select: false },
@@ -480,6 +489,7 @@ const orderSchema = new Schema<RestaurantOrder>(
       decisionIdempotencyKey: String,
     },
     items: { type: [orderItemSnapshotSchema], required: true },
+    kotLineIds: { type: [String], default: [] },
     subtotal: { type: Number, required: true, min: 0 },
     billDiscountAmount: { type: Number, min: 0, default: 0 },
     couponCodeSnapshot: String,
@@ -547,6 +557,72 @@ orderSchema.index({ restaurantId: 1, idempotencyKey: 1 }, { unique: true });
 orderSchema.index({ restaurantId: 1, createdAt: -1 });
 orderSchema.index({ restaurantId: 1, status: 1, createdAt: -1 });
 orderSchema.index({ restaurantId: 1, customerId: 1, createdAt: -1 });
+orderSchema.index({ restaurantId: 1, tableSessionId: 1, createdAt: 1 });
+
+const tableSessionSchema = new Schema<TableSession>(
+  {
+    id: { type: String, required: true, unique: true, index: true },
+    sessionNumber: { type: String, required: true },
+    organizationId: { type: String, index: true },
+    restaurantId: { type: String, required: true, index: true },
+    serviceLocationId: { type: String, required: true, index: true },
+    tableNumberSnapshot: { type: Number, required: true },
+    locationType: { type: String, enum: ["TABLE", "ROOM"], required: true },
+    status: { type: String, enum: ["ACTIVE", "BILLING", "PAYMENT_PENDING", "CLOSED", "CANCELLED"], required: true, default: "ACTIVE" },
+    billingStatus: { type: String, enum: ["OPEN", "DRAFT", "ISSUED", "PARTIALLY_PAID", "PAID", "VOID"], required: true, default: "OPEN" },
+    openedAt: { type: String, required: true },
+    openedBy: { type: Schema.Types.Mixed, required: true },
+    closedAt: String,
+    closedBy: Schema.Types.Mixed,
+    guestCount: { type: Number, min: 1 },
+    customerReference: String,
+    version: { type: Number, required: true, default: 1, min: 1 },
+    createdAt: { type: String, required: true },
+    updatedAt: { type: String, required: true },
+  },
+  { ...baseOptions, collection: "tableSessions" },
+);
+tableSessionSchema.index({ restaurantId: 1, sessionNumber: 1 }, { unique: true });
+tableSessionSchema.index(
+  { restaurantId: 1, serviceLocationId: 1 },
+  { unique: true, partialFilterExpression: { status: { $in: ["ACTIVE", "BILLING", "PAYMENT_PENDING"] } } },
+);
+
+const masterBillSchema = new Schema(
+  {
+    id: { type: String, required: true, unique: true, index: true },
+    billNumber: { type: String, required: true },
+    organizationId: { type: String, index: true },
+    restaurantId: { type: String, required: true, index: true },
+    tableSessionId: { type: String, required: true, index: true },
+    serviceLocationId: { type: String, required: true },
+    version: { type: Number, required: true, min: 1 },
+    status: { type: String, enum: ["ISSUED", "PARTIALLY_PAID", "PAID", "VOID", "SUPERSEDED"], required: true },
+    orderIds: { type: [String], required: true },
+    lines: { type: [Schema.Types.Mixed], required: true },
+    subtotal: { type: Number, required: true, min: 0 },
+    discountAmount: { type: Number, required: true, min: 0 },
+    taxAmount: { type: Number, required: true, min: 0 },
+    packagingCharge: { type: Number, required: true, min: 0 },
+    serviceCharge: { type: Number, required: true, min: 0 },
+    tipAmount: { type: Number, required: true, min: 0 },
+    total: { type: Number, required: true, min: 0 },
+    amountPaid: { type: Number, required: true, min: 0 },
+    outstandingAmount: { type: Number, required: true, min: 0 },
+    fingerprint: { type: String, required: true },
+    splitMode: { type: String, enum: ["NONE", "EQUAL", "ITEMS", "CUSTOM"], required: true, default: "NONE" },
+    allocations: { type: [Schema.Types.Mixed], default: [] },
+    paymentLedger: { type: [Schema.Types.Mixed], default: [] },
+    issuedAt: { type: String, required: true },
+    issuedBy: { type: Schema.Types.Mixed, required: true },
+    supersededAt: String,
+    createdAt: { type: String, required: true },
+    updatedAt: { type: String, required: true },
+  },
+  { ...baseOptions, collection: "masterBills" },
+);
+masterBillSchema.index({ restaurantId: 1, tableSessionId: 1, version: 1 }, { unique: true });
+masterBillSchema.index({ restaurantId: 1, billNumber: 1 }, { unique: true });
 
 const orderCounterSchema = new Schema(
   {
@@ -707,6 +783,12 @@ export const TableModel =
 export const OrderModel =
   mongoose.models.Order ??
   mongoose.model<RestaurantOrder>("Order", orderSchema);
+export const TableSessionModel =
+  mongoose.models.TableSession ??
+  mongoose.model<TableSession>("TableSession", tableSessionSchema);
+export const MasterBillModel =
+  mongoose.models.MasterBill ??
+  mongoose.model<MasterBill>("MasterBill", masterBillSchema);
 export const OrderCounterModel =
   mongoose.models.OrderCounter ??
   mongoose.model("OrderCounter", orderCounterSchema);
@@ -1566,6 +1648,43 @@ export const DeviceConnectorModel =
 export const ConnectorPairingCodeModel =
   mongoose.models.ConnectorPairingCode ??
   mongoose.model("ConnectorPairingCode", connectorPairingCodeSchema);
+
+const dynamicPaymentRequestSchema = new Schema<DynamicPaymentRequest>(
+  {
+    id: { type: String, required: true, unique: true, index: true },
+    restaurantId: { type: String, required: true, index: true },
+    organizationId: { type: String, index: true },
+    outletId: { type: String, required: true, index: true },
+    orderId: { type: String, required: true, index: true },
+    tableSessionId: { type: String, index: true },
+    billId: { type: String, index: true },
+    billVersion: Number,
+    paymentReferenceId: { type: String, required: true, unique: true, index: true },
+    merchantAccountId: { type: String, required: true },
+    provider: { type: String, required: true, enum: ["RAZORPAY"] },
+    providerQrId: { type: String, required: true, unique: true, index: true },
+    qrImageUrl: String,
+    amount: { type: Number, required: true, min: 0.01 },
+    currency: { type: String, required: true, enum: ["INR"] },
+    status: {
+      type: String,
+      required: true,
+      enum: ["CREATING", "PROCESSING", "PENDING", "PAID", "FAILED", "EXPIRED", "CANCELLED", "PARTIAL", "WRONG_AMOUNT"],
+      index: true,
+    },
+    expiresAt: { type: String, required: true, index: true },
+    providerPaymentId: String,
+    providerEventIds: { type: [String], default: [] },
+    failureReason: String,
+    createdAt: { type: String, required: true, index: true },
+    updatedAt: { type: String, required: true },
+  },
+  { ...baseOptions, collection: "dynamicPaymentRequests" },
+);
+dynamicPaymentRequestSchema.index({ restaurantId: 1, orderId: 1, status: 1 });
+
+export const DynamicPaymentRequestModel =
+  mongoose.models.DynamicPaymentRequest ?? mongoose.model("DynamicPaymentRequest", dynamicPaymentRequestSchema);
 
 const hardwarePilotRunSchema = new Schema(
   {

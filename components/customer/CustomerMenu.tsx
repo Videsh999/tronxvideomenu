@@ -22,10 +22,13 @@ import type { OrderSummary } from "@/types";
 import ReservationPanel from "@/components/customer/ReservationPanel";
 import WifiAccessPanel from "@/components/customer/WifiAccessPanel";
 import CustomerLoyaltyPanel from "@/components/customer/CustomerLoyaltyPanel";
+import UpiPaymentQr from "@/components/shared/UpiPaymentQr";
+import { calculateRestaurantBill } from "@/lib/billing/calculate-bill";
+import { resolveLineTaxRate } from "@/lib/billing/resolve-tax-rate";
 
 type CartSelection = { groupId: string; addonIds: string[] };
 type CartLine = { key: string; dishId: string; quantity: number; selections: CartSelection[] };
-type CustomerOrderReceipt = Pick<OrderSummary, "id" | "orderNumber" | "tableNumber" | "total" | "status"> & Partial<Pick<OrderSummary, "items" | "subtotal" | "createdAt" | "updatedAt">> & { token: string; restaurantId?: string; restaurantSlug?: string; tableId?: string; customerSessionId?: string };
+type CustomerOrderReceipt = Pick<OrderSummary, "id" | "orderNumber" | "tableNumber" | "total" | "status"> & Partial<Pick<OrderSummary, "items" | "subtotal" | "createdAt" | "updatedAt" | "payment" | "tableSessionId">> & { token: string; restaurantId?: string; restaurantSlug?: string; tableId?: string; customerSessionId?: string };
 
 const orderStatusMessage: Record<OrderSummary["status"], MessageKey> = {
   PENDING: "statusPending",
@@ -114,6 +117,7 @@ type CustomerMenuProps = {
   videoMenuEnabled?: boolean;
   tableOrderingEnabled?: boolean;
   loyaltyEnabled?: boolean;
+  upiSettings?: { enabled: boolean; upiId: string; payeeName: string; staticQrUrl?: string };
 };
 
 export default function CustomerMenu({
@@ -130,6 +134,7 @@ export default function CustomerMenu({
   videoMenuEnabled = true,
   tableOrderingEnabled = true,
   loyaltyEnabled = false,
+  upiSettings,
 }: CustomerMenuProps) {
   const [reservationOpen, setReservationOpen] = useState(initialReservationView);
   const [wifiOpen, setWifiOpen] = useState(false);
@@ -329,6 +334,20 @@ export default function CustomerMenu({
   };
   const cartCount = cart.reduce((sum, line) => sum + line.quantity, 0);
   const cartTotal = cart.reduce((sum, line) => sum + priceForLine(line), 0);
+  const cartBreakdown = useMemo(() => calculateRestaurantBill({
+    lines: cart.map((line) => {
+      const dish = menu.dishes.find((entry) => entry.id === line.dishId);
+      const category = dish ? activeCategories.find((entry) => entry.id === dish.categoryId) : undefined;
+      return {
+        lineTotal: priceForLine(line),
+        quantity: line.quantity,
+        gstRatePercent: resolveLineTaxRate({ dish, category, billing: menu.restaurant.billing }).rate,
+      };
+    }),
+    billing: menu.restaurant.billing,
+    itemCount: cart.length,
+    quantityCount: cartCount,
+  }), [activeCategories, cart, cartCount, menu.dishes, menu.restaurant.billing]);
   const customerOrdersTotal = customerOrders.reduce((sum, order) => sum + order.total, 0);
 
   const addToCart = (entry: { dishId: string; quantity: number; selections: CartSelection[] }) => {
@@ -360,6 +379,7 @@ export default function CustomerMenu({
           slug: menu.restaurant.slug,
           locationType,
           tableNumber,
+          tableSessionId: customerOrders.find((order) => order.tableSessionId)?.tableSessionId,
           idempotencyKey: key,
           items: cart.map((line) => {
             const dish = menu.dishes.find((entry) => entry.id === line.dishId)!;
@@ -654,6 +674,9 @@ export default function CustomerMenu({
                 </div>
                 <OrderProgress status={order.status} />
                 {order.items && order.items.length > 0 && <ul className="mt-3 space-y-1.5 border-t border-dashed border-[var(--customer-border)] pt-3">{order.items.map((item, index) => <li key={`${item.dishId}-${index}`} className="text-sm"><div className="flex justify-between gap-3"><span className="font-medium text-[var(--restaurant-text)]"><span className="tabular-nums text-[var(--restaurant-text-muted)]">{item.quantity}×</span> {tc(item.dishNameSnapshot)}</span><span className="text-xs tabular-nums text-[var(--restaurant-text-muted)]">₹{item.itemTotal}</span></div>{item.addons.length > 0 && <p className="mt-0.5 pl-5 text-xs text-[var(--restaurant-text-muted)]">{item.addons.map((addon) => `${tc(addon.nameSnapshot)}${addon.quantity > 1 ? ` × ${addon.quantity}` : ""}`).join(" · ")}</p>}</li>)}</ul>}
+                {upiSettings?.enabled && (upiSettings.upiId || upiSettings.staticQrUrl) && !["PAID", "REFUNDED"].includes(order.payment?.status ?? "UNPAID") && !["CANCELLED", "REJECTED", "REFUNDED"].includes(order.status) ? (
+                  <div className="mt-3"><UpiPaymentQr upiId={upiSettings.upiId} payeeName={upiSettings.payeeName} staticQrUrl={upiSettings.staticQrUrl} amount={order.total} orderNumber={order.orderNumber} compact /></div>
+                ) : null}
               </article>)}
             </div>}
           </div>
@@ -760,7 +783,7 @@ export default function CustomerMenu({
               <span className="relative grid h-11 w-11 place-items-center rounded-full bg-white/15"><ShoppingBag className="h-5 w-5" /><span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-white px-1 text-[11px] font-bold tabular-nums text-[var(--restaurant-primary)]">{cartCount}</span></span>
               <span><span className="block text-sm font-bold">{t("viewCart")}</span><span className="block text-xs text-white/70">{tn("itemsCount", cartCount)} · {serviceLocationLabel}</span></span>
             </span>
-            <span className="text-lg font-bold tabular-nums">₹{cartTotal}</span>
+            <span className="text-lg font-bold tabular-nums">₹{cartBreakdown.total.toFixed(2)}</span>
           </button>
         </div>
       )}
@@ -805,12 +828,20 @@ export default function CustomerMenu({
             <footer className="safe-bottom border-t border-[var(--customer-border)] bg-white px-4 pt-4 sm:px-5">
               <div className="mb-3 flex items-center justify-between">
                 <button type="button" onClick={() => setCart([])} className="text-xs font-semibold text-[var(--restaurant-text-muted)] underline-offset-4 hover:text-rose-700 hover:underline">{t("clearCart")}</button>
-                <p className="text-sm text-[var(--restaurant-text-muted)]">{t("subtotal")} <span className="ml-1 text-lg font-bold tabular-nums text-[var(--restaurant-text)]">₹{cartTotal}</span></p>
+                <div className="space-y-1 text-right text-sm text-[var(--restaurant-text-muted)]">
+                  <p>{t("subtotal")} <span className="ml-2 font-semibold tabular-nums text-[var(--restaurant-text)]">₹{cartBreakdown.itemsSubtotal.toFixed(2)}</span></p>
+                  {cartBreakdown.packagingCharge > 0 ? <p>Packaging <span className="ml-2 font-semibold tabular-nums text-[var(--restaurant-text)]">₹{cartBreakdown.packagingCharge.toFixed(2)}</span></p> : null}
+                  {cartBreakdown.serviceCharge > 0 ? <p>Service charge <span className="ml-2 font-semibold tabular-nums text-[var(--restaurant-text)]">₹{cartBreakdown.serviceCharge.toFixed(2)}</span></p> : null}
+                  {(cartBreakdown.taxAmount > 0 || menu.restaurant.billing?.gstEnabled) ? <p>{cartBreakdown.taxLabel} ({cartBreakdown.gstRatePercent}%) <span className="ml-2 font-semibold tabular-nums text-[var(--restaurant-text)]">₹{cartBreakdown.taxAmount.toFixed(2)}</span></p> : null}
+                  {cartBreakdown.cgstAmount > 0 ? <p>CGST ({(cartBreakdown.gstRatePercent / 2).toFixed(2)}%) <span className="ml-2 font-semibold tabular-nums text-[var(--restaurant-text)]">₹{cartBreakdown.cgstAmount.toFixed(2)}</span></p> : null}
+                  {cartBreakdown.sgstAmount > 0 ? <p>SGST ({(cartBreakdown.gstRatePercent / 2).toFixed(2)}%) <span className="ml-2 font-semibold tabular-nums text-[var(--restaurant-text)]">₹{cartBreakdown.sgstAmount.toFixed(2)}</span></p> : null}
+                  <p className="pt-1 text-base font-bold text-[var(--restaurant-text)]">Total <span className="ml-2 tabular-nums">₹{cartBreakdown.total.toFixed(2)}</span></p>
+                </div>
               </div>
               {orderError && <p role="alert" className="mb-3 flex items-start gap-2 rounded-xl bg-rose-50 p-3 text-sm text-rose-700"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />{orderError}</p>}
               <button type="button" disabled={!canOrder || cart.length === 0 || submitting || cart.some((line) => !menu.dishes.some((dish) => dish.id === line.dishId && dish.isAvailable))} onClick={() => void placeOrder()} className="mb-1 inline-flex h-14 w-full items-center justify-between rounded-full bg-[var(--restaurant-primary)] px-6 text-sm font-bold text-white shadow-[0_12px_28px_-12px_var(--restaurant-primary)] transition hover:bg-[var(--restaurant-primary-dark)] disabled:cursor-not-allowed disabled:opacity-45">
                 <span>{submitting ? t("placingOrder") : t("placeOrder")}</span>
-                <span className="tabular-nums">₹{cartTotal}</span>
+                <span className="tabular-nums">₹{cartBreakdown.total.toFixed(2)}</span>
               </button>
             </footer>
           </div>

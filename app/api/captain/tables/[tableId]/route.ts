@@ -6,6 +6,7 @@ import { tableRepository } from "@/lib/repositories/table.repository";
 import { orderService } from "@/lib/services/order.service";
 import { serviceRequestService } from "@/lib/services/service-request.service";
 import type { TableStatus } from "@/types";
+import { tableSessionService } from "@/lib/services/table-session.service";
 
 const patchSchema = z
   .object({
@@ -45,16 +46,20 @@ export async function GET(
     return NextResponse.json({ success: false, error: "Table not found" }, { status: 404 });
   }
 
-  const [activeOrder, requests] = await Promise.all([
-    orderService.findActiveForTable(captain.restaurantId, table.tableNumber),
+  const [overview, requests] = await Promise.all([
+    tableSessionService.overview(captain.restaurantId, table.id),
     serviceRequestService.listForTable(captain.restaurantId, tableId),
   ]);
+  const activeOrder = [...overview.orders].reverse().find((order) => !["COMPLETED", "CANCELLED", "REJECTED", "REFUNDED"].includes(order.status)) ?? null;
 
   return NextResponse.json({
     success: true,
     data: {
       table,
       activeOrder,
+      session: overview.session,
+      orders: overview.orders,
+      bill: overview.bill,
       requests,
     },
   });
@@ -64,7 +69,7 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ tableId: string }> },
 ) {
-  const { captain, error } = await requireCaptain("TABLE_MANAGEMENT");
+  const { captain, restaurant, error } = await requireCaptain("TABLE_MANAGEMENT");
   if (error) return error;
   const { tableId } = await params;
 
@@ -158,6 +163,15 @@ export async function PATCH(
       return NextResponse.json({ success: false, error: "Unable to update table" }, { status: 500 });
     }
     updated = floor;
+  }
+
+  if (parsed.data.action === "START_SERVICE" && restaurant) {
+    await tableSessionService.ensureActive({
+      restaurant,
+      table: updated,
+      openedBy: { role: "CAPTAIN", id: captain.id, name: captain.name, email: captain.email },
+      guestCount: parsed.data.guestCount,
+    });
   }
 
   if (parsed.data.action === "SET_GUEST_COUNT" && parsed.data.guestCount && active) {

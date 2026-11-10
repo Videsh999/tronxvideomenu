@@ -22,10 +22,12 @@ export default function CaptainManagement({
   restaurantSlug,
   tables = [],
   initialQrRequiresCaptainApproval = true,
+  initialCustomerOrderingMode,
 }: {
   restaurantSlug: string;
   tables?: RestaurantTable[];
   initialQrRequiresCaptainApproval?: boolean;
+  initialCustomerOrderingMode?: "OFF" | "CAPTAIN_APPROVAL" | "AUTOMATIC";
 }) {
   const [captains, setCaptains] = useState<CaptainView[]>([]);
   const [name, setName] = useState("");
@@ -41,6 +43,7 @@ export default function CaptainManagement({
   const [resetVisible, setResetVisible] = useState(false);
   const [assignDraft, setAssignDraft] = useState<Record<string, string[]>>({});
   const [qrRequiresCaptainApproval, setQrRequiresCaptainApproval] = useState(initialQrRequiresCaptainApproval);
+  const [customerOrderingMode, setCustomerOrderingMode] = useState(initialCustomerOrderingMode ?? (initialQrRequiresCaptainApproval ? "CAPTAIN_APPROVAL" : "AUTOMATIC"));
   const [savingApprovalPolicy, setSavingApprovalPolicy] = useState(false);
   const activeTables = tables.filter((table) => table.isActive);
 
@@ -61,6 +64,11 @@ export default function CaptainManagement({
     } finally {
       setSavingApprovalPolicy(false);
     }
+  };
+
+  const saveCustomerOrderingMode = async (mode: "OFF" | "CAPTAIN_APPROVAL" | "AUTOMATIC") => {
+    setSavingApprovalPolicy(true); setMessage("");
+    try { await request("/api/admin/captain-settings", { method: "PATCH", body: JSON.stringify({ customerOrderingMode: mode }) }); setCustomerOrderingMode(mode); setQrRequiresCaptainApproval(mode === "CAPTAIN_APPROVAL"); setMessage(`Customer ordering: ${mode.replace(/_/g, " ").toLowerCase()}.`); } catch (error) { setMessage(error instanceof Error ? error.message : "Unable to save customer ordering mode"); } finally { setSavingApprovalPolicy(false); }
   };
 
   const refresh = async () => {
@@ -326,6 +334,15 @@ export default function CaptainManagement({
             ? "Current workflow: customer → captain approval → KOT → kitchen"
             : "Current workflow: customer → Orders → staff accepts → KOT → kitchen"}
         </p>
+      </section>
+
+      <section className="rounded-2xl border border-neutral-200 bg-white p-4 sm:p-5">
+        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-neutral-400">Customer ordering</p>
+        <h2 className="mt-1 text-lg font-bold">How guests can add items</h2>
+        <p className="mt-1 text-sm text-neutral-500">Captains can always add items. Choose whether QR guests are disabled, held for approval, or sent into the configured workflow automatically.</p>
+        <div className="mt-4 grid gap-2 sm:grid-cols-3">
+          {(["OFF", "CAPTAIN_APPROVAL", "AUTOMATIC"] as const).map((mode) => <button key={mode} type="button" disabled={savingApprovalPolicy} onClick={() => void saveCustomerOrderingMode(mode)} className={`min-h-12 rounded-xl border px-3 text-sm font-bold ${customerOrderingMode === mode ? "border-neutral-900 bg-neutral-900 text-white" : "border-neutral-200 text-neutral-700"}`}>{mode === "OFF" ? "Captain only" : mode === "CAPTAIN_APPROVAL" ? "Captain approval" : "Automatic"}</button>)}
+        </div>
       </section>
 
       <section className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4 text-sm text-neutral-600">

@@ -419,6 +419,16 @@ export class OrderRepository implements IOrderRepository {
     return order ? this.mapOrder(order) : null;
   }
 
+  async markKotSent(restaurantId: string, id: string, lineIds: string[], event: OrderEvent) {
+    await connectToDatabase();
+    const order = await OrderModel.findOneAndUpdate(
+      { restaurantId, id, status: { $nin: ["CANCELLED", "REJECTED", "REFUNDED", "COMPLETED"] } },
+      { $addToSet: { kotLineIds: { $each: lineIds } }, $set: { status: "PREPARING", updatedAt: new Date().toISOString() }, $push: { events: event } },
+      { new: true, runValidators: true },
+    ).lean();
+    return order ? this.mapOrder(order) : null;
+  }
+
   async hasIdempotencyKey(restaurantId: string, key: string) {
     await connectToDatabase();
     return Boolean(await OrderModel.exists({ restaurantId, idempotencyKey: key }));

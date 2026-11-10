@@ -41,6 +41,7 @@ export default async function CaptainTakeOrderPage({
         0
       }
       taxLabel={menu.restaurant.billing?.taxLabel ?? "Tax"}
+      billing={menu.restaurant.billing}
       categories={menu.categories.filter((category) => category.isActive)}
       dishes={menu.dishes}
       tables={tables}

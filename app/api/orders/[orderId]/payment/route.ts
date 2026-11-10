@@ -123,6 +123,12 @@ export async function POST(request: Request, { params }: RouteContext) {
           { status: 403 },
         );
       }
+      if (parsed.data.method === "UPI") {
+        return NextResponse.json(
+          { success: false, error: "Captain UPI payments must be completed through a verified dynamic QR request." },
+          { status: 409 },
+        );
+      }
       const order = await orderService.getForRestaurant(restaurantId, orderId);
       if (order?.tableId) {
         try {

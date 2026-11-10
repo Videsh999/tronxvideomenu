@@ -13,6 +13,7 @@ import type {
 import { computeBillTotals, lineItemTotal, roundMoney } from "@/lib/order-pricing";
 import { useBarcodeWedge } from "@/components/admin/useBarcodeWedge";
 import { MonitorSmartphone, Search, Trash2 } from "lucide-react";
+import UpiPaymentQr from "@/components/shared/UpiPaymentQr";
 
 type CartLine = {
   key: string;
@@ -37,6 +38,7 @@ type PosTerminalProps = {
   dishes: Dish[];
   tables: RestaurantTable[];
   initialShift: PosShift | null;
+  upiSettings?: { enabled: boolean; upiId: string; payeeName: string; staticQrUrl?: string };
 };
 
 function money(value: number, currency: string) {
@@ -56,6 +58,7 @@ export default function PosTerminal({
   dishes,
   tables,
   initialShift,
+  upiSettings,
 }: PosTerminalProps) {
   const [channel, setChannel] = useState<OrderChannel>("POS_DINE_IN");
   const [tableNumber, setTableNumber] = useState<number | "">("");
@@ -72,6 +75,7 @@ export default function PosTerminal({
   const [closingCash, setClosingCash] = useState(0);
   const [message, setMessage] = useState<string | null>(null);
   const [lastOrderId, setLastOrderId] = useState<string | null>(null);
+  const [lastOrderNumber, setLastOrderNumber] = useState<number | string | null>(null);
   const [payMethod, setPayMethod] = useState<PaymentMethod>("CASH");
   const [payAmount, setPayAmount] = useState<number | "">("");
   const [pending, startTransition] = useTransition();
@@ -325,6 +329,7 @@ export default function PosTerminal({
       try {
         const order = await submitPosOrder();
         setLastOrderId(order.id);
+        setLastOrderNumber(order.orderNumber);
         setCart([]);
         setBillDiscount(0);
         setOrderNote("");
@@ -352,6 +357,7 @@ export default function PosTerminal({
       try {
         const order = await submitPosOrder();
         setLastOrderId(order.id);
+        setLastOrderNumber(order.orderNumber);
         setCart([]);
         setBillDiscount(0);
         setOrderNote("");
@@ -359,6 +365,10 @@ export default function PosTerminal({
         setRedeemLoyaltyPoints(0);
         setPayAmount(order.total);
 
+        if (payMethod === "UPI") {
+          setMessage(`Order #${order.orderNumber} placed. Scan the UPI QR, then verify and tap Record.`);
+          return;
+        }
         const response = await fetch(`/api/orders/${order.id}/payment`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -366,15 +376,11 @@ export default function PosTerminal({
         });
         const json = await response.json();
         if (!json.success) {
-          setMessage(
-            `Order #${order.orderNumber} placed, but payment failed: ${json.error || "try Record"}.`,
-          );
+          setMessage(`Order #${order.orderNumber} placed, but payment failed: ${json.error || "try Record"}.`);
           return;
         }
         setPayAmount("");
-        setMessage(
-          `Order #${order.orderNumber} placed & ${json.data.payment.status} via ${payMethod} · ${money(order.total, currency)}`,
-        );
+        setMessage(`Order #${order.orderNumber} placed & ${json.data.payment.status} via ${payMethod} · ${money(order.total, currency)}`);
         if (json.data.payment.status === "PAID") setLastOrderId(null);
       } catch (error) {
         const text = error instanceof Error ? error.message : "Checkout failed";
@@ -460,7 +466,7 @@ export default function PosTerminal({
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {(["POS_DINE_IN", "POS_TAKEAWAY", "POS_DELIVERY"] as OrderChannel[]).map((value) => (
+          {(["POS_DINE_IN", "POS_TAKEAWAY"] as OrderChannel[]).map((value) => (
             <button
               key={value}
               type="button"
@@ -885,6 +891,11 @@ export default function PosTerminal({
                   Record
                 </button>
               </div>
+              {payMethod === "UPI" && lastOrderId && lastOrderNumber != null && upiSettings?.enabled && (upiSettings.upiId || upiSettings.staticQrUrl) ? (
+                <UpiPaymentQr upiId={upiSettings.upiId} payeeName={upiSettings.payeeName} staticQrUrl={upiSettings.staticQrUrl} amount={Number(payAmount) || 0} orderNumber={lastOrderNumber} compact />
+              ) : payMethod === "UPI" && lastOrderId ? (
+                <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">UPI QR is not configured. Add a UPI ID or upload a static QR under Billing settings.</p>
+              ) : null}
             </div>
           </div>
         </aside>

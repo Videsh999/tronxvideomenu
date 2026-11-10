@@ -20,5 +20,6 @@ export default async function CaptainsPage({ params }: { params: Promise<{ slug:
     restaurantSlug={restaurant.slug}
     tables={tables}
     initialQrRequiresCaptainApproval={restaurant.orderSettings?.qrRequiresCaptainApproval !== false}
+    initialCustomerOrderingMode={restaurant.orderSettings?.customerOrderingMode ?? (restaurant.orderSettings?.qrRequiresCaptainApproval === false ? "AUTOMATIC" : "CAPTAIN_APPROVAL")}
   />;
 }
