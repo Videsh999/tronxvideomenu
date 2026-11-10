@@ -16,7 +16,7 @@ TRONX is a digital restaurant menu with a public customer menu and an authentica
 npm install
 ```
 
-Copy `.env.example` to `.env.local`, provide local values, ensure MongoDB and Cloudinary are available, then seed the default restaurant data:
+Copy `envs/.env.example` to `envs/.env.local`, link it at the project root with `ln -s envs/.env.local .env.local`, provide local values, ensure MongoDB and Cloudinary are available, then seed the default restaurant data:
 
 ```bash
 npm run seed:mongodb
@@ -39,7 +39,7 @@ SUPER_ADMIN_PASSWORD=
 CREDENTIALS_ENCRYPTION_KEY=
 ```
 
-Never expose these values through `NEXT_PUBLIC_*` variables or client components. `.env.local` is ignored by Git.
+Never expose these values through `NEXT_PUBLIC_*` variables or client components. Local files in `envs/` and their root links are ignored by Git. Next.js reads the root links automatically.
 
 ## Running Locally
 
@@ -75,7 +75,7 @@ Set the same persistent value in local and production server environments. Do no
 
 Use a dedicated **non-production** MongoDB database for local credential testing. Do not point local setup or the seed command at production. The credential flow needs `MONGODB_URI`, `AUTH_SECRET`, `SUPER_ADMIN_EMAIL`, `SUPER_ADMIN_PASSWORD`, and `CREDENTIALS_ENCRYPTION_KEY`. Keep the existing restaurant-specific `*_ADMIN_RESTAURANT_SLUG`, `*_ADMIN_EMAIL`, and `*_ADMIN_PASSWORD` values configured while those accounts still depend on legacy login. `WIFI_ENCRYPTION_KEY` is separate and must not be rotated for credential migration. Cloudinary variables are needed for media operations, not for credential login itself.
 
-1. Copy `.env.example` to `.env.local` if needed and fill in the required values using only local/test services. Generate a credential key once with the command above, put its output after `CREDENTIALS_ENCRYPTION_KEY=` in `.env.local`, and keep that same key securely backed up. The key must be canonical Base64 for exactly 32 random bytes. Do not generate a replacement on each start.
+1. Copy `envs/.env.example` to `envs/.env.local` if needed, create the root link with `ln -s envs/.env.local .env.local`, and fill in the required values using only local/test services. Generate a credential key once with the command above, put its output after `CREDENTIALS_ENCRYPTION_KEY=` in `envs/.env.local`, and keep that same key securely backed up. The key must be canonical Base64 for exactly 32 random bytes. Do not generate a replacement on each start.
 2. Stop and restart `npm run dev` after adding or changing the key. Next.js loads `.env.local` when the server starts. In Super Admin, the credential panel should report encryption configuration as ready. A missing/invalid status means credential encryption and recovery checks are not ready.
 3. Sign in at `http://localhost:3000/super-admin/login`. Open the restaurant list and inspect each restaurant's Restaurant Admin account panel. For a legacy-only account, choose **Migrate to encrypted storage**. Migration is insert-if-absent; it does not overwrite an existing database account.
 4. For each migrated restaurant, choose **Verify database login and recovery**. Continue only when it reports that the stored encrypted password decrypts and authenticates through the tenant-scoped database login. This check is environment-specific and does not verify production when run locally.
