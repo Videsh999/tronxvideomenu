@@ -56,6 +56,7 @@ export class TableSessionService {
   }) {
     const session = await tableSessionRepository.findById(input.restaurantId, input.tableSessionId);
     if (!session || !["ACTIVE", "BILLING", "PAYMENT_PENDING"].includes(session.status)) throw new TableSessionServiceError("Active table session not found.", 404);
+    await tableSessionRepository.attachLegacyOpenOrders(input.restaurantId, session.serviceLocationId, session.id);
     const [orders, current] = await Promise.all([
       tableSessionRepository.listOrders(input.restaurantId, session.id),
       tableSessionRepository.latestBill(input.restaurantId, session.id),
@@ -125,12 +126,17 @@ export class TableSessionService {
   }
 
   async close(restaurantId: string, tableSessionId: string, actor: PaymentAuditActor) {
+    const session = await tableSessionRepository.findById(restaurantId, tableSessionId);
+    if (!session || !["ACTIVE", "BILLING", "PAYMENT_PENDING"].includes(session.status)) throw new TableSessionServiceError("Active table session not found.", 404);
+    await tableSessionRepository.attachLegacyOpenOrders(restaurantId, session.serviceLocationId, session.id);
     const orders = await tableSessionRepository.listOrders(restaurantId, tableSessionId);
     if (orders.some((order) => order.status === "PENDING" || order.items.some((item) => item.lineId && !(order.kotLineIds ?? []).includes(item.lineId) && ((order.kotLineIds ?? []).length > 0 || order.status === "ACCEPTED")))) {
       throw new TableSessionServiceError("Send every new item to the kitchen before finishing this table.");
     }
+    const bill = await tableSessionRepository.latestBill(restaurantId, tableSessionId);
+    if (!bill || !["ISSUED", "PARTIALLY_PAID", "PAID"].includes(bill.status)) throw new TableSessionServiceError("Create the final bill before ending this table visit.");
     const closed = await tableSessionRepository.close(restaurantId, tableSessionId, actor);
-    if (!closed) throw new TableSessionServiceError("Session can close only after the master bill is fully paid.");
+    if (!closed) throw new TableSessionServiceError("This table visit could not be ended. Refresh and try again.");
     return closed;
   }
 

@@ -54,7 +54,7 @@ export class TableSessionRepository {
   async attachLegacyOpenOrders(restaurantId: string, serviceLocationId: string, tableSessionId: string) {
     await connectToDatabase();
     await OrderModel.updateMany(
-      { restaurantId, tableId: serviceLocationId, tableSessionId: { $exists: false }, status: { $in: ["PENDING", "ACCEPTED", "PREPARING", "READY", "SERVED"] } },
+      { restaurantId, tableId: serviceLocationId, $or: [{ tableSessionId: { $exists: false } }, { tableSessionId: null }, { tableSessionId: "" }], status: { $in: ["PENDING", "ACCEPTED", "PREPARING", "READY", "SERVED"] } },
       { $set: { tableSessionId, updatedAt: new Date().toISOString() } },
     );
   }
@@ -138,7 +138,10 @@ export class TableSessionRepository {
       { new: true },
     ).lean();
     if (!row) throw new Error("Bill payment changed concurrently. Refresh and try again.");
-    if (status === "PAID") await TableSessionModel.updateOne({ restaurantId, id: current.tableSessionId }, { $set: { billingStatus: "PAID", status: "BILLING", updatedAt: now }, $inc: { version: 1 } });
+    if (status === "PAID") {
+      await TableSessionModel.updateOne({ restaurantId, id: current.tableSessionId, status: "CLOSED" }, { $set: { billingStatus: "PAID", updatedAt: now }, $inc: { version: 1 } });
+      await TableSessionModel.updateOne({ restaurantId, id: current.tableSessionId, status: { $ne: "CLOSED" } }, { $set: { billingStatus: "PAID", status: "BILLING", updatedAt: now }, $inc: { version: 1 } });
+    }
     return toDomain<MasterBill>(row);
   }
 
@@ -152,15 +155,19 @@ export class TableSessionRepository {
         if (orders.some((order) => order.status === "PENDING" || order.items.some((item: { lineId?: string }) => item.lineId && !(order.kotLineIds ?? []).includes(item.lineId) && ((order.kotLineIds ?? []).length > 0 || order.status === "ACCEPTED")))) {
           throw new Error("Send every new item to the kitchen before finishing this table.");
         }
+        const bill = await MasterBillModel.findOne({ restaurantId, tableSessionId: id }).sort({ version: -1 }).session(transaction).lean();
+        if (!bill || !["ISSUED", "PARTIALLY_PAID", "PAID"].includes(String(bill.status))) {
+          throw new Error("Create the final bill before ending this table visit.");
+        }
         const row = await TableSessionModel.findOneAndUpdate(
-          { restaurantId, id, status: { $in: ["ACTIVE", "BILLING", "PAYMENT_PENDING"] }, billingStatus: "PAID" },
+          { restaurantId, id, status: { $in: ["ACTIVE", "BILLING", "PAYMENT_PENDING"] }, billingStatus: { $in: ["ISSUED", "PARTIALLY_PAID", "PAID"] } },
           { $set: { status: "CLOSED", closedAt: now, closedBy: actor, updatedAt: now }, $inc: { version: 1 } },
           { new: true, session: transaction },
         ).lean();
         if (!row) return null;
         await OrderModel.updateMany(
           { restaurantId, tableSessionId: id, status: { $nin: ["COMPLETED", "CANCELLED", "REJECTED", "REFUNDED"] } },
-          { $set: { status: "COMPLETED", completedAt: now, updatedAt: now }, $push: { events: { id: `event-${randomUUID()}`, type: "STATUS_CHANGED", at: now, actor, message: "Table finished after full payment", meta: { to: "COMPLETED", tableSessionId: id } } } },
+          { $set: { status: "COMPLETED", completedAt: now, updatedAt: now }, $push: { events: { id: `event-${randomUUID()}`, type: "STATUS_CHANGED", at: now, actor, message: bill.outstandingAmount > 0 ? `Table visit ended with ${bill.outstandingAmount} still due` : "Table visit ended after payment", meta: { to: "COMPLETED", tableSessionId: id, outstandingAmount: bill.outstandingAmount } } } },
           { session: transaction },
         );
         await TableModel.updateOne(
