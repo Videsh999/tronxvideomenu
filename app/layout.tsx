@@ -26,7 +26,7 @@ const bebasNeue = Bebas_Neue({
 });
 
 export const metadata: Metadata = {
-  title: "TRONX Restaurant | Digital Video Menu",
+  title: "TRONX Video Menu",
   description:
     "Explore the TRONX Restaurant digital video menu with interactive video previews and customisations.",
 };
