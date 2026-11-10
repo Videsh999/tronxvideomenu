@@ -14,6 +14,14 @@ jobs:
           cache: npm
       - name: Install
         run: npm ci
+      - name: Secret scan
+        run: node scripts/scan-secrets.mjs
+      - name: Advisory policy
+        run: node scripts/check-advisories.mjs
+      - name: Migration declaration
+        run: |
+          git fetch origin ${{ github.base_ref }}
+          node scripts/check-migrations.mjs origin/${{ github.base_ref }}
       - name: Lint
         run: npm run lint
       - name: Typecheck

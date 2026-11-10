@@ -4,23 +4,13 @@ import { readXlsxSheets } from "@/lib/spreadsheet";
 import { connectToDatabase } from "@/lib/db/mongodb";
 import { CategoryModel, DishModel, RestaurantModel, TableModel } from "@/lib/db/models";
 import { restaurantAdminService } from "@/lib/services/restaurant-admin.service";
+import { isLoopbackMongoUri } from "@/lib/security/mongo-target";
 
 export const DEMO_KITCHEN = {
   restaurantId: "tronx-demo-kitchen",
   slug: "tronx-demo-kitchen",
   adminEmail: "demo@tronx.local",
 } as const;
-
-function isLoopbackMongoUri(uri: string): boolean {
-  if (!uri.startsWith("mongodb://")) return false;
-  const withoutScheme = uri.slice("mongodb://".length);
-  const hostPart = (withoutScheme.split("@").pop() ?? "").split("/")[0] ?? "";
-  if (!hostPart) return false;
-  return hostPart.split(",").every((entry) => {
-    const host = entry.trim().replace(/^\[|\]$/g, "").split(":")[0];
-    return host === "localhost" || host === "127.0.0.1";
-  });
-}
 
 /**
  * Fail closed. Production is never allowed. A loopback URI, an explicit

@@ -14,7 +14,7 @@ Environment: Linux, Node v22.23.4, npm 10.9.9. No production database was opened
 | `npm run test:integration` | 0 | **PASS**. `# tests 12`, `# pass 12`, `# fail 0`, `# skipped 0`. The runner refused to start the suite until `MongoMemoryReplSet` was up. The child process received only that loopback replica-set URI. |
 | `npm run build` | 0 | **PASS**. Next.js 16.3.6 compiled, then `Running TypeScript` / `Finished TypeScript in 14.3s`. The log does not say `Skipping validation of types`. 53 static pages. `ƒ Proxy (Middleware)` is still present. |
 
-`npm audit` after removing `xlsx` and moving `zod` to 4.6.7: critical 1 (`next`, fixed in 16.4.5), high 1 (`source-map-js`, transitive), moderate 10. `xlsx` is gone. The suggested `exceljs@3.4.0` fix is a downgrade and was not taken. Downgrading `eslint-config-next` to 15.5.29 to clear a transitive `minimatch` advisory would leave the Next 16 lint config and was not taken. `next@16.4.5` was not applied in this wave; the build and tests were verified on 16.3.6, which is the version this app is pinned to.
+The first audit on 16.3.6 named a critical `next` advisory and a high `source-map-js` advisory. Both are addressed below. `xlsx` is gone. The ExcelJS `uuid` finding stays on the allowlist because application code does not call the vulnerable buffered API.
 
 Browser walk-through of POS and captain: **NOT TESTED**. Those screens need a signed-in outlet. Bill parity is covered by `tests/bill-preview-parity.test.ts`, which feeds the same lines to `previewStaffCartBill` and `billFromStoredLines`.
 
@@ -29,11 +29,25 @@ Browser walk-through of POS and captain: **NOT TESTED**. Those screens need a si
 - Menu import/export tests generate real `.xlsx` bytes with ExcelJS. A truncated zip and a non-workbook buffer are rejected. A blank name and a bad price are reported, not dropped.
 - `tests/captain-credential-access.test.ts` — the repository double implements `touchLastActiveAt` and does not bump `updatedAt`.
 
+## CTO review fixes
+
+Re-run after the review changes, still on Node v22.23.4:
+
+| Command | Exit | Result |
+| --- | --- | --- |
+| `npm test` | 0 | **PASS**. `# tests 228`, `# pass 228`, `# fail 0`. |
+| `npm run lint` | 0 | **PASS**. 0 errors, 28 warnings. |
+| `npx tsc --noEmit` | 0 | **PASS**. |
+| `npm run test:integration` | 0 | **PASS**. `# tests 14`, `# pass 14`, `# fail 0`, `# skipped 0`. |
+| `npm run build` | 0 | **PASS**. Next.js 16.4.5. `Finished TypeScript in 10.5s`. |
+| `node scripts/scan-secrets.mjs` | 0 | **PASS**. |
+| `node scripts/check-advisories.mjs` | 0 | **PASS**. High and critical findings are empty except the documented ExcelJS `uuid` allowlist. |
+
+`next` and `eslint-config-next` are 16.4.5. `source-map-js` is overridden to 1.2.2. `zod` is 4.6.7.
+
 ## Known remaining issues
 
-- `next@16.3.6` still matches the published critical advisory. The patched release is 16.4.5. This repo does not use `use cache` or Draft Mode. The upgrade was left for a focused follow-up so this wave's build stays on the pinned version.
-- `source-map-js` is transitive through the lint toolchain. No direct dependency bump fixes it without replacing the toolchain.
-- ExcelJS 4.4.0 pulls `uuid` below 11.1.1 (moderate). The audit's fix is an older ExcelJS.
+- ExcelJS 4.4.0 still depends on `uuid` below 11.1.1. That advisory is accepted in `TRONX_PRO_MAX_ADVISORY_ALLOWLIST.md` because this app does not call `uuid` v3, v5, or v6 with a caller buffer. The audit's fix downgrades ExcelJS.
 - ESLint still reports 27 warnings.
 - One restaurant admin per outlet, cashier logins, and kitchen logins are not in this wave.
 - Guest Wi-Fi reveal, login rate-limit fail-open, and order-number allocation outside the insert are unchanged.
