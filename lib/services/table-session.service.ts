@@ -7,6 +7,13 @@ export class TableSessionServiceError extends Error {
 }
 
 export class TableSessionService {
+  findSession(restaurantId: string, sessionId: string) {
+    return tableSessionRepository.findById(restaurantId, sessionId);
+  }
+
+  async billSessionId(restaurantId: string, billId: string) {
+    return (await this.requireBill(restaurantId, billId)).tableSessionId;
+  }
   async ensureActive(input: {
     restaurant: Pick<Restaurant, "id" | "organizationId">;
     table: RestaurantTable;
@@ -106,6 +113,7 @@ export class TableSessionService {
   }
 
   async recordPayment(input: { restaurantId: string; billId: string; amount: number; method: "CASH" | "UPI" | "CARD"; actor: PaymentAuditActor; idempotencyKey: string; allocationId?: string }) {
+    if (input.method === "UPI") throw new TableSessionServiceError("UPI payments require verified provider confirmation.");
     try {
       const bill = await tableSessionRepository.recordPayment(input.restaurantId, input.billId, input.amount, input.method, input.actor, input.idempotencyKey, input.allocationId);
       if (!bill) throw new TableSessionServiceError("Bill not found.", 404);
@@ -123,12 +131,25 @@ export class TableSessionService {
   }
 
   async move(restaurantId: string, tableSessionId: string, destination: { id: string; tableNumber: number; locationType: "TABLE" | "ROOM" }) {
+    const existing = await tableSessionRepository.findById(restaurantId, tableSessionId);
+    if (!existing || existing.status === "CLOSED") throw new TableSessionServiceError("Active table session not found.", 404);
+    if (await tableSessionRepository.latestBill(restaurantId, tableSessionId)) throw new TableSessionServiceError("A session with bill history cannot be moved.");
+    if (await tableSessionRepository.findActive(restaurantId, destination.id)) throw new TableSessionServiceError("Destination already has an active session. Use merge instead.");
     const moved = await tableSessionRepository.moveSession(restaurantId, tableSessionId, destination);
     if (!moved) throw new TableSessionServiceError("Active table session not found.", 404);
     return moved;
   }
 
   async merge(restaurantId: string, sourceSessionId: string, destinationSessionId: string) {
+    if (sourceSessionId === destinationSessionId) throw new TableSessionServiceError("Choose a different destination table.");
+    const [source, destination, sourceBill, destinationBill] = await Promise.all([
+      tableSessionRepository.findById(restaurantId, sourceSessionId),
+      tableSessionRepository.findById(restaurantId, destinationSessionId),
+      tableSessionRepository.latestBill(restaurantId, sourceSessionId),
+      tableSessionRepository.latestBill(restaurantId, destinationSessionId),
+    ]);
+    if (!source || !destination || source.status !== "ACTIVE" || destination.status !== "ACTIVE") throw new TableSessionServiceError("Both tables need active sessions before merging.");
+    if (sourceBill || destinationBill) throw new TableSessionServiceError("Sessions with bill history cannot be merged.");
     const merged = await tableSessionRepository.mergeSessions(restaurantId, sourceSessionId, destinationSessionId);
     if (!merged) throw new TableSessionServiceError("Destination table session not found.", 404);
     return merged;

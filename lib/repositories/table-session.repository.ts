@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { MasterBill, PaymentAuditActor, RestaurantOrder, TableSession } from "@/types";
 import { connectToDatabase } from "@/lib/db/mongodb";
-import { MasterBillModel, OrderModel, TableSessionModel } from "@/lib/db/models";
+import { MasterBillModel, OrderModel, TableModel, TableSessionModel } from "@/lib/db/models";
 import { toDomain } from "@/lib/db/mongo-mappers";
 
 export class TableSessionRepository {
@@ -117,6 +117,8 @@ export class TableSessionRepository {
     if (!bill) return null;
     const current = toDomain<MasterBill>(bill);
     if (current.paymentLedger.some((entry) => entry.id === idempotencyKey)) return current;
+    const latest = await MasterBillModel.findOne({ restaurantId, tableSessionId: current.tableSessionId }).sort({ version: -1 }).select({ id: 1 }).lean();
+    if (latest?.id !== billId || !["ISSUED", "PARTIALLY_PAID"].includes(current.status)) throw new Error("This bill is no longer payable. Refresh the latest bill.");
     if (amount <= 0 || amount > current.outstandingAmount) throw new Error("Payment exceeds the outstanding bill balance.");
     if (allocationId) {
       const allocation = current.allocations.find((row) => row.id === allocationId);
@@ -131,7 +133,7 @@ export class TableSessionRepository {
     const status = outstandingAmount === 0 ? "PAID" : "PARTIALLY_PAID";
     current.paymentLedger.push({ id: idempotencyKey, kind: "CHARGE", method, amount, recordedAt: now, recordedBy: actor });
     const row = await MasterBillModel.findOneAndUpdate(
-      { restaurantId, id: billId, version: current.version, amountPaid: current.amountPaid, outstandingAmount: { $gte: amount } },
+      { restaurantId, id: billId, version: current.version, status: { $in: ["ISSUED", "PARTIALLY_PAID"] }, amountPaid: current.amountPaid, outstandingAmount: { $gte: amount } },
       { $set: { amountPaid, outstandingAmount, status, allocations: current.allocations, paymentLedger: current.paymentLedger, updatedAt: now } },
       { new: true },
     ).lean();
@@ -153,23 +155,54 @@ export class TableSessionRepository {
 
   async moveSession(restaurantId: string, sessionId: string, destination: { id: string; tableNumber: number; locationType: "TABLE" | "ROOM" }) {
     await connectToDatabase();
-    const session = await TableSessionModel.findOneAndUpdate(
-      { restaurantId, id: sessionId, status: { $in: ["ACTIVE", "BILLING", "PAYMENT_PENDING"] } },
-      { $set: { serviceLocationId: destination.id, tableNumberSnapshot: destination.tableNumber, locationType: destination.locationType, updatedAt: new Date().toISOString() }, $inc: { version: 1 } },
-      { new: true },
-    ).lean();
-    if (!session) return null;
-    await OrderModel.updateMany({ restaurantId, tableSessionId: sessionId }, { $set: { tableId: destination.id, tableNumber: destination.tableNumber, locationType: destination.locationType, updatedAt: new Date().toISOString() } });
-    return toDomain<TableSession>(session);
+    const transaction = await TableSessionModel.startSession();
+    try {
+      let moved: TableSession | null = null;
+      await transaction.withTransaction(async () => {
+        const source = await TableSessionModel.findOne({ restaurantId, id: sessionId, status: "ACTIVE" }).session(transaction).lean();
+        if (!source) return;
+        if (await MasterBillModel.exists({ restaurantId, tableSessionId: sessionId }).session(transaction)) throw new Error("An issued bill prevents table transfer.");
+        if (await TableSessionModel.exists({ restaurantId, serviceLocationId: destination.id, status: { $in: ["ACTIVE", "BILLING", "PAYMENT_PENDING"] } }).session(transaction)) throw new Error("Destination already has an active session.");
+        const now = new Date().toISOString();
+        const updated = await TableSessionModel.findOneAndUpdate(
+          { restaurantId, id: sessionId, status: "ACTIVE", version: source.version },
+          { $set: { serviceLocationId: destination.id, tableNumberSnapshot: destination.tableNumber, locationType: destination.locationType, updatedAt: now }, $inc: { version: 1 } },
+          { new: true, session: transaction },
+        ).lean();
+        if (!updated) throw new Error("Table session changed concurrently.");
+        await OrderModel.updateMany({ restaurantId, tableSessionId: sessionId }, { $set: { tableId: destination.id, tableNumber: destination.tableNumber, locationType: destination.locationType, updatedAt: now } }, { session: transaction });
+        await TableModel.updateOne({ restaurantId, id: source.serviceLocationId }, { $set: { status: "OPEN", updatedAt: now } }, { session: transaction });
+        await TableModel.updateOne({ restaurantId, id: destination.id }, { $set: { status: "OCCUPIED", updatedAt: now } }, { session: transaction });
+        moved = toDomain<TableSession>(updated);
+      });
+      return moved;
+    } finally {
+      await transaction.endSession();
+    }
   }
 
   async mergeSessions(restaurantId: string, sourceSessionId: string, destinationSessionId: string) {
     await connectToDatabase();
-    const destination = await TableSessionModel.findOne({ restaurantId, id: destinationSessionId, status: { $in: ["ACTIVE", "BILLING", "PAYMENT_PENDING"] } }).lean();
-    if (!destination) return null;
-    await OrderModel.updateMany({ restaurantId, tableSessionId: sourceSessionId }, { $set: { tableSessionId: destinationSessionId, tableId: destination.serviceLocationId, tableNumber: destination.tableNumberSnapshot, locationType: destination.locationType, updatedAt: new Date().toISOString() } });
-    await TableSessionModel.updateOne({ restaurantId, id: sourceSessionId }, { $set: { status: "CLOSED", billingStatus: "VOID", closedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }, $inc: { version: 1 } });
-    return toDomain<TableSession>(destination);
+    if (sourceSessionId === destinationSessionId) return null;
+    const transaction = await TableSessionModel.startSession();
+    try {
+      let merged: TableSession | null = null;
+      await transaction.withTransaction(async () => {
+        const source = await TableSessionModel.findOne({ restaurantId, id: sourceSessionId, status: "ACTIVE" }).session(transaction).lean();
+        const destination = await TableSessionModel.findOne({ restaurantId, id: destinationSessionId, status: "ACTIVE" }).session(transaction).lean();
+        if (!source || !destination) return;
+        if (await MasterBillModel.exists({ restaurantId, tableSessionId: { $in: [sourceSessionId, destinationSessionId] } }).session(transaction)) throw new Error("An issued bill prevents table merge.");
+        const now = new Date().toISOString();
+        await OrderModel.updateMany({ restaurantId, tableSessionId: sourceSessionId }, { $set: { tableSessionId: destinationSessionId, tableId: destination.serviceLocationId, tableNumber: destination.tableNumberSnapshot, locationType: destination.locationType, updatedAt: now } }, { session: transaction });
+        const closed = await TableSessionModel.updateOne({ restaurantId, id: sourceSessionId, status: "ACTIVE", version: source.version }, { $set: { status: "CLOSED", billingStatus: "VOID", closedAt: now, updatedAt: now }, $inc: { version: 1 } }, { session: transaction });
+        if (closed.modifiedCount !== 1) throw new Error("Source session changed concurrently.");
+        await TableModel.updateOne({ restaurantId, id: source.serviceLocationId }, { $set: { status: "OPEN", updatedAt: now } }, { session: transaction });
+        merged = toDomain<TableSession>(destination);
+      });
+      return merged;
+    } finally {
+      await transaction.endSession();
+    }
   }
 }
 

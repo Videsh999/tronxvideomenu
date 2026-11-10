@@ -50,12 +50,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ tab
   if (!parsed.success) return NextResponse.json({ success: false, error: "Invalid session billing request", details: parsed.error.issues }, { status: 400 });
   const actor = { role: "CAPTAIN" as const, id: auth.captain.id, name: auth.captain.name, email: auth.captain.email };
   try {
+    const sourceSessionId = parsed.data.action === "SPLIT_BILL" || parsed.data.action === "RECORD_PAYMENT"
+      ? (await tableSessionService.billSessionId(auth.captain.restaurantId, parsed.data.billId))
+      : parsed.data.sessionId;
+    const sourceSession = await tableSessionService.findSession(auth.captain.restaurantId, sourceSessionId);
+    if (!sourceSession || sourceSession.serviceLocationId !== tableId || !["ACTIVE", "BILLING", "PAYMENT_PENDING"].includes(sourceSession.status)) {
+      throw new TableSessionServiceError("This bill or session does not belong to the selected table.", 403);
+    }
     let data;
     if (parsed.data.action === "GENERATE_BILL") data = await tableSessionService.generateBill({ restaurantId: auth.captain.restaurantId, tableSessionId: parsed.data.sessionId, actor, tipAmount: parsed.data.tipAmount, revise: parsed.data.revise });
     else if (parsed.data.action === "SPLIT_BILL") data = await tableSessionService.splitBill({ restaurantId: auth.captain.restaurantId, ...parsed.data });
     else if (parsed.data.action === "RECORD_PAYMENT") {
+      if (parsed.data.method === "UPI") throw new TableSessionServiceError("UPI requires verified provider payment. Manual UPI recording is unavailable for consolidated bills.", 409);
       const permissions = resolveCaptainPermissions(auth.captain);
-      const allowed = parsed.data.method === "CASH" ? permissions.recordCashPayment : parsed.data.method === "UPI" ? permissions.recordUpiPayment : permissions.recordCardPayment;
+      const allowed = parsed.data.method === "CASH" ? permissions.recordCashPayment : permissions.recordCardPayment;
       if (!allowed) return NextResponse.json({ success: false, error: `Captain cannot record ${parsed.data.method} payments.` }, { status: 403 });
       data = await tableSessionService.recordPayment({ restaurantId: auth.captain.restaurantId, actor, ...parsed.data });
     } else {
@@ -63,9 +71,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ tab
         data = await tableSessionService.close(auth.captain.restaurantId, parsed.data.sessionId, actor);
         await tableRepository.setFloorStatus(auth.captain.restaurantId, tableId, "CLEANING");
       } else if (parsed.data.action === "MOVE_TABLE") {
-        data = await tableSessionService.move(auth.captain.restaurantId, parsed.data.sessionId, { id: parsed.data.destinationTableId, tableNumber: parsed.data.destinationTableNumber, locationType: parsed.data.destinationLocationType });
+        await captainService.assertCaptainMayServeTable(auth.captain.id, auth.captain.restaurantId, parsed.data.destinationTableId);
+        const destination = await tableRepository.findByRestaurantAndId(auth.captain.restaurantId, parsed.data.destinationTableId);
+        if (!destination?.isActive || destination.tableNumber !== parsed.data.destinationTableNumber || (destination.locationType ?? "TABLE") !== parsed.data.destinationLocationType) throw new TableSessionServiceError("Destination table is invalid.", 400);
+        data = await tableSessionService.move(auth.captain.restaurantId, parsed.data.sessionId, { id: destination.id, tableNumber: destination.tableNumber, locationType: destination.locationType ?? "TABLE" });
       } else {
-        const destinationOverview = await tableSessionService.overview(auth.captain.restaurantId, parsed.data.destinationSessionId);
+        const destination = await tableRepository.findByRestaurantAndId(auth.captain.restaurantId, parsed.data.destinationSessionId);
+        if (!destination?.isActive) throw new TableSessionServiceError("Destination table is invalid.", 400);
+        await captainService.assertCaptainMayServeTable(auth.captain.id, auth.captain.restaurantId, destination.id);
+        const destinationOverview = await tableSessionService.overview(auth.captain.restaurantId, destination.id);
         if (!destinationOverview.session) throw new TableSessionServiceError("Destination table has no active session.", 409);
         data = await tableSessionService.merge(auth.captain.restaurantId, parsed.data.sessionId, destinationOverview.session.id);
       }
