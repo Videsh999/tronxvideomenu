@@ -53,6 +53,10 @@ export function enrichCaptainTables(
         orderCount: activeOrders.length,
         runningTotal: activeOrders.reduce((sum, order) => sum + order.total, 0),
         amountPaid: activeOrders.reduce((sum, order) => sum + (order.payment?.amountPaid ?? 0), 0),
+        unsentItems: activeOrders.reduce((sum, order) => {
+          const sent = new Set(order.kotLineIds ?? []);
+          return sum + order.items.filter((item) => item.lineId !== undefined && !sent.has(item.lineId) && (item.cancelledQuantity ?? 0) < item.quantity).reduce((qty, item) => qty + item.quantity - (item.cancelledQuantity ?? 0), 0);
+        }, 0),
       };
     });
 }

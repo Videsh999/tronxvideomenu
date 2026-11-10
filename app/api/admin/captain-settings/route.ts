@@ -4,7 +4,8 @@ import { requireRestaurantAdmin } from "@/lib/auth-server";
 import { restaurantService } from "@/lib/services/restaurant.service";
 
 const settingsSchema = z.object({
-  qrRequiresCaptainApproval: z.boolean(),
+  qrRequiresCaptainApproval: z.boolean().optional(),
+  customerOrderingMode: z.enum(["OFF", "CAPTAIN_APPROVAL", "AUTOMATIC"]).optional(),
 }).strict();
 
 export async function PATCH(request: Request) {
@@ -13,7 +14,10 @@ export async function PATCH(request: Request) {
     if (error) return error;
     const input = settingsSchema.parse(await request.json());
     const restaurant = await restaurantService.update(admin.restaurantId, {
-      orderSettings: input,
+      orderSettings: {
+        ...(input.customerOrderingMode ? { customerOrderingMode: input.customerOrderingMode, qrRequiresCaptainApproval: input.customerOrderingMode === "CAPTAIN_APPROVAL" } : {}),
+        ...(input.qrRequiresCaptainApproval !== undefined ? { qrRequiresCaptainApproval: input.qrRequiresCaptainApproval } : {}),
+      },
     });
     if (!restaurant) {
       return NextResponse.json({ success: false, error: "Restaurant not found." }, { status: 404 });

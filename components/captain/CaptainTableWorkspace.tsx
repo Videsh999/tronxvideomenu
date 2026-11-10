@@ -17,7 +17,7 @@ import type { ServiceRequest, ServiceRequestType } from "@/types/service-request
 import { TABLE_STATUS_LABEL, TABLE_STATUS_STYLE } from "@/lib/captain-floor";
 import { isPendingCaptainApproval } from "@/lib/order-authorization";
 import { primaryFloorAction } from "@/lib/order-board";
-import { printSessionKitchenTicket } from "@/lib/kot-print";
+import { printQueuedKitchenOrderTicket, printSessionKitchenTicket } from "@/lib/kot-print";
 import UpiPaymentQr from "@/components/shared/UpiPaymentQr";
 
 function money(value: number, currency = "INR") {
@@ -48,6 +48,7 @@ export default function CaptainTableWorkspace({
   captainName,
   currency,
   initialTable,
+  availableTables,
   initialOrder,
   initialOrders,
   initialSession,
@@ -60,6 +61,7 @@ export default function CaptainTableWorkspace({
   captainName: string;
   currency: string;
   initialTable: RestaurantTable;
+  availableTables: RestaurantTable[];
   initialOrder: OrderSummary | null;
   initialOrders: OrderSummary[];
   initialSession: TableSession | null;
@@ -79,6 +81,7 @@ export default function CaptainTableWorkspace({
   const [message, setMessage] = useState<string | null>(null);
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("ALL");
   const [billServiceCharge, setBillServiceCharge] = useState("0");
+  const [destinationTableId, setDestinationTableId] = useState("");
   const [pending, startTransition] = useTransition();
 
   const openRequests = useMemo(
@@ -213,6 +216,13 @@ export default function CaptainTableWorkspace({
     });
   }
 
+  function moveOrMerge(action: "MOVE_TABLE" | "MERGE_TABLE") {
+    if (!session || !destinationTableId) return;
+    const destination = availableTables.find((row) => row.id === destinationTableId);
+    if (!destination) return;
+    sessionBillingAction(action === "MOVE_TABLE" ? { action, sessionId: session.id, destinationTableId: destination.id, destinationTableNumber: destination.tableNumber, destinationLocationType: destination.locationType ?? "TABLE" } : { action, sessionId: session.id, destinationSessionId: destinationTableId }, action === "MOVE_TABLE" ? `Moved session to ${locationName(destination)}` : `Merged into ${locationName(destination)}`);
+  }
+
   /** Approval clears the captain gate; a separate acceptance sends the order to kitchen. */
   function sendToKitchen() {
     if (!order) return;
@@ -234,14 +244,16 @@ export default function CaptainTableWorkspace({
           setOrder(json.data);
           setMessage(`Order #${order.orderNumber} approved · now waiting in New orders`);
         } else {
-          const response = await fetch(`/api/captain/orders/${order.id}`, {
-            method: "PATCH",
+          const sentBefore = order.kotLineIds ?? [];
+          const response = await fetch(`/api/captain/orders/${order.id}/send-kot`, {
+            method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ status: "PREPARING" }),
+            body: "{}",
           });
           const json = await response.json();
           if (!json.success) throw new Error(json.error || "Unable to send to kitchen");
           setOrder(json.data);
+          printQueuedKitchenOrderTicket(json.data, restaurantName, sentBefore);
           setMessage(`Order #${order.orderNumber} sent to kitchen`);
         }
         await refreshTable();
@@ -360,6 +372,7 @@ export default function CaptainTableWorkspace({
             {orders.map((row) => <button key={row.id} type="button" onClick={() => setOrder(row)} className={`min-w-36 rounded-xl border px-3 py-2 text-left text-xs ${order?.id === row.id ? "border-neutral-900 bg-neutral-900 text-white" : "border-neutral-200"}`}><strong className="block">Order #{row.orderNumber}</strong><span>{row.status} · {money(row.total, currency)}</span></button>)}
           </div>
         ) : null}
+        {session ? <div className="mt-4 flex flex-wrap items-end gap-2 rounded-2xl border border-neutral-200 bg-neutral-50 p-3"><label className="text-xs font-semibold text-neutral-600">Table tools<select value={destinationTableId} onChange={(event) => setDestinationTableId(event.target.value)} className="mt-1 block h-10 rounded-lg border border-neutral-300 bg-white px-2 text-sm"><option value="">Select destination</option>{availableTables.filter((row) => row.id !== table.id && row.isActive && row.status !== "CLOSED").map((row) => <option key={row.id} value={row.id}>{locationName(row)}</option>)}</select></label><button type="button" disabled={!destinationTableId || pending} onClick={() => moveOrMerge("MOVE_TABLE")} className="h-10 rounded-lg border border-neutral-300 px-3 text-xs font-bold">Move table</button><button type="button" disabled={!destinationTableId || pending} onClick={() => moveOrMerge("MERGE_TABLE")} className="h-10 rounded-lg border border-amber-300 bg-amber-50 px-3 text-xs font-bold text-amber-900">Merge tables</button></div> : null}
         {bill ? (
           <div className="mt-4 grid gap-3 rounded-2xl bg-violet-50 p-4 sm:grid-cols-3">
             <div><p className="text-xs text-violet-700">Final bill</p><p className="font-bold">{bill.billNumber} · v{bill.version}</p></div>

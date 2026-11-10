@@ -141,6 +141,7 @@ const restaurantSchema = new Schema<Restaurant>(
       enabled: { type: Boolean, default: false },
     },
     orderSettings: {
+      customerOrderingMode: { type: String, enum: ["OFF", "CAPTAIN_APPROVAL", "AUTOMATIC"], default: "CAPTAIN_APPROVAL" },
       qrRequiresCaptainApproval: { type: Boolean, default: true },
     },
   },
@@ -488,6 +489,7 @@ const orderSchema = new Schema<RestaurantOrder>(
       decisionIdempotencyKey: String,
     },
     items: { type: [orderItemSnapshotSchema], required: true },
+    kotLineIds: { type: [String], default: [] },
     subtotal: { type: Number, required: true, min: 0 },
     billDiscountAmount: { type: Number, min: 0, default: 0 },
     couponCodeSnapshot: String,
@@ -586,7 +588,7 @@ tableSessionSchema.index(
   { unique: true, partialFilterExpression: { status: { $in: ["ACTIVE", "BILLING", "PAYMENT_PENDING"] } } },
 );
 
-const masterBillSchema = new Schema<MasterBill>(
+const masterBillSchema = new Schema(
   {
     id: { type: String, required: true, unique: true, index: true },
     billNumber: { type: String, required: true },

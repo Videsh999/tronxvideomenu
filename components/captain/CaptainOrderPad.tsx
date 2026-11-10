@@ -6,7 +6,7 @@ import { ArrowLeft, Minus, Plus, Search, ShoppingBag, Trash2, X } from "lucide-r
 import type { CaptainPermissions, Category, Dish, PaymentMethod, RestaurantBillingSettings, RestaurantTable } from "@/types";
 import { lineItemTotal, roundMoney } from "@/lib/order-pricing";
 import { calculateRestaurantBill } from "@/lib/billing/calculate-bill";
-import { resolveLineTaxRate } from "@/lib/billing/resolve-line-tax-rate";
+import { resolveLineTaxRate } from "@/lib/billing/resolve-tax-rate";
 import { resolveCaptainPermissions } from "@/lib/captain-permissions";
 import { locationName } from "@/lib/service-location";
 

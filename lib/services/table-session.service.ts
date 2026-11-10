@@ -121,6 +121,18 @@ export class TableSessionService {
     if (!closed) throw new TableSessionServiceError("Session can close only after the master bill is fully paid.");
     return closed;
   }
+
+  async move(restaurantId: string, tableSessionId: string, destination: { id: string; tableNumber: number; locationType: "TABLE" | "ROOM" }) {
+    const moved = await tableSessionRepository.moveSession(restaurantId, tableSessionId, destination);
+    if (!moved) throw new TableSessionServiceError("Active table session not found.", 404);
+    return moved;
+  }
+
+  async merge(restaurantId: string, sourceSessionId: string, destinationSessionId: string) {
+    const merged = await tableSessionRepository.mergeSessions(restaurantId, sourceSessionId, destinationSessionId);
+    if (!merged) throw new TableSessionServiceError("Destination table session not found.", 404);
+    return merged;
+  }
 }
 
 export const tableSessionService = new TableSessionService();

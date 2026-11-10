@@ -13,6 +13,8 @@ const schema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("SPLIT_BILL"), billId: z.string().min(1), version: z.number().int().min(1), mode: z.enum(["EQUAL", "ITEMS", "CUSTOM"]), customers: z.number().int().min(2).max(50).optional(), custom: z.array(z.object({ label: z.string().trim().max(80), amount: z.number().positive() })).optional(), items: z.array(z.object({ label: z.string().trim().max(80), lines: z.array(z.object({ allocationKey: z.string().min(1), quantity: z.number().int().positive() })).min(1) })).optional() }).strict(),
   z.object({ action: z.literal("RECORD_PAYMENT"), billId: z.string().min(1), amount: z.number().positive(), method: z.enum(["CASH", "UPI", "CARD"]), allocationId: z.string().optional(), idempotencyKey: z.string().uuid() }).strict(),
   z.object({ action: z.literal("CLOSE_SESSION"), sessionId: z.string().min(1) }).strict(),
+  z.object({ action: z.literal("MOVE_TABLE"), sessionId: z.string().min(1), destinationTableId: z.string().min(1), destinationTableNumber: z.number().int().positive(), destinationLocationType: z.enum(["TABLE", "ROOM"]) }).strict(),
+  z.object({ action: z.literal("MERGE_TABLE"), sessionId: z.string().min(1), destinationSessionId: z.string().min(1) }).strict(),
 ]);
 
 async function authorize(tableId: string) {
@@ -57,13 +59,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ tab
       if (!allowed) return NextResponse.json({ success: false, error: `Captain cannot record ${parsed.data.method} payments.` }, { status: 403 });
       data = await tableSessionService.recordPayment({ restaurantId: auth.captain.restaurantId, actor, ...parsed.data });
     } else {
-      data = await tableSessionService.close(auth.captain.restaurantId, parsed.data.sessionId, actor);
-      await tableRepository.setFloorStatus(auth.captain.restaurantId, tableId, "CLEANING");
+      if (parsed.data.action === "CLOSE_SESSION") {
+        data = await tableSessionService.close(auth.captain.restaurantId, parsed.data.sessionId, actor);
+        await tableRepository.setFloorStatus(auth.captain.restaurantId, tableId, "CLEANING");
+      } else if (parsed.data.action === "MOVE_TABLE") {
+        data = await tableSessionService.move(auth.captain.restaurantId, parsed.data.sessionId, { id: parsed.data.destinationTableId, tableNumber: parsed.data.destinationTableNumber, locationType: parsed.data.destinationLocationType });
+      } else {
+        const destinationOverview = await tableSessionService.overview(auth.captain.restaurantId, parsed.data.destinationSessionId);
+        if (!destinationOverview.session) throw new TableSessionServiceError("Destination table has no active session.", 409);
+        data = await tableSessionService.merge(auth.captain.restaurantId, parsed.data.sessionId, destinationOverview.session.id);
+      }
     }
     const restaurant = await restaurantService.getById(auth.captain.restaurantId);
     const upiId = restaurant?.billing?.upiId ?? "";
     const paymentUri = data && "outstandingAmount" in data && data.outstandingAmount > 0 && restaurant?.billing?.upiEnabled && isValidUpiId(upiId)
-      ? buildUpiPaymentUri({ upiId, payeeName: restaurant.billing?.upiPayeeName || restaurant.name, amount: data.outstandingAmount, orderNumber: "billNumber" in data ? data.billNumber : data.id })
+      ? buildUpiPaymentUri({ upiId, payeeName: restaurant.billing?.upiPayeeName || restaurant.name, amount: data.outstandingAmount, orderNumber: "billNumber" in data ? data.billNumber : String((data as { id?: string }).id ?? "bill") })
       : undefined;
     return NextResponse.json({ success: true, data, meta: { paymentUri } });
   } catch (error) {

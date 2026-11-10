@@ -61,6 +61,13 @@ export function printKitchenOrderTicket(order: OrderSummary, restaurantName?: st
   window.setTimeout(cleanup, 60_000);
 }
 
+export function printQueuedKitchenOrderTicket(order: OrderSummary, restaurantName?: string, previouslySentLineIds: string[] = []) {
+  const sent = new Set(previouslySentLineIds.length ? previouslySentLineIds : order.kotLineIds ?? []);
+  const queued = order.items.filter((item) => item.lineId !== undefined && !sent.has(item.lineId) && (item.preparationStatus ?? "QUEUED") === "QUEUED");
+  if (!queued.length) return;
+  printKitchenOrderTicket({ ...order, items: queued }, restaurantName);
+}
+
 /** Prints one consolidated kitchen ticket for all orders in a table session. */
 export function printSessionKitchenTicket(orders: OrderSummary[], restaurantName = "TRONX", location = "Table") {
   if (typeof window === "undefined" || orders.length === 0) return;

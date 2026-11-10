@@ -274,8 +274,12 @@ export class OrderService {
     if (!currentTable?.isActive || currentTable.status === "CLOSED") {
       throw new OrderServiceError("This table became unavailable. Please ask restaurant staff for help.");
     }
+    if (menu.restaurant.orderSettings?.customerOrderingMode === "OFF") {
+      throw new OrderServiceError("Customer QR ordering is disabled for this outlet.", 403);
+    }
+    const customerMode = menu.restaurant.orderSettings?.customerOrderingMode;
     const existingSession = await tableSessionRepository.findActive(menu.restaurant.id, table.id);
-    if (existingSession && input.tableSessionId !== existingSession.id) {
+    if (existingSession && input.tableSessionId !== existingSession.id && customerMode !== "AUTOMATIC") {
       throw new OrderServiceError("This table already has an active party. Ask the captain to join the existing bill or start a separate order.", 409);
     }
     const customerToken = randomBytes(32).toString("base64url");
@@ -285,8 +289,18 @@ export class OrderService {
       openedBy: { role: "CUSTOMER_QR", id: options?.loyaltyCustomerId ?? `guest:${input.idempotencyKey}` },
       customerReference: options?.loyaltyCustomerId,
     });
-    const requiresCaptainApproval = menu.restaurant.orderSettings?.qrRequiresCaptainApproval !== false;
+    const requiresCaptainApproval = menu.restaurant.orderSettings?.customerOrderingMode
+      ? menu.restaurant.orderSettings.customerOrderingMode === "CAPTAIN_APPROVAL"
+      : menu.restaurant.orderSettings?.qrRequiresCaptainApproval !== false;
     const captainAuthorization = authorizationForCustomerQr(requiresCaptainApproval);
+    if (customerMode === "AUTOMATIC" && existingSession) {
+      const existingOrders = await tableSessionRepository.listOrders(menu.restaurant.id, existingSession.id);
+      const active = [...existingOrders].reverse().find((entry) => !["COMPLETED", "CANCELLED", "REJECTED", "REFUNDED"].includes(entry.status));
+      if (active) {
+        const merged = await this.appendItemsToOrder(menu.restaurant.id, menu.restaurant.slug, active.id, { items: input.items, idempotencyKey: input.idempotencyKey }, { role: "CAPTAIN", id: "customer-qr", name: "Customer QR" });
+        return { order: customerOrderView(merged as never), customerToken };
+      }
+    }
     const createdEvent = makeEvent("CREATED", requiresCaptainApproval
       ? "Order placed via QR menu — awaiting captain approval"
       : "Order placed via QR menu — ready for staff acceptance", undefined, {
@@ -302,7 +316,7 @@ export class OrderService {
       locationType: table.locationType ?? "TABLE",
       customerTokenHash: createHash("sha256").update(customerToken).digest("hex"),
       idempotencyKey: input.idempotencyKey,
-      status: "PENDING",
+      status: requiresCaptainApproval ? "PENDING" : "ACCEPTED",
       channel: "QR",
       source: "QR",
       captainAuthorization,
@@ -357,6 +371,7 @@ export class OrderService {
     let tableNumber = 0;
     let locationType: RestaurantOrder["locationType"];
     let serviceTable: Awaited<ReturnType<typeof tableRepository.findByRestaurantAndNumber>> = null;
+    const isCaptainActor = actor.role === "CAPTAIN";
     if (input.channel === "POS_DINE_IN") {
       const table = await tableRepository.findByRestaurantAndNumber(restaurantId, input.tableNumber!);
       if (!table || !table.isActive || table.status === "CLOSED" || table.status === "CLEANING") {
@@ -366,6 +381,16 @@ export class OrderService {
       tableNumber = table.tableNumber;
       locationType = table.locationType ?? "TABLE";
       serviceTable = table;
+      if (isCaptainActor) {
+        const active = await orderRepository.findActiveForTable(restaurantId, table.tableNumber);
+        if (active && active.tableId === table.id && !["COMPLETED", "CANCELLED", "REJECTED", "REFUNDED"].includes(active.status)) {
+          return this.appendItemsToOrder(restaurantId, restaurantSlug, active.id, {
+            items: input.items,
+            idempotencyKey: input.idempotencyKey,
+            orderNote: input.orderNote,
+          }, actor);
+        }
+      }
     }
 
     const categoryStation = new Map(
@@ -524,7 +549,6 @@ export class OrderService {
       total: bill.total,
     };
 
-    const isCaptainActor = actor.role === "CAPTAIN";
     const captainAuthorization: CaptainAuthorization = isCaptainActor
       ? {
           ...defaultAuthorizationForSource("CAPTAIN_DIRECT"),
@@ -836,14 +860,26 @@ export class OrderService {
     });
 
     if (!updated) throw new OrderServiceError("Unable to update order.", 500);
-    // Additional-item KOT — does not re-print the whole ticket; enqueue uses current order snapshot.
-    void this.enqueueKotPrintSafe(updated, { actorId: actor.id });
+    // Appended lines remain QUEUED until the captain explicitly sends the next KOT.
     return staffOrderView(updated);
   }
 
   /** Explicit additional KOT enqueue for captain append flows (idempotent print layer handles dupes). */
   async enqueueAdditionalKot(order: RestaurantOrder, actorId?: string) {
     return this.enqueueKotPrintSafe(order, { actorId });
+  }
+
+  async sendKot(restaurantId: string, orderId: string, actor: PaymentAuditActor) {
+    const current = await orderRepository.findByRestaurantAndId(restaurantId, orderId);
+    if (!current) throw new OrderServiceError("Order not found.", 404);
+    const sent = new Set(current.kotLineIds ?? []);
+    const pendingLineIds = current.items.map((item) => item.lineId).filter((id): id is string => typeof id === "string" && !sent.has(id));
+    if (!pendingLineIds.length) throw new OrderServiceError("There are no new items waiting for a KOT.", 409);
+    const event = makeEvent("STATUS_CHANGED", `KOT sent for ${pendingLineIds.length} new line(s)`, actor, { kotLineIds: pendingLineIds });
+    const updated = await orderRepository.markKotSent(restaurantId, orderId, pendingLineIds, event);
+    if (!updated) throw new OrderServiceError("Unable to send KOT. Refresh the table and try again.", 409);
+    void this.enqueueAdditionalKot(updated, actor.id);
+    return staffOrderView(updated);
   }
 
   /**

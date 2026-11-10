@@ -104,7 +104,7 @@ export default function CaptainTables({
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {visibleRows.map(({ table, activeOrder, orderCount, runningTotal, amountPaid }) => (
+        {visibleRows.map(({ table, activeOrder, orderCount, runningTotal, amountPaid, unsentItems }) => (
           <Link
             key={table.id}
             href={`/captain/${slug}/tables/${table.id}`}
@@ -150,6 +150,7 @@ export default function CaptainTables({
                 {activeOrder ? elapsed(activeOrder.createdAt) : "Idle"}
               </span>
               {orderCount ? <span className="col-span-2 font-semibold text-neutral-800">{orderCount} order{orderCount === 1 ? "" : "s"} · Paid {money(amountPaid, currency)} · Due {money(Math.max(0, runningTotal - amountPaid), currency)}</span> : null}
+              {unsentItems > 0 ? <span className="col-span-2 rounded-lg bg-amber-50 px-2 py-1 font-bold text-amber-900">{unsentItems} item{unsentItems === 1 ? "" : "s"} waiting for KOT</span> : null}
             </div>
 
             {activeOrder ? (

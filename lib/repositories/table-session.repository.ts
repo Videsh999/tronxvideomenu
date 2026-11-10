@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { MasterBill, PaymentAuditActor, TableSession } from "@/types";
+import type { MasterBill, PaymentAuditActor, RestaurantOrder, TableSession } from "@/types";
 import { connectToDatabase } from "@/lib/db/mongodb";
 import { MasterBillModel, OrderModel, TableSessionModel } from "@/lib/db/models";
 import { toDomain } from "@/lib/db/mongo-mappers";
@@ -62,7 +62,7 @@ export class TableSessionRepository {
   async listOrders(restaurantId: string, tableSessionId: string) {
     await connectToDatabase();
     const rows = await OrderModel.find({ restaurantId, tableSessionId }).sort({ createdAt: 1 }).lean();
-    return rows.map((row) => toDomain(row));
+    return rows.map((row) => toDomain<RestaurantOrder>(row));
   }
 
   async latestBill(restaurantId: string, tableSessionId: string) {
@@ -149,6 +149,27 @@ export class TableSessionRepository {
       { new: true },
     ).lean();
     return row ? toDomain<TableSession>(row) : null;
+  }
+
+  async moveSession(restaurantId: string, sessionId: string, destination: { id: string; tableNumber: number; locationType: "TABLE" | "ROOM" }) {
+    await connectToDatabase();
+    const session = await TableSessionModel.findOneAndUpdate(
+      { restaurantId, id: sessionId, status: { $in: ["ACTIVE", "BILLING", "PAYMENT_PENDING"] } },
+      { $set: { serviceLocationId: destination.id, tableNumberSnapshot: destination.tableNumber, locationType: destination.locationType, updatedAt: new Date().toISOString() }, $inc: { version: 1 } },
+      { new: true },
+    ).lean();
+    if (!session) return null;
+    await OrderModel.updateMany({ restaurantId, tableSessionId: sessionId }, { $set: { tableId: destination.id, tableNumber: destination.tableNumber, locationType: destination.locationType, updatedAt: new Date().toISOString() } });
+    return toDomain<TableSession>(session);
+  }
+
+  async mergeSessions(restaurantId: string, sourceSessionId: string, destinationSessionId: string) {
+    await connectToDatabase();
+    const destination = await TableSessionModel.findOne({ restaurantId, id: destinationSessionId, status: { $in: ["ACTIVE", "BILLING", "PAYMENT_PENDING"] } }).lean();
+    if (!destination) return null;
+    await OrderModel.updateMany({ restaurantId, tableSessionId: sourceSessionId }, { $set: { tableSessionId: destinationSessionId, tableId: destination.serviceLocationId, tableNumber: destination.tableNumberSnapshot, locationType: destination.locationType, updatedAt: new Date().toISOString() } });
+    await TableSessionModel.updateOne({ restaurantId, id: sourceSessionId }, { $set: { status: "CLOSED", billingStatus: "VOID", closedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }, $inc: { version: 1 } });
+    return toDomain<TableSession>(destination);
   }
 }
 

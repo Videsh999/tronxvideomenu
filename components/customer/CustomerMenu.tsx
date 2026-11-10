@@ -24,7 +24,7 @@ import WifiAccessPanel from "@/components/customer/WifiAccessPanel";
 import CustomerLoyaltyPanel from "@/components/customer/CustomerLoyaltyPanel";
 import UpiPaymentQr from "@/components/shared/UpiPaymentQr";
 import { calculateRestaurantBill } from "@/lib/billing/calculate-bill";
-import { resolveLineTaxRate } from "@/lib/billing/resolve-line-tax-rate";
+import { resolveLineTaxRate } from "@/lib/billing/resolve-tax-rate";
 
 type CartSelection = { groupId: string; addonIds: string[] };
 type CartLine = { key: string; dishId: string; quantity: number; selections: CartSelection[] };

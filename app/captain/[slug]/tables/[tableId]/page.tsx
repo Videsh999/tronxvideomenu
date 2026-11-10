@@ -27,6 +27,7 @@ export default async function CaptainTableWorkspacePage({
 
   const table = await tableRepository.findByRestaurantAndId(captain.restaurantId, tableId);
   if (!table) notFound();
+  const availableTables = (await tableRepository.findByRestaurantId(captain.restaurantId)).filter((row) => captain.assignedTableIds?.includes(row.id));
 
   let overview = await tableSessionService.overview(captain.restaurantId, table.id);
   if (!overview.session && table.status !== "OPEN") {
@@ -43,6 +44,7 @@ export default async function CaptainTableWorkspacePage({
       captainName={captain.name}
       currency={restaurant.currency ?? restaurant.billing?.currency ?? "INR"}
       initialTable={table}
+      availableTables={availableTables}
       initialOrder={activeOrder}
       initialOrders={overview.orders}
       initialSession={overview.session}

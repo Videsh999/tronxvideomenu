@@ -280,7 +280,8 @@ export type Restaurant = {
 };
 
 export type RestaurantOrderSettings = {
-  /** Defaults to true. False skips captain approval but still requires staff acceptance in Orders. */
+  customerOrderingMode?: "OFF" | "CAPTAIN_APPROVAL" | "AUTOMATIC";
+  /** Legacy compatibility. Defaults to true when mode is not set. */
   qrRequiresCaptainApproval?: boolean;
 };
 
@@ -667,6 +668,8 @@ export type RestaurantOrder = {
   /** Captain authorization gate (QR pending until approved). */
   captainAuthorization?: CaptainAuthorization;
   items: OrderItemSnapshot[];
+  /** Line ids already sent to the kitchen; queued lines remain unsent until Send KOT. */
+  kotLineIds?: string[];
   subtotal: number;
   /** Bill-level discount absolute amount (snapshotted). */
   billDiscountAmount?: number;
@@ -784,6 +787,7 @@ export type OrderSummary = Pick<
   | "guestCount"
   | "captainAuthorization"
   | "items"
+  | "kotLineIds"
   | "subtotal"
   | "billDiscountAmount"
   | "taxRatePercent"

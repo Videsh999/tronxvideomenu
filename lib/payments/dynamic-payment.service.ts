@@ -13,7 +13,7 @@ function activeRequest(request: DynamicPaymentRequest | null) {
 
 export async function createDynamicUpiRequest(input: {
   restaurant: Restaurant;
-  order: RestaurantOrder;
+  order: Pick<RestaurantOrder, "id" | "orderNumber" | "tableSessionId" | "total" | "payment">;
   actor: PaymentAuditActor;
 }) {
   if (!isRazorpayConfigured()) throw new Error("Dynamic UPI QR is not configured. Ask the restaurant owner to connect Razorpay merchant credentials.");
