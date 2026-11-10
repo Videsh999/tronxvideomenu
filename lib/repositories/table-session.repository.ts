@@ -156,8 +156,8 @@ export class TableSessionRepository {
           throw new Error("Send every new item to the kitchen before finishing this table.");
         }
         const bill = await MasterBillModel.findOne({ restaurantId, tableSessionId: id }).sort({ version: -1 }).session(transaction).lean();
-        if (!bill || !["ISSUED", "PARTIALLY_PAID", "PAID"].includes(String(bill.status))) {
-          throw new Error("Create the final bill before ending this table visit.");
+        if (!bill || bill.status !== "PAID" || Number(bill.outstandingAmount) > 0) {
+          throw new Error("Record the customer's full payment before completing this table visit.");
         }
         const row = await TableSessionModel.findOneAndUpdate(
           { restaurantId, id, status: { $in: ["ACTIVE", "BILLING", "PAYMENT_PENDING"] }, billingStatus: { $in: ["ISSUED", "PARTIALLY_PAID", "PAID"] } },
@@ -165,11 +165,44 @@ export class TableSessionRepository {
           { new: true, session: transaction },
         ).lean();
         if (!row) return null;
-        await OrderModel.updateMany(
-          { restaurantId, tableSessionId: id, status: { $nin: ["COMPLETED", "CANCELLED", "REJECTED", "REFUNDED"] } },
-          { $set: { status: "COMPLETED", completedAt: now, updatedAt: now }, $push: { events: { id: `event-${randomUUID()}`, type: "STATUS_CHANGED", at: now, actor, message: bill.outstandingAmount > 0 ? `Table visit ended with ${bill.outstandingAmount} still due` : "Table visit ended after payment", meta: { to: "COMPLETED", tableSessionId: id, outstandingAmount: bill.outstandingAmount } } } },
-          { session: transaction },
-        );
+        const paidAt = bill.paymentLedger?.filter((entry: { kind: string }) => entry.kind === "CHARGE").at(-1)?.recordedAt ?? now;
+        const paidBy = bill.paymentLedger?.filter((entry: { kind: string }) => entry.kind === "CHARGE").at(-1)?.recordedBy ?? actor;
+        for (const order of orders) {
+          if (["COMPLETED", "CANCELLED", "REJECTED", "REFUNDED"].includes(String(order.status))) continue;
+          const previousAmountPaid = Number(order.payment?.amountPaid ?? 0);
+          const remainingForOrder = Math.max(0, Math.round((Number(order.total ?? 0) - previousAmountPaid) * 100) / 100);
+          const orderPaidAt = remainingForOrder > 0 ? paidAt : order.payment?.recordedAt ?? paidAt;
+          const orderPaidBy = remainingForOrder > 0 ? paidBy : order.payment?.recordedBy ?? paidBy;
+          const auditTrail = remainingForOrder > 0 ? {
+            eventId: `bill-settlement:${bill.id}:${order.id}`,
+            action: "RECORD",
+            previousStatus: order.payment?.status ?? "UNPAID",
+            newStatus: "PAID",
+            amount: remainingForOrder,
+            actor: orderPaidBy,
+            reason: `Settled with consolidated bill ${bill.billNumber}`,
+            timestamp: orderPaidAt,
+          } : null;
+          await OrderModel.updateOne(
+            { restaurantId, id: order.id, tableSessionId: id, status: { $nin: ["COMPLETED", "CANCELLED", "REJECTED", "REFUNDED"] } },
+            {
+              $set: {
+                status: "COMPLETED",
+                completedAt: now,
+                updatedAt: now,
+                "payment.status": "PAID",
+                "payment.amountPaid": Number(order.total ?? previousAmountPaid),
+                "payment.recordedAt": orderPaidAt,
+                "payment.recordedBy": orderPaidBy,
+              },
+              $push: {
+                events: { id: `event-${randomUUID()}`, type: "STATUS_CHANGED", at: now, actor, message: `Table visit completed after bill ${bill.billNumber} was paid`, meta: { to: "COMPLETED", tableSessionId: id, billId: bill.id, billNumber: bill.billNumber } },
+                ...(auditTrail ? { "payment.auditTrail": auditTrail } : {}),
+              },
+            },
+            { session: transaction },
+          );
+        }
         await TableModel.updateOne(
           { restaurantId, id: row.serviceLocationId, status: { $ne: "CLOSED" } },
           { $set: { status: "OPEN", updatedAt: now } },

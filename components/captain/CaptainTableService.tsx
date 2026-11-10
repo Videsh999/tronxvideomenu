@@ -222,9 +222,20 @@ export default function CaptainTableService({ slug, restaurantName, table, curre
         setBill(finalBill);
       }
       if (!finalBill) throw new Error("The final bill could not be created.");
-      const confirmation = finalBill.outstandingAmount > 0
-        ? `End ${locationName(table)}'s visit with ${money(finalBill.outstandingAmount, currency)} still due? The unpaid bill will remain in Admin Orders.`
-        : `End ${locationName(table)}'s visit and make the table available for the next guests?`;
+      if (finalBill.outstandingAmount > 0) {
+        if (unsentOrders.length) {
+          const sendConfirmation = window.confirm(`The customer has ${money(finalBill.outstandingAmount, currency)} due. Send the final waiting items to Kitchen now? Record payment before completing and freeing the table.`);
+          if (!sendConfirmation) return;
+          const batch = await dispatchUnsentOrders();
+          if (batch.length === 1) printQueuedKitchenOrderTicket(batch[0], restaurantName, []);
+          else if (batch.length > 1) printSessionKitchenTicket(batch, restaurantName, locationName(table));
+          await new Promise((resolve) => window.setTimeout(resolve, 180));
+          await refresh();
+        }
+        setMessage(`Bill ${finalBill.billNumber} has ${money(finalBill.outstandingAmount, currency)} due. Record the payment before marking this order completed and freeing the table.`);
+        return;
+      }
+      const confirmation = `The bill is paid. End ${locationName(table)}'s visit and make the table available for the next guests?`;
       if (!window.confirm(confirmation)) return;
       if (unsentOrders.length) {
         const batch = await dispatchUnsentOrders();
@@ -255,6 +266,6 @@ export default function CaptainTableService({ slug, restaurantName, table, curre
         {billNeedsUpdate ? <p className="rounded-xl bg-amber-50 p-3 text-sm font-semibold text-amber-900">The table order changed. Tap Update bill before taking payment.</p> : bill.outstandingAmount > 0 ? <div className="space-y-3 border-t border-neutral-200 pt-4"><div className="flex flex-wrap gap-2"><button type="button" onClick={() => setMethod("CASH")} className={`rounded-xl px-4 py-2 text-sm font-bold ${method === "CASH" ? "bg-neutral-900 text-white" : "border border-neutral-300"}`}>Cash</button><button type="button" onClick={() => setMethod("CARD")} className={`rounded-xl px-4 py-2 text-sm font-bold ${method === "CARD" ? "bg-neutral-900 text-white" : "border border-neutral-300"}`}>Card</button><button type="button" disabled={busy || !upiOrder} onClick={createUpi} className="rounded-xl border border-neutral-300 px-4 py-2 text-sm font-bold disabled:opacity-40">UPI QR</button></div><button type="button" disabled={busy || unsentOrders.length > 0} onClick={recordPayment} className="min-h-11 w-full rounded-xl bg-emerald-700 px-4 text-sm font-bold text-white disabled:opacity-50">Record {method} received · {money(bill.outstandingAmount, currency)}</button>{!upiOrder ? <p className="text-xs text-neutral-500">A verified UPI QR is available when this bill matches one unpaid order without an extra tip. Cash or card can settle a consolidated bill.</p> : null}{upi ? <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4 text-center"><p className="font-bold">{restaurantName} · {locationName(table)} · {money(upi.amount, currency)}</p>{upi.qrImageUrl ? <Image unoptimized src={upi.qrImageUrl} alt={`UPI payment QR for bill ${bill.billNumber}`} width={280} height={280} className="mx-auto mt-3 h-70 w-70 max-w-full object-contain" /> : null}<p className="mt-2 text-sm">{upi.status === "PAID" ? "Payment verified" : upi.status === "PENDING" ? "Waiting for verified payment…" : `Payment ${upi.status.toLowerCase()}`}</p><button type="button" onClick={() => upiOrder && session && void run(() => refreshUpi(upiOrder.id, session))} className="mt-2 rounded-lg border border-neutral-300 px-3 py-2 text-sm font-semibold">Refresh status</button></div> : null}</div> : <p className="border-t border-neutral-200 pt-4 font-semibold text-emerald-700">Bill paid in full.</p>}
       </div>}
     </section> : null}
-    {session || activeOrders.length ? <section className="rounded-3xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-6"><h2 className="text-lg font-bold">End table visit</h2><p className="mt-1 text-sm text-neutral-600">{bill ? bill.outstandingAmount > 0 ? `${money(bill.outstandingAmount, currency)} remains unpaid. Ending frees the table and keeps this balance in Admin.` : "The bill is paid. End the visit to make this table available for the next guests." : "After the guest confirms they are finished, end the visit. We save the final itemized bill and free the table."}</p><button type="button" disabled={busy} onClick={endTableVisit} className="mt-4 min-h-12 w-full rounded-xl bg-neutral-900 px-4 text-base font-bold text-white disabled:opacity-40">{busy ? "Finishing table…" : "Finish visit & free table"}</button>{unsentOrders.length ? <p className="mt-2 text-xs font-medium text-neutral-500">Any accepted items not yet sent will be sent to Kitchen before this visit closes.</p> : null}</section> : null}
+    {session || activeOrders.length ? <section className="rounded-3xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-6"><h2 className="text-lg font-bold">End table visit</h2><p className="mt-1 text-sm text-neutral-600">{bill ? bill.outstandingAmount > 0 ? `${money(bill.outstandingAmount, currency)} is still due. Record the received payment before the order can be marked completed and the table freed.` : "The bill is paid. End the visit to make this table available for the next guests." : "After the guest confirms they are finished, finalize the bill and payment to free the table."}</p><button type="button" disabled={busy} onClick={endTableVisit} className="mt-4 min-h-12 w-full rounded-xl bg-neutral-900 px-4 text-base font-bold text-white disabled:opacity-40">{busy ? "Finishing table…" : "Finish visit & free table"}</button>{unsentOrders.length ? <p className="mt-2 text-xs font-medium text-neutral-500">Any accepted items not yet sent will be sent to Kitchen before this visit closes.</p> : null}</section> : null}
   </div>;
 }

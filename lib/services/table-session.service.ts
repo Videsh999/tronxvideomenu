@@ -135,6 +135,9 @@ export class TableSessionService {
     }
     const bill = await tableSessionRepository.latestBill(restaurantId, tableSessionId);
     if (!bill || !["ISSUED", "PARTIALLY_PAID", "PAID"].includes(bill.status)) throw new TableSessionServiceError("Create the final bill before ending this table visit.");
+    if (bill.outstandingAmount > 0 || bill.status !== "PAID") {
+      throw new TableSessionServiceError("Record the customer's full payment before completing this table visit.");
+    }
     const closed = await tableSessionRepository.close(restaurantId, tableSessionId, actor);
     if (!closed) throw new TableSessionServiceError("This table visit could not be ended. Refresh and try again.");
     return closed;
