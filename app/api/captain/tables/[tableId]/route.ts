@@ -28,7 +28,7 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ tableId: string }> },
 ) {
-  const { captain, error } = await requireCaptain("TABLE_MANAGEMENT");
+  const { captain, error } = await requireCaptain("ORDER_MANAGEMENT");
   if (error) return error;
   const { tableId } = await params;
 
@@ -69,7 +69,7 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ tableId: string }> },
 ) {
-  const { captain, restaurant, error } = await requireCaptain("TABLE_MANAGEMENT");
+  const { captain, restaurant, error } = await requireCaptain("ORDER_MANAGEMENT");
   if (error) return error;
   const { tableId } = await params;
 

@@ -125,6 +125,10 @@ export class TableSessionService {
   }
 
   async close(restaurantId: string, tableSessionId: string, actor: PaymentAuditActor) {
+    const orders = await tableSessionRepository.listOrders(restaurantId, tableSessionId);
+    if (orders.some((order) => order.status === "PENDING" || order.items.some((item) => item.lineId && !(order.kotLineIds ?? []).includes(item.lineId) && ((order.kotLineIds ?? []).length > 0 || order.status === "ACCEPTED")))) {
+      throw new TableSessionServiceError("Send every new item to the kitchen before finishing this table.");
+    }
     const closed = await tableSessionRepository.close(restaurantId, tableSessionId, actor);
     if (!closed) throw new TableSessionServiceError("Session can close only after the master bill is fully paid.");
     return closed;

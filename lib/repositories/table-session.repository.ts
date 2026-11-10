@@ -145,12 +145,35 @@ export class TableSessionRepository {
   async close(restaurantId: string, id: string, actor: PaymentAuditActor) {
     await connectToDatabase();
     const now = new Date().toISOString();
-    const row = await TableSessionModel.findOneAndUpdate(
-      { restaurantId, id, status: { $ne: "CLOSED" }, billingStatus: "PAID" },
-      { $set: { status: "CLOSED", closedAt: now, closedBy: actor, updatedAt: now }, $inc: { version: 1 } },
-      { new: true },
-    ).lean();
-    return row ? toDomain<TableSession>(row) : null;
+    const transaction = await TableSessionModel.startSession();
+    try {
+      const closed = await transaction.withTransaction(async () => {
+        const orders = await OrderModel.find({ restaurantId, tableSessionId: id }).session(transaction).lean();
+        if (orders.some((order) => order.status === "PENDING" || order.items.some((item: { lineId?: string }) => item.lineId && !(order.kotLineIds ?? []).includes(item.lineId) && ((order.kotLineIds ?? []).length > 0 || order.status === "ACCEPTED")))) {
+          throw new Error("Send every new item to the kitchen before finishing this table.");
+        }
+        const row = await TableSessionModel.findOneAndUpdate(
+          { restaurantId, id, status: { $in: ["ACTIVE", "BILLING", "PAYMENT_PENDING"] }, billingStatus: "PAID" },
+          { $set: { status: "CLOSED", closedAt: now, closedBy: actor, updatedAt: now }, $inc: { version: 1 } },
+          { new: true, session: transaction },
+        ).lean();
+        if (!row) return null;
+        await OrderModel.updateMany(
+          { restaurantId, tableSessionId: id, status: { $nin: ["COMPLETED", "CANCELLED", "REJECTED", "REFUNDED"] } },
+          { $set: { status: "COMPLETED", completedAt: now, updatedAt: now }, $push: { events: { id: `event-${randomUUID()}`, type: "STATUS_CHANGED", at: now, actor, message: "Table finished after full payment", meta: { to: "COMPLETED", tableSessionId: id } } } },
+          { session: transaction },
+        );
+        await TableModel.updateOne(
+          { restaurantId, id: row.serviceLocationId, status: { $ne: "CLOSED" } },
+          { $set: { status: "OPEN", updatedAt: now } },
+          { session: transaction },
+        );
+        return toDomain<TableSession>(row);
+      });
+      return closed ?? null;
+    } finally {
+      await transaction.endSession();
+    }
   }
 
   async moveSession(restaurantId: string, sessionId: string, destination: { id: string; tableNumber: number; locationType: "TABLE" | "ROOM" }) {

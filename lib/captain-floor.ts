@@ -36,9 +36,13 @@ export function enrichCaptainTables(
     .map((table) => {
       const activeOrders = orders.filter((order) => order.tableId === table.id && !["COMPLETED", "CANCELLED", "REJECTED", "REFUNDED"].includes(order.status));
       const activeOrder = activeOrders.reduce<OrderSummary | null>((earliest, order) => !earliest || order.createdAt < earliest.createdAt ? order : earliest, null);
+      const startedAt = activeOrder?.tableSessionId
+        ? orders.filter((order) => order.tableId === table.id && order.tableSessionId === activeOrder.tableSessionId).reduce<string | undefined>((earliest, order) => !earliest || order.createdAt < earliest ? order.createdAt : earliest, undefined)
+        : activeOrder?.createdAt;
       return {
         table,
         activeOrder,
+        startedAt,
         activeOrders,
         orderCount: activeOrders.length,
         runningTotal: activeOrders.reduce((sum, order) => sum + order.total, 0),

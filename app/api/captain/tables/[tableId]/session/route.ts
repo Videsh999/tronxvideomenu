@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireCaptain } from "@/lib/auth-server";
 import { captainService } from "@/lib/services/captain.service";
 import { tableRepository } from "@/lib/repositories/table.repository";
+import { orderRepository } from "@/lib/repositories/order.repository";
 import { tableSessionService, TableSessionServiceError } from "@/lib/services/table-session.service";
 import { restaurantService } from "@/lib/services/restaurant.service";
 import { resolveCaptainPermissions } from "@/lib/captain-permissions";
@@ -18,7 +19,7 @@ const schema = z.discriminatedUnion("action", [
 ]);
 
 async function authorize(tableId: string) {
-  const auth = await requireCaptain("TABLE_MANAGEMENT");
+  const auth = await requireCaptain("ORDER_MANAGEMENT");
   if (auth.error) return { error: auth.error } as const;
   try {
     await captainService.assertCaptainMayServeTable(auth.captain.id, auth.captain.restaurantId, tableId);
@@ -35,7 +36,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tab
   const table = await tableRepository.findByRestaurantAndId(auth.captain.restaurantId, tableId);
   if (!table) return NextResponse.json({ success: false, error: "Table not found" }, { status: 404 });
   let overview = await tableSessionService.overview(auth.captain.restaurantId, tableId);
-  if (!overview.session && table.status !== "OPEN") {
+  if (!overview.session && await orderRepository.findActiveForTable(auth.captain.restaurantId, table.id)) {
     await tableSessionService.ensureActive({ restaurant: auth.restaurant, table, openedBy: { role: "CAPTAIN", id: auth.captain.id, name: auth.captain.name, email: auth.captain.email } });
     overview = await tableSessionService.overview(auth.captain.restaurantId, tableId);
   }
@@ -69,7 +70,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ tab
     } else {
       if (parsed.data.action === "CLOSE_SESSION") {
         data = await tableSessionService.close(auth.captain.restaurantId, parsed.data.sessionId, actor);
-        await tableRepository.setFloorStatus(auth.captain.restaurantId, tableId, "OPEN");
       } else if (parsed.data.action === "MOVE_TABLE") {
         await captainService.assertCaptainMayServeTable(auth.captain.id, auth.captain.restaurantId, parsed.data.destinationTableId);
         const destination = await tableRepository.findByRestaurantAndId(auth.captain.restaurantId, parsed.data.destinationTableId);

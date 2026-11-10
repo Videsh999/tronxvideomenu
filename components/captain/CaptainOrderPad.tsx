@@ -866,6 +866,7 @@ export default function CaptainOrderPad({
               {lastOrderId ? (
                 <section className="space-y-2 rounded-xl border border-white/15 bg-white/5 p-3" aria-label="Saved order actions">
                   <div className="flex items-center justify-between gap-2 text-xs"><strong>Saved order #{lastOrderNumber}</strong><span className="text-white/70">{selectedLocationName}</span></div>
+                  {selectedLocation ? <Link href={`/captain/${slug}/tables/${encodeURIComponent(selectedLocation.id)}`} className="flex min-h-11 items-center justify-center rounded-lg border border-white/30 bg-white/10 px-3 text-sm font-bold">View all table items &amp; bill</Link> : null}
                   <div className="flex gap-2"><button type="button" disabled={kotPending || savedUnsentCount === 0} onClick={sendKot} className="min-h-10 flex-1 rounded-lg bg-amber-500 px-3 text-xs font-bold text-neutral-950 disabled:opacity-50">{kotPending ? "Sending KOT…" : savedUnsentCount > 0 ? `Send ${savedUnsentCount} new item${savedUnsentCount === 1 ? "" : "s"} to kitchen` : "All items sent"}</button>{kotSent && lastSavedOrder ? <button type="button" onClick={() => printQueuedKitchenOrderTicket(lastSavedOrder, undefined, previousKotLineIds)} className="min-h-10 rounded-lg border border-white/30 px-3 text-xs font-bold">Print KOT copy</button> : null}</div>
                   {canRecordAny ? <>
                   <div className="grid grid-cols-3 gap-1.5">

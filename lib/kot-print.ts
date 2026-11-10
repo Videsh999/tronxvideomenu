@@ -78,10 +78,13 @@ export function printSessionKitchenTicket(orders: OrderSummary[], restaurantName
   const merged = new Map<string, { name: string; quantity: number; total: number; note?: string }>();
   for (const order of orders) {
     for (const item of order.items) {
-      const key = `${item.dishId}:${item.variantId ?? ""}:${item.addons.map((addon) => addon.addonId).sort().join(",")}`;
+      const key = `${item.dishId}:${item.variantId ?? ""}:${item.addons.map((addon) => addon.addonId).sort().join(",")}:${item.note ?? ""}`;
+      const activeQuantity = Math.max(0, item.quantity - (item.cancelledQuantity ?? 0));
+      if (activeQuantity === 0) continue;
+      const lineTotal = Math.round(item.itemTotal * activeQuantity / item.quantity * 100) / 100;
       const current = merged.get(key);
-      if (current) current.quantity += Math.max(0, item.quantity - (item.cancelledQuantity ?? 0));
-      else merged.set(key, { name: `${item.dishNameSnapshot}${item.variantNameSnapshot ? ` · ${item.variantNameSnapshot}` : ""}`, quantity: Math.max(0, item.quantity - (item.cancelledQuantity ?? 0)), total: item.itemTotal, note: item.note });
+      if (current) { current.quantity += activeQuantity; current.total += lineTotal; }
+      else merged.set(key, { name: `${item.dishNameSnapshot}${item.variantNameSnapshot ? ` · ${item.variantNameSnapshot}` : ""}${item.addons.length ? ` · ${item.addons.map((addon) => addon.nameSnapshot).join(", ")}` : ""}`, quantity: activeQuantity, total: lineTotal, note: item.note });
     }
   }
   const html = `<section class="kot-ticket" aria-label="Consolidated kitchen ticket"><header><div class="brand">${escapeHtml(restaurantName)}</div><div class="kind">CONSOLIDATED KITCHEN ORDER</div><div class="order-number">${escapeHtml(location)}</div><div class="meta">${orders.length} orders · ${escapeHtml(new Date().toLocaleString())}</div></header><div class="rule"></div><table><thead><tr><th>Qty</th><th>Item</th><th class="price">Price</th></tr></thead><tbody>${[...merged.values()].map((item) => `<tr><td class="qty">${item.quantity}×</td><td class="item"><div class="dish">${escapeHtml(item.name)}</div>${item.note ? `<div class="note">NOTE: ${escapeHtml(item.note)}</div>` : ""}</td><td class="price"><strong>${money(item.total)}</strong></td></tr>`).join("")}</tbody></table><div class="rule"></div><footer>Session KOT · ${orders.map((order) => `#${order.orderNumber}`).join(", ")} · Powered by TRONX</footer></section>`;

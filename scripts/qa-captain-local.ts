@@ -70,7 +70,13 @@ async function main() {
   assert.equal(finalPayment.status, "PAID");
   assert.equal(finalPayment.outstandingAmount, 0);
 
-  console.log(JSON.stringify({ success: true, table: tableNumber, room: roomNumber, dishes: dishes.slice(0, 2).map((dish) => dish.name), orderNumber: first.orderNumber, kotBatches: 2, billTotal: bill.total, paymentMethods: ["CASH", "CARD"], elapsedMs: Math.round(performance.now() - started) }, null, 2));
+  const closed = await tableSessionService.close(restaurantId, secondKot.tableSessionId!, actor);
+  assert.equal(closed.status, "CLOSED", "Paid table must finish in one action.");
+  assert.equal((await orderRepository.findByRestaurantAndId(restaurantId, first.id))?.status, "COMPLETED", "Finished table must clear its order from active views.");
+  assert.equal((await tableRepository.findByRestaurantAndId(restaurantId, table.id))?.status, "OPEN", "Finished table must be ready for the next guest.");
+  assert.equal((await tableSessionService.overview(restaurantId, table.id)).session, null, "No active session should remain after finishing.");
+
+  console.log(JSON.stringify({ success: true, table: tableNumber, room: roomNumber, dishes: dishes.slice(0, 2).map((dish) => dish.name), orderNumber: first.orderNumber, kotBatches: 2, billTotal: bill.total, paymentMethods: ["CASH", "CARD"], tableFinished: true, elapsedMs: Math.round(performance.now() - started) }, null, 2));
 }
 
 main().catch((error) => { console.error(error); process.exitCode = 1; }).finally(() => mongoose.disconnect());
