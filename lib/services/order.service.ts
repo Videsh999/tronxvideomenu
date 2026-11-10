@@ -162,6 +162,9 @@ class VersionConflict extends Error {
   }
 }
 
+/** Test hook. Set during a test to crash cancelOrderLines after the totals write. */
+export const cancelCrash: { afterTotals: null | (() => void) } = { afterTotals: null };
+
 export class OrderService {
   /** Live floor orders (open + last 36h). Use repository.findByRestaurantId for full history reports. */
   async listForRestaurant(restaurantId: string) {
@@ -1455,6 +1458,7 @@ export class OrderService {
             cancellations: OrderLineCancellation[];
             duplicate: boolean;
             refundSuggested?: number;
+            restorePending?: boolean;
           }
         | undefined;
       try {
@@ -1468,10 +1472,12 @@ export class OrderService {
           if (marker && (markerStatus == null || markerStatus === "APPLIED")) {
             const order = await orderRepository.findByRestaurantAndId(restaurantId, orderId, session);
             if (!order) throw new OrderServiceError("Order not found.", 404);
+            const restore = marker.inventoryRestoreStatus as string | undefined;
             outcome = {
               order: staffOrderView(order),
               cancellations: [toDomain<OrderLineCancellation>(marker.toObject())],
               duplicate: true,
+              restorePending: restore === "PENDING" || restore === "FAILED",
             };
             return;
           }
@@ -1513,13 +1519,19 @@ export class OrderService {
             session,
           });
           if (!updated) throw new VersionConflict();
+          if (cancelCrash.afterTotals) {
+            const crash = cancelCrash.afterTotals;
+            cancelCrash.afterTotals = null;
+            crash();
+          }
 
           const now = new Date().toISOString();
           const parentFields = {
             applyStatus: "APPLIED" as const,
             baseVersion: current.version ?? 0,
             plannedCancelled: plan.plannedCancelled,
-            inventoryRestoreStatus: "NONE" as const,
+            inventoryRestoreStatus: "PENDING" as const,
+            priorOrderStatus: current.status,
             quantityCancelled: input.lines.reduce((sum, line) => sum + line.quantity, 0),
             reason,
           };
@@ -1548,7 +1560,7 @@ export class OrderService {
             orderLineId: request.lineId,
             quantityCancelled: request.quantity,
             reason,
-            inventoryRestoreStatus: "NONE" as const,
+            inventoryRestoreStatus: "PENDING" as const,
             idempotencyKey: `${input.idempotencyKey}:${request.lineId}`,
             actor: input.actor,
             createdAt: now,
@@ -1573,16 +1585,8 @@ export class OrderService {
       }
 
       if (!outcome) continue;
-      if (!outcome.duplicate) {
-        const restaurant = await restaurantService.getById(restaurantId);
-        if (restaurant && hasRestaurantFeature(restaurant, "INVENTORY")) {
-          await inventoryService.restoreForCancelledLines(
-            restaurant,
-            outcome.order as unknown as RestaurantOrder,
-            input.lines.map((line) => line.lineId),
-            outcome.order.status,
-          ).catch(() => undefined);
-        }
+      if (!outcome.duplicate || outcome.restorePending) {
+        await this.settleCancellationInventory(restaurantId, orderId, input.idempotencyKey);
       }
       return outcome;
     }
@@ -1590,17 +1594,86 @@ export class OrderService {
     throw new OrderServiceError("Order changed during cancellation. Please retry.", 409);
   }
 
-  listLineCancellations(restaurantId: string, orderId: string) {
-    return connectToDatabase().then(async () => {
-      const rows = await OrderLineCancellationModel.find({
-        restaurantId,
-        orderId,
-        orderLineId: { $ne: "*" },
-      })
-        .sort({ createdAt: -1 })
-        .lean();
-      return rows.map((row) => toDomain<OrderLineCancellation>(row));
-    });
+  /**
+   * Finish inventory restore for one applied cancellation. Idempotent.
+   * A full cancel uses the whole-order restore. A partial cancel restores only those lines.
+   */
+  async settleCancellationInventory(restaurantId: string, orderId: string, idempotencyKey: string) {
+    await connectToDatabase();
+    const parent = await OrderLineCancellationModel.findOne({ restaurantId, idempotencyKey }).lean();
+    if (!parent) return { status: "APPLIED" as const };
+    const current = parent.inventoryRestoreStatus as string | undefined;
+    if (current === "APPLIED" || current === "RESTORED" || current === "BLOCKED" || current === "NONE") {
+      return { status: "APPLIED" as const };
+    }
+    const order = await orderRepository.findByRestaurantAndId(restaurantId, orderId);
+    if (!order) throw new OrderServiceError("Order not found.", 404);
+    const lineIds = Object.keys((parent.plannedCancelled as Record<string, number> | undefined) ?? {});
+    const priorStatus = (parent.priorOrderStatus as RestaurantOrder["status"] | undefined) ?? order.status;
+    const allGone = order.items.every((item) => (item.cancelledQuantity ?? 0) >= item.quantity);
+    let status: "APPLIED" | "FAILED" = "APPLIED";
+    try {
+      const restaurant = await restaurantService.getById(restaurantId);
+      if (restaurant && hasRestaurantFeature(restaurant, "INVENTORY")) {
+        const result = allGone
+          ? await inventoryService.maybeRestoreForCancelledOrder(restaurant, order, priorStatus)
+          : await inventoryService.restoreForCancelledLines(restaurant, order, lineIds, priorStatus);
+        if (result && "blocked" in result && result.blocked) status = "FAILED";
+      }
+    } catch (error) {
+      status = "FAILED";
+      await this.markInventoryRestore(restaurantId, orderId, idempotencyKey, lineIds, status);
+      throw error;
+    }
+    await this.markInventoryRestore(restaurantId, orderId, idempotencyKey, lineIds, status);
+    return { status };
+  }
+
+  /** Retry every pending or failed restore for an order. Safe to call more than once. */
+  async retryInventoryRestores(restaurantId: string, orderId: string) {
+    await connectToDatabase();
+    const pending = await OrderLineCancellationModel.find({
+      restaurantId,
+      orderId,
+      orderLineId: "*",
+      inventoryRestoreStatus: { $in: ["PENDING", "FAILED"] },
+    }).lean();
+    const results = [];
+    for (const row of pending) {
+      try {
+        results.push(await this.settleCancellationInventory(restaurantId, orderId, String(row.idempotencyKey)));
+      } catch {
+        results.push({ status: "FAILED" as const });
+      }
+    }
+    return results;
+  }
+
+  private async markInventoryRestore(
+    restaurantId: string,
+    orderId: string,
+    idempotencyKey: string,
+    lineIds: string[],
+    status: "APPLIED" | "FAILED",
+  ) {
+    const keys = [idempotencyKey, ...lineIds.map((lineId) => `${idempotencyKey}:${lineId}`)];
+    await OrderLineCancellationModel.updateMany(
+      { restaurantId, orderId, idempotencyKey: { $in: keys } },
+      { $set: { inventoryRestoreStatus: status } },
+    );
+  }
+
+  async listLineCancellations(restaurantId: string, orderId: string) {
+    await this.retryInventoryRestores(restaurantId, orderId);
+    await connectToDatabase();
+    const rows = await OrderLineCancellationModel.find({
+      restaurantId,
+      orderId,
+      orderLineId: { $ne: "*" },
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+    return rows.map((row) => toDomain<OrderLineCancellation>(row));
   }
 }
 

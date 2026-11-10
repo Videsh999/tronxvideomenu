@@ -292,25 +292,24 @@ export class OrderRepository implements IOrderRepository {
     auditEvent: import("@/types").PaymentAuditEvent,
     ledgerEntry: import("@/types").PaymentLedgerEntry,
     orderEvent: OrderEvent,
-    orderStatus?: RestaurantOrder["status"],
-    expectedVersion?: number,
+    orderStatus: RestaurantOrder["status"] | undefined,
+    expectedVersion: number,
   ) {
     await connectToDatabase();
     const now = new Date().toISOString();
     const set: Record<string, unknown> = {
       "payment.status": paymentStatus,
       "payment.amountPaid": amountPaid,
+      version: expectedVersion + 1,
       updatedAt: now,
     };
-    if (expectedVersion != null) set.version = expectedVersion + 1;
     if (orderStatus) set.status = orderStatus;
     const filter: Record<string, unknown>[] = [{
       restaurantId,
       id,
       "payment.status": { $in: ["PAID", "PARTIAL"] },
       status: { $nin: ["CANCELLED", "REJECTED", "REFUNDED"] },
-    }];
-    if (expectedVersion != null) filter.push(versionClause(expectedVersion));
+    }, versionClause(expectedVersion)];
 
     const order = await OrderModel.findOneAndUpdate(
       { $and: filter },

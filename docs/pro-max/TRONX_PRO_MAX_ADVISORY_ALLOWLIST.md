@@ -1,11 +1,7 @@
 # Advisory allowlist
 
-CI fails on high or critical npm audit findings unless the package is listed here with a reason.
+CI fails on high or critical npm audit findings unless the GHSA id is listed here. Package names are not an allowlist entry.
 
-## `exceljs`
+## `GHSA-w5hq-g745-h8pq`
 
-Accepted. ExcelJS 4.4.0 depends on `uuid` below 11.1.1. That advisory applies when `uuid` v3, v5, or v6 is called with a caller-supplied buffer. This app does not call `uuid`. Workbook read and write go through ExcelJS's own API. The audit's suggested fix downgrades ExcelJS to 3.4.0, which is not acceptable.
-
-## `uuid`
-
-Accepted for the same reason. The vulnerable API is not called from this repository. Only ExcelJS 4.x is on the import path, and it does not use the buffered v3/v5/v6 entry points from application code.
+Accepted. This is the `uuid` missing buffer-bounds check in v3, v5, and v6 when the caller passes a buffer. ExcelJS 4.4.0 depends on that `uuid` release. Application code does not call `uuid`. Workbook read and write go through ExcelJS's own API, which does not use those buffered entry points. The audit's suggested fix downgrades ExcelJS to 3.4.0, which is not acceptable.

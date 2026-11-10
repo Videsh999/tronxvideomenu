@@ -1152,9 +1152,11 @@ const orderLineCancellationSchema = new Schema(
     reason: { type: String, required: true, maxlength: 500 },
     inventoryRestoreStatus: {
       type: String,
-      enum: ["RESTORED", "BLOCKED", "NONE"],
+      enum: ["RESTORED", "BLOCKED", "NONE", "PENDING", "APPLIED", "FAILED"],
       required: true,
     },
+    /** Order status before this cancellation. Used when a restore is retried. */
+    priorOrderStatus: String,
     idempotencyKey: { type: String, required: true },
     actor: {
       role: { type: String, enum: ["RESTAURANT_ADMIN", "CAPTAIN"], required: true },

@@ -1062,7 +1062,8 @@ export type OrderLineCancellation = {
   orderLineId: string;
   quantityCancelled: number;
   reason: string;
-  inventoryRestoreStatus: "RESTORED" | "BLOCKED" | "NONE";
+  inventoryRestoreStatus: "RESTORED" | "BLOCKED" | "NONE" | "PENDING" | "APPLIED" | "FAILED";
+  priorOrderStatus?: string;
   idempotencyKey: string;
   actor: PaymentAuditActor;
   createdAt: string;
