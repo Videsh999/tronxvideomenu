@@ -20,8 +20,10 @@ import { orderService } from "@/lib/services/order.service";
 import { tableService } from "@/lib/services/table.service";
 import { reservationService } from "@/lib/services/reservation.service";
 import { captainService } from "@/lib/services/captain.service";
+import { analyticsService } from "@/lib/services/analytics.service";
 import { getAllRestaurantFeatures } from "@/lib/feature-access";
 import { getReservationLocalDate } from "@/lib/reservations/time";
+import { addLocalDays, localDateKey, startOfLocalDayIso } from "@/lib/analytics/period";
 
 export const dynamic = "force-dynamic";
 
@@ -54,21 +56,31 @@ export default async function AdminRestaurantDashboardPage({
   }
 
   const features = getAllRestaurantFeatures(restaurant);
-  const today = getReservationLocalDate();
-  const [menu, orders, tables, reservations, captains, wifi] = await Promise.all([
+  const timeZone = "Asia/Kolkata";
+  const today = localDateKey(new Date().toISOString(), timeZone);
+  const yesterday = addLocalDays(today, -1);
+  const todayFrom = startOfLocalDayIso(today, timeZone);
+  const todayTo = new Date(new Date(startOfLocalDayIso(addLocalDays(today, 1), timeZone)).getTime() - 1).toISOString();
+  const yesterdayFrom = startOfLocalDayIso(yesterday, timeZone);
+  const yesterdayTo = new Date(new Date(todayFrom).getTime() - 1).toISOString();
+  const [menu, orders, tables, reservations, captains, wifi, todaySales, yesterdaySales, bestSellers] = await Promise.all([
     restaurantService.getFullMenu(restaurant.id),
     features.ORDER_MANAGEMENT ? orderService.listForRestaurant(restaurant.id) : Promise.resolve([]),
     features.TABLE_MANAGEMENT ? tableService.list(restaurant.id) : Promise.resolve([]),
     features.RESERVATIONS ? reservationService.list(restaurant.id, today) : Promise.resolve([]),
     features.CAPTAIN_ACCESS ? captainService.list(restaurant.id).catch(() => []) : Promise.resolve([]),
     features.WIFI ? restaurantService.getWifiCustomerDetails(restaurant.slug).catch(() => null) : Promise.resolve(null),
+    features.ORDER_MANAGEMENT ? analyticsService.salesSummary(restaurant.id, todayFrom, todayTo) : Promise.resolve(null),
+    features.ORDER_MANAGEMENT ? analyticsService.salesSummary(restaurant.id, yesterdayFrom, yesterdayTo) : Promise.resolve(null),
+    features.ORDER_MANAGEMENT ? analyticsService.salesByDish(restaurant.id, todayFrom, todayTo, 5) : Promise.resolve([]),
   ]);
 
   const dishes = menu?.dishes ?? [];
   const categories = menu?.categories ?? [];
   const activeOrders = orders.filter((order) => order.status !== "SERVED" && order.status !== "CANCELLED");
-  const todaysOrders = orders.filter((order) => order.createdAt && getReservationLocalDate(new Date(order.createdAt)) === today && order.status !== "CANCELLED");
-  const todaysRevenue = todaysOrders.reduce((sum, order) => sum + order.total, 0);
+  const todaysOrders = orders.filter((order) => order.createdAt && getReservationLocalDate(new Date(order.createdAt)) === getReservationLocalDate());
+  const grossDelta = todaySales && yesterdaySales ? todaySales.grossSales - yesterdaySales.grossSales : 0;
+  const grossDeltaPercent = yesterdaySales?.grossSales ? Math.round((grossDelta / yesterdaySales.grossSales) * 100) : null;
   const recentOrders = [...orders]
     .sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime())
     .slice(0, 5);
@@ -78,7 +90,7 @@ export default async function AdminRestaurantDashboardPage({
   const stats: { label: string; value: string; hint: string; icon: LucideIcon; href: string }[] = [
     ...(features.ORDER_MANAGEMENT ? [
       { label: "Active orders", value: String(activeOrders.length), hint: `${todaysOrders.length} placed today`, icon: ClipboardList, href: `/admin/${slug}/orders` },
-      { label: "Today’s sales", value: `₹${todaysRevenue.toLocaleString("en-IN")}`, hint: "Excludes cancelled", icon: IndianRupee, href: `/admin/${slug}/orders` },
+      { label: "Gross sales today", value: `₹${(todaySales?.grossSales ?? 0).toLocaleString("en-IN")}`, hint: `₹${(todaySales?.netSales ?? 0).toLocaleString("en-IN")} collected`, icon: IndianRupee, href: `/admin/${slug}/orders` },
     ] : []),
     { label: "Dishes", value: String(dishes.length), hint: `${dishes.filter((dish) => dish.isAvailable).length} available now`, icon: UtensilsCrossed, href: `/admin/${slug}/menu/dishes` },
     ...(features.TABLE_MANAGEMENT ? [
@@ -178,6 +190,24 @@ export default async function AdminRestaurantDashboardPage({
           </Link>
         ))}
       </section>
+
+      {features.ORDER_MANAGEMENT ? (
+        <section aria-labelledby="today-performance" className="rounded-3xl border border-neutral-200 bg-white p-5 sm:p-6">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div><p className="text-[11px] font-bold uppercase tracking-[0.18em] text-neutral-400">Live business snapshot</p><h2 id="today-performance" className="mt-1 text-lg font-bold">Today’s performance</h2></div>
+            <Link href={`/admin/${slug}/reports`} className="inline-flex items-center gap-1 text-xs font-semibold text-neutral-700">Detailed reports <ArrowRight className="h-3.5 w-3.5" /></Link>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-2xl bg-neutral-50 p-4"><p className="text-xs text-neutral-500">Gross sales</p><p className="mt-1 text-xl font-bold tabular-nums">₹{(todaySales?.grossSales ?? 0).toLocaleString("en-IN")}</p><p className="mt-1 text-xs text-neutral-500">{todaySales?.orderCount ?? 0} orders · excludes cancelled and rejected</p></div>
+            <div className="rounded-2xl bg-neutral-50 p-4"><p className="text-xs text-neutral-500">Collected</p><p className="mt-1 text-xl font-bold tabular-nums">₹{(todaySales?.netSales ?? 0).toLocaleString("en-IN")}</p><p className="mt-1 text-xs text-neutral-500">Recorded payments less refunds</p></div>
+            <div className="rounded-2xl bg-neutral-50 p-4"><p className="text-xs text-neutral-500">Compared with yesterday</p><p className={`mt-1 text-xl font-bold tabular-nums ${grossDelta > 0 ? "text-emerald-700" : grossDelta < 0 ? "text-rose-700" : "text-neutral-900"}`}>{grossDelta > 0 ? "↑ " : grossDelta < 0 ? "↓ " : ""}{grossDeltaPercent == null ? "—" : `${Math.abs(grossDeltaPercent)}%`}</p><p className="mt-1 text-xs text-neutral-500">{grossDeltaPercent == null ? "No previous-day sales to compare" : `${grossDelta >= 0 ? "Up" : "Down"} ₹${Math.abs(grossDelta).toLocaleString("en-IN")}`}</p></div>
+          </div>
+          <div className="mt-4 border-t border-neutral-100 pt-4">
+            <h3 className="text-sm font-semibold">Best sellers today</h3>
+            {bestSellers.length ? <ol className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">{bestSellers.map((dish, index) => <li key={dish.dishId} className="flex min-w-0 items-center gap-3 rounded-xl border border-neutral-100 px-3 py-2"><span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-neutral-100 text-xs font-bold">{index + 1}</span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{dish.dishName}</span><span className="block text-xs text-neutral-500">{dish.quantitySold} sold</span></span><span className="shrink-0 text-xs font-semibold">₹{dish.revenue.toLocaleString("en-IN")}</span></li>)}</ol> : <p className="mt-2 text-sm text-neutral-500">Best sellers appear after today’s first orders.</p>}
+          </div>
+        </section>
+      ) : null}
 
       <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
         {features.ORDER_MANAGEMENT ? (
