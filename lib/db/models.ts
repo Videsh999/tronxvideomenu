@@ -494,6 +494,8 @@ const orderSchema = new Schema<RestaurantOrder>(
     sgstAmount: { type: Number, min: 0, default: 0 },
     igstAmount: { type: Number, min: 0, default: 0 },
     billSnapshot: { type: Schema.Types.Mixed },
+    /** Packaging, service charge, price mode, and GST settings frozen at create. */
+    billingSettingsSnapshot: { type: Schema.Types.Mixed },
     total: { type: Number, required: true, min: 0 },
     payment: {
       type: paymentSummarySchema,
@@ -1150,9 +1152,11 @@ const orderLineCancellationSchema = new Schema(
     reason: { type: String, required: true, maxlength: 500 },
     inventoryRestoreStatus: {
       type: String,
-      enum: ["RESTORED", "BLOCKED", "NONE"],
+      enum: ["RESTORED", "BLOCKED", "NONE", "PENDING", "APPLIED", "FAILED"],
       required: true,
     },
+    /** Order status before this cancellation. Used when a restore is retried. */
+    priorOrderStatus: String,
     idempotencyKey: { type: String, required: true },
     actor: {
       role: { type: String, enum: ["RESTAURANT_ADMIN", "CAPTAIN"], required: true },

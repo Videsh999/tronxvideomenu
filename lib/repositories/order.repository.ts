@@ -1,3 +1,4 @@
+import type { ClientSession } from "mongoose";
 import type { RestaurantOrder, KitchenStation, OrderEvent } from "@/types";
 import type { IOrderRepository } from "./types";
 import { connectToDatabase } from "@/lib/db/mongodb";
@@ -122,9 +123,9 @@ export class OrderRepository implements IOrderRepository {
       .filter((order) => order.items.length > 0);
   }
 
-  async findByRestaurantAndId(restaurantId: string, id: string) {
+  async findByRestaurantAndId(restaurantId: string, id: string, session?: ClientSession) {
     await connectToDatabase();
-    const order = await OrderModel.findOne({ restaurantId, id }).lean();
+    const order = await OrderModel.findOne({ restaurantId, id }).session(session ?? null).lean();
     return order ? this.mapOrder(order) : null;
   }
 
@@ -140,10 +141,13 @@ export class OrderRepository implements IOrderRepository {
     expectedStatus: RestaurantOrder["status"],
     status: RestaurantOrder["status"],
     event?: OrderEvent,
+    expectedVersion?: number,
+    session?: ClientSession,
   ) {
     await connectToDatabase();
     const now = new Date().toISOString();
     const set: Record<string, unknown> = { status, updatedAt: now };
+    if (expectedVersion != null) set.version = expectedVersion + 1;
     if (status === "COMPLETED" || status === "SERVED") {
       set.completedAt = now;
     }
@@ -151,10 +155,13 @@ export class OrderRepository implements IOrderRepository {
     if (event) {
       update.$push = { events: event };
     }
+    const filter: Record<string, unknown> = expectedVersion == null
+      ? { restaurantId, id, status: expectedStatus }
+      : { $and: [{ restaurantId, id, status: expectedStatus }, versionClause(expectedVersion)] };
     const order = await OrderModel.findOneAndUpdate(
-      { restaurantId, id, status: expectedStatus },
+      filter,
       update,
-      { new: true, runValidators: true },
+      { new: true, runValidators: true, session },
     ).lean();
     return order ? this.mapOrder(order) : null;
   }
@@ -178,14 +185,21 @@ export class OrderRepository implements IOrderRepository {
     lineId: string,
     preparationStatus: "QUEUED" | "PREPARING" | "READY",
     event: OrderEvent,
+    expectedVersion: number,
   ) {
     await connectToDatabase();
     const now = new Date().toISOString();
     const order = await OrderModel.findOneAndUpdate(
-      { restaurantId, id, "items.lineId": lineId },
+      {
+        $and: [
+          { restaurantId, id, "items.lineId": lineId },
+          versionClause(expectedVersion),
+        ],
+      },
       {
         $set: {
           "items.$.preparationStatus": preparationStatus,
+          version: expectedVersion + 1,
           updatedAt: now,
         },
         $push: { events: event },
@@ -278,24 +292,27 @@ export class OrderRepository implements IOrderRepository {
     auditEvent: import("@/types").PaymentAuditEvent,
     ledgerEntry: import("@/types").PaymentLedgerEntry,
     orderEvent: OrderEvent,
-    orderStatus?: RestaurantOrder["status"],
+    orderStatus: RestaurantOrder["status"] | undefined,
+    expectedVersion: number,
   ) {
     await connectToDatabase();
     const now = new Date().toISOString();
     const set: Record<string, unknown> = {
       "payment.status": paymentStatus,
       "payment.amountPaid": amountPaid,
+      version: expectedVersion + 1,
       updatedAt: now,
     };
     if (orderStatus) set.status = orderStatus;
+    const filter: Record<string, unknown>[] = [{
+      restaurantId,
+      id,
+      "payment.status": { $in: ["PAID", "PARTIAL"] },
+      status: { $nin: ["CANCELLED", "REJECTED", "REFUNDED"] },
+    }, versionClause(expectedVersion)];
 
     const order = await OrderModel.findOneAndUpdate(
-      {
-        restaurantId,
-        id,
-        "payment.status": { $in: ["PAID", "PARTIAL"] },
-        status: { $nin: ["CANCELLED", "REJECTED", "REFUNDED"] },
-      },
+      { $and: filter },
       {
         $set: set,
         $push: {
@@ -400,6 +417,8 @@ export class OrderRepository implements IOrderRepository {
       reopenForKitchen?: boolean;
       billDiscountAmount?: number;
       expectedVersion: number;
+      nextStatus?: RestaurantOrder["status"];
+      session?: ClientSession;
     },
   ) {
     await connectToDatabase();
@@ -421,6 +440,7 @@ export class OrderRepository implements IOrderRepository {
     if (patch.orderNote !== undefined) set.orderNote = patch.orderNote;
     if (patch.billDiscountAmount !== undefined) set.billDiscountAmount = patch.billDiscountAmount;
     if (patch.reopenForKitchen) set.status = "PREPARING";
+    if (patch.nextStatus) set.status = patch.nextStatus;
 
     const order = await OrderModel.findOneAndUpdate(
       {
@@ -433,7 +453,7 @@ export class OrderRepository implements IOrderRepository {
         $set: set,
         $push: { events: patch.event },
       },
-      { new: true, runValidators: true },
+      { new: true, runValidators: true, session: patch.session },
     ).lean();
     return order ? this.mapOrder(order) : null;
   }

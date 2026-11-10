@@ -635,6 +635,8 @@ export type RestaurantOrder = {
   igstAmount?: number;
   /** Immutable financial breakdown captured at create/append time. */
   billSnapshot?: BillBreakdown;
+  /** Outlet billing settings frozen when the order was opened. */
+  billingSettingsSnapshot?: RestaurantBillingSettings;
   total: number;
   payment: PaymentSummary;
   events?: OrderEvent[];
@@ -1060,7 +1062,8 @@ export type OrderLineCancellation = {
   orderLineId: string;
   quantityCancelled: number;
   reason: string;
-  inventoryRestoreStatus: "RESTORED" | "BLOCKED" | "NONE";
+  inventoryRestoreStatus: "RESTORED" | "BLOCKED" | "NONE" | "PENDING" | "APPLIED" | "FAILED";
+  priorOrderStatus?: string;
   idempotencyKey: string;
   actor: PaymentAuditActor;
   createdAt: string;
