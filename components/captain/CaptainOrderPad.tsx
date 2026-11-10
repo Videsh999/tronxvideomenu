@@ -1,14 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { ArrowLeft, Minus, Plus, Search, ShoppingBag, Trash2, X } from "lucide-react";
-import type { CaptainPermissions, Category, Dish, PaymentMethod, RestaurantBillingSettings, RestaurantTable } from "@/types";
+import type { CaptainPermissions, Category, Dish, DynamicPaymentRequest, OrderSummary, PaymentMethod, RestaurantBillingSettings, RestaurantTable } from "@/types";
 import { lineItemTotal, roundMoney } from "@/lib/order-pricing";
 import { calculateRestaurantBill } from "@/lib/billing/calculate-bill";
 import { resolveLineTaxRate } from "@/lib/billing/resolve-tax-rate";
 import { resolveCaptainPermissions } from "@/lib/captain-permissions";
 import { locationName } from "@/lib/service-location";
+import { printQueuedKitchenOrderTicket } from "@/lib/kot-print";
 
 type CartLine = {
   key: string;
@@ -93,11 +94,17 @@ export default function CaptainOrderPad({
   const [selectedVariantId, setSelectedVariantId] = useState("");
   const [selectedAddons, setSelectedAddons] = useState<Record<string, string[]>>({});
   const [lastOrderId, setLastOrderId] = useState<string | null>(null);
-  const [payMethod, setPayMethod] = useState<PaymentMethod>("CASH");
+  const [lastOrderNumber, setLastOrderNumber] = useState<string | number | null>(null);
+  const [lastSavedOrder, setLastSavedOrder] = useState<OrderSummary | null>(null);
+  const [previousKotLineIds, setPreviousKotLineIds] = useState<string[]>([]);
+  const [kotSent, setKotSent] = useState(false);
+  const [kotPending, setKotPending] = useState(false);
+  const [payMethod, setPayMethod] = useState<PaymentMethod>(permissions.recordCashPayment ? "CASH" : permissions.recordCardPayment ? "CARD" : "UPI");
   const [payAmount, setPayAmount] = useState<number | "">("");
+  const [upiRequest, setUpiRequest] = useState<DynamicPaymentRequest | null>(null);
+  const [paymentPending, setPaymentPending] = useState(false);
   const [extrasOpen, setExtrasOpen] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
-  const [checkoutOpen, setCheckoutOpen] = useState(false);
 
   const tableKey = tableId;
   const session = cartsByTable[tableKey] ?? emptyCartState();
@@ -119,6 +126,30 @@ export default function CaptainOrderPad({
       return { ...prev, [tableKey]: emptyCartState() };
     });
   }, [tableKey]);
+
+  useEffect(() => {
+    if (!tableId) return;
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const response = await fetch(`/api/captain/tables/${encodeURIComponent(tableId)}`, { signal: controller.signal, cache: "no-store" });
+        if (!response.ok) return;
+        const json = await response.json();
+        if (controller.signal.aborted || !json.success || !json.data?.activeOrder) return;
+        const order: OrderSummary = json.data.activeOrder;
+        setLastOrderId(order.id);
+        setLastOrderNumber(order.orderNumber);
+        setLastSavedOrder(order);
+        setPreviousKotLineIds(order.kotLineIds ?? []);
+        setKotSent(false);
+        const due = roundMoney(Math.max(0, order.total - (order.payment?.amountPaid ?? 0)));
+        setPayAmount(due > 0 ? due : "");
+      } catch (error) {
+        if (!controller.signal.aborted) setMessage(error instanceof Error ? error.message : "Unable to load the table order.");
+      }
+    })();
+    return () => controller.abort();
+  }, [tableId]);
 
   const availableDishes = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -150,6 +181,8 @@ export default function CaptainOrderPad({
     });
   }, [billing, categories, dishes, session.cart, session.billDiscount, taxLabel, taxRatePercent]);
   const cartItemCount = session.cart.reduce((sum, line) => sum + line.quantity, 0);
+  const savedUnsentCount = lastSavedOrder?.items.filter((item) => item.lineId && !(lastSavedOrder.kotLineIds ?? []).includes(item.lineId)).length ?? 0;
+  const upiRequestNeedsReplacement = upiRequest ? ["CANCELLED", "EXPIRED", "FAILED", "WRONG_AMOUNT"].includes(upiRequest.status) : false;
 
   function dishNeedsCustomize(dish: Dish) {
     const variants = (dish.variants ?? []).filter((variant) => variant.isAvailable !== false);
@@ -166,19 +199,34 @@ export default function CaptainOrderPad({
       addSimple(dish);
       return;
     }
+    const availableVariants = (dish.variants ?? []).filter((variant) => variant.isAvailable !== false);
+    const activeGroups = (dish.addonGroups ?? []).filter((group) => group.isActive !== false);
+    if (availableVariants.length === 1 && activeGroups.length === 0) {
+      addSimple(dish, availableVariants[0]);
+      return;
+    }
     const firstVariant = (dish.variants ?? []).find((variant) => variant.isAvailable !== false);
     setSelectedVariantId(firstVariant?.id ?? "");
     setSelectedAddons({});
     setCustomizing(dish);
   }
 
-  function addSimple(dish: Dish) {
+  function addSimple(dish: Dish, variant?: NonNullable<Dish["variants"]>[number]) {
     if (!tableKey) return;
+    const existing = session.cart.find((line) => line.dishId === dish.id && line.variantId === variant?.id && line.addons.length === 0 && !line.note && !line.itemDiscountAmount);
+    if (existing) {
+      if (existing.quantity >= 99) { setMessage("Maximum 99 of one item per line."); return; }
+      patchSession({ cart: session.cart.map((line) => line.key === existing.key ? { ...line, quantity: line.quantity + 1 } : line) });
+      setMessage(`${dish.name} ×${existing.quantity + 1} · ${selectedLocationName}`);
+      return;
+    }
     const next: CartLine = {
-      key: `${dish.id}-${Date.now()}`,
+      key: crypto.randomUUID(),
       dishId: dish.id,
       name: dish.name,
-      unitPrice: dish.price,
+      variantId: variant?.id,
+      variantName: variant?.name,
+      unitPrice: variant?.price ?? dish.price,
       quantity: 1,
       itemDiscountAmount: 0,
       note: "",
@@ -197,6 +245,15 @@ export default function CaptainOrderPad({
       return;
     }
     const variant = availableVariants.find((entry) => entry.id === selectedVariantId);
+    for (const group of customizing.addonGroups ?? []) {
+      if (group.isActive === false) continue;
+      const count = (selectedAddons[group.id] ?? []).length;
+      const minimum = group.isRequired ? Math.max(1, group.minSelect) : group.minSelect;
+      if (count < minimum || count > group.maxSelect) {
+        setMessage(`Choose ${minimum}–${group.maxSelect} options for ${group.name}.`);
+        return;
+      }
+    }
     const addons = (customizing.addonGroups ?? []).flatMap((group) => {
       if (group.isActive === false) return [];
       return (selectedAddons[group.id] ?? []).flatMap((addonId) => {
@@ -222,7 +279,7 @@ export default function CaptainOrderPad({
     setCustomizing(null);
   }
 
-  function placeOrder(andPay: boolean) {
+  function placeOrder() {
     if (!selectedLocation) {
       setMessage("Select an assigned table or room first.");
       return;
@@ -280,38 +337,20 @@ export default function CaptainOrderPad({
 
         const orderId = json.data?.id as string | undefined;
         setLastOrderId(orderId ?? null);
-        setPayAmount(roundMoney(json.data?.total ?? totals.total));
-
-        if (andPay && orderId) {
-          const canPay =
-            (payMethod === "CASH" && permissions.recordCashPayment) ||
-            (payMethod === "UPI" && permissions.recordUpiPayment) ||
-            (payMethod === "CARD" && permissions.recordCardPayment);
-          if (!canPay) {
-            patchSession(emptyCartState());
-            setMessage(
-              `Order #${json.data.orderNumber} saved in New orders — payment not permitted for ${payMethod}. Hand over to cashier.`,
-            );
-            return;
-          }
-          const payRes = await fetch(`/api/orders/${encodeURIComponent(orderId)}/payment`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              method: payMethod,
-              amount: Number(payAmount) || json.data.total,
-            }),
-          });
-          const payJson = await payRes.json();
-          if (!payJson.success) throw new Error(payJson.error || "Order placed but payment failed");
-        }
+        setLastOrderNumber(json.data?.orderNumber ?? null);
+        setLastSavedOrder(json.data);
+        setPreviousKotLineIds(json.data?.kotLineIds ?? []);
+        setKotSent(false);
+        setPayAmount(roundMoney(Math.max(0, (json.data?.total ?? totals.total) - (json.data?.payment?.amountPaid ?? 0))));
+        setUpiRequest(null);
+        setCartOpen(true);
 
         patchSession(emptyCartState());
         const warning = json.meta?.warning ? ` · ${json.meta.warning}` : "";
         setMessage(
           `Order #${json.data.orderNumber} ${json.meta?.appended ? "updated" : "placed"} for ${selectedLocationName}${
             json.meta?.sentToKitchen ? " · KOT sent to kitchen" : ""
-          }${andPay ? ` · paid (${payMethod})` : ""}${warning}`,
+          }${warning}`,
         );
       } catch (error) {
         setMessage(error instanceof Error ? error.message : "Unable to place order");
@@ -324,12 +363,19 @@ export default function CaptainOrderPad({
       setMessage("Place an order first, then record payment.");
       return;
     }
+    if (payMethod === "UPI") {
+      setMessage("Use Generate UPI QR and wait for verified payment confirmation.");
+      return;
+    }
     const canPay =
       (payMethod === "CASH" && permissions.recordCashPayment) ||
-      (payMethod === "UPI" && permissions.recordUpiPayment) ||
       (payMethod === "CARD" && permissions.recordCardPayment);
     if (!canPay) {
       setMessage(`You are not permitted to record ${payMethod} payments.`);
+      return;
+    }
+    if (payAmount === "" || !Number.isFinite(payAmount) || payAmount <= 0) {
+      setMessage("Enter a valid payment amount.");
       return;
     }
     startTransition(async () => {
@@ -339,14 +385,81 @@ export default function CaptainOrderPad({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             method: payMethod,
-            amount: Number(payAmount) || totals.total,
+            amount: payAmount,
           }),
         });
         const json = await response.json();
         if (!json.success) throw new Error(json.error || "Unable to record payment");
-        setMessage(`Payment recorded (${payMethod}).`);
+        const outstanding = roundMoney(Math.max(0, (json.data?.total ?? 0) - (json.data?.payment?.amountPaid ?? 0)));
+        setMessage(`${payMethod} payment recorded.${outstanding > 0 ? ` ${money(outstanding, currency)} remains due.` : " Order paid."}`);
+        if (json.data) setLastSavedOrder(json.data);
+        setPayAmount(outstanding > 0 ? outstanding : "");
       } catch (error) {
         setMessage(error instanceof Error ? error.message : "Unable to record payment");
+      }
+    });
+  }
+
+  function sendKot() {
+    if (!lastOrderId) return;
+    setKotPending(true);
+    startTransition(async () => {
+      try {
+        const response = await fetch(`/api/captain/orders/${encodeURIComponent(lastOrderId)}/send-kot`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+        const json = await response.json();
+        if (!response.ok || !json.success) throw new Error(json.error || "Unable to send KOT.");
+        setLastSavedOrder(json.data);
+        setKotSent(true);
+        setMessage(`Order #${lastOrderNumber} · new items sent to kitchen.`);
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : "Unable to send KOT.");
+      } finally {
+        setKotPending(false);
+      }
+    });
+  }
+
+  const refreshUpiStatus = useCallback(async (orderId: string) => {
+    const response = await fetch(`/api/captain/orders/${encodeURIComponent(orderId)}/upi/status`, { cache: "no-store" });
+    const json = await response.json();
+    if (!response.ok || !json.success) throw new Error(json.error || "Unable to refresh UPI status.");
+    setUpiRequest(json.data);
+    if (json.data.status === "PAID") {
+      setMessage(`Order #${lastOrderNumber} · UPI payment verified and recorded.`);
+      const orderResponse = await fetch(`/api/captain/orders/${encodeURIComponent(orderId)}`, { cache: "no-store" });
+      if (orderResponse.ok) {
+        const orderJson = await orderResponse.json();
+        if (orderJson.success) {
+          setLastSavedOrder(orderJson.data);
+          const due = roundMoney(Math.max(0, orderJson.data.total - (orderJson.data.payment?.amountPaid ?? 0)));
+          setPayAmount(due > 0 ? due : "");
+        }
+      }
+    }
+  }, [lastOrderNumber]);
+
+  useEffect(() => {
+    if (!lastOrderId || !upiRequest || !["CREATING", "PENDING", "PROCESSING", "PARTIAL"].includes(upiRequest.status)) return;
+    const timer = window.setInterval(() => {
+      void refreshUpiStatus(lastOrderId).catch((error) => setMessage(error instanceof Error ? error.message : "Unable to refresh UPI status."));
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [lastOrderId, refreshUpiStatus, upiRequest?.status]);
+
+  function createUpiQr() {
+    if (!lastOrderId) return;
+    setPaymentPending(true);
+    startTransition(async () => {
+      try {
+        const response = await fetch(`/api/captain/orders/${encodeURIComponent(lastOrderId)}/upi`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+        const json = await response.json();
+        if (!response.ok || !json.success) throw new Error(json.error || "Unable to create UPI QR.");
+        setUpiRequest(json.data);
+        setMessage(`Order #${lastOrderNumber} · waiting for UPI payment.`);
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : "Unable to create UPI QR.");
+      } finally {
+        setPaymentPending(false);
       }
     });
   }
@@ -391,6 +504,10 @@ export default function CaptainOrderPad({
               setTableId(event.target.value);
               setMessage(null);
               setLastOrderId(null);
+              setLastOrderNumber(null);
+              setLastSavedOrder(null);
+              setKotSent(false);
+              setUpiRequest(null);
             }}
             className={`mt-1 block min-h-12 w-full min-w-[11rem] rounded-xl border bg-white px-3 ${
               !selectedLocation ? "border-rose-400 ring-2 ring-rose-200" : "border-neutral-200"
@@ -411,7 +528,7 @@ export default function CaptainOrderPad({
         <p
           role="status"
           className={`shrink-0 rounded-xl px-3 py-2 text-sm font-medium ${
-            /unable|select|add at least|not assigned|failed|invalid|not permitted|exceeds/i.test(message)
+            /unable|select|add at least|not assigned|failed|invalid|not permitted|exceeds|not configured|cannot|error/i.test(message)
               ? "border border-rose-200 bg-rose-50 text-rose-700"
               : "border border-emerald-200 bg-emerald-50 text-emerald-800"
           }`}
@@ -520,9 +637,7 @@ export default function CaptainOrderPad({
               {selectedLocation ? (
                 <span className="ml-2 text-sm font-normal text-white/60">· {selectedLocationName}</span>
               ) : null}
-              <span className="ml-2 text-sm font-normal text-white/60">
-                ({session.cart.reduce((sum, line) => sum + line.quantity, 0)} items)
-              </span>
+              <span className="ml-2 text-sm font-normal text-white/60">({cartItemCount} new{lastSavedOrder ? ` · ${lastSavedOrder.items.length} saved` : ""})</span>
             </h2>
             <button type="button" onClick={() => setCartOpen(false)} className="grid h-10 w-10 place-items-center rounded-full bg-white/10 lg:hidden" aria-label="Close cart">
               <X className="h-5 w-5" />
@@ -531,7 +646,13 @@ export default function CaptainOrderPad({
           </div>
 
           <ul className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain px-3 py-3">
-            {session.cart.length === 0 ? (
+            {lastSavedOrder ? lastSavedOrder.items.map((item) => (
+              <li key={item.lineId ?? `${item.dishId}-${item.dishNameSnapshot}`} className="rounded-xl border border-white/15 bg-white/5 p-3">
+                <div className="flex items-start justify-between gap-3 text-sm"><span className="min-w-0 font-semibold">{item.quantity}× {item.dishNameSnapshot}{item.variantNameSnapshot ? ` · ${item.variantNameSnapshot}` : ""}</span><span className="shrink-0 font-semibold">{money(item.itemTotal, currency)}</span></div>
+                <p className="mt-1 text-[11px] text-white/60">{item.lineId && (lastSavedOrder.kotLineIds ?? []).includes(item.lineId) ? "Sent to kitchen" : "Waiting for KOT"}{item.note ? ` · ${item.note}` : ""}</p>
+              </li>
+            )) : null}
+            {session.cart.length === 0 && !lastSavedOrder ? (
               <li className="flex min-h-[7rem] items-center justify-center rounded-xl border border-dashed border-white/20 p-4 text-center text-sm text-white/60">
                 Tap dishes to build this table&apos;s cart. Switching tables keeps each cart separate.
               </li>
@@ -587,7 +708,7 @@ export default function CaptainOrderPad({
                         onClick={() =>
                           patchSession({
                             cart: session.cart.map((entry) =>
-                              entry.key === line.key ? { ...entry, quantity: entry.quantity + 1 } : entry,
+                              entry.key === line.key ? { ...entry, quantity: Math.min(99, entry.quantity + 1) } : entry,
                             ),
                           })
                         }
@@ -643,7 +764,7 @@ export default function CaptainOrderPad({
           </ul>
 
           {/* Compact dock — ordered items stay the main view */}
-          <div className="shrink-0 border-t border-white/10 bg-neutral-950 px-3 py-2.5 sm:px-4">
+          <div className="max-h-[58dvh] shrink-0 overflow-y-auto border-t border-white/10 bg-neutral-950 px-3 py-2.5 sm:px-4 lg:max-h-[65dvh]">
             <div className="flex items-center gap-2">
               <span className="shrink-0 rounded-lg border border-white/15 px-2 py-1.5 text-[11px] font-semibold text-white/70">
                 ₹ off
@@ -695,8 +816,17 @@ export default function CaptainOrderPad({
             ) : null}
 
             <div className="mt-2 space-y-0.5 text-sm">
+              {lastSavedOrder ? <div className="space-y-0.5 border-b border-white/15 pb-1.5">
+                <div className="flex justify-between font-semibold"><span>Saved order #{lastOrderNumber}</span><span>{money(lastSavedOrder.total, currency)}</span></div>
+                <div className="flex justify-between text-xs text-white/55"><span>Items subtotal</span><span>{money(lastSavedOrder.subtotal, currency)}</span></div>
+                {(lastSavedOrder.serviceCharge ?? 0) > 0 ? <div className="flex justify-between text-xs text-white/55"><span>Service charge</span><span>{money(lastSavedOrder.serviceCharge ?? 0, currency)}</span></div> : null}
+                {(lastSavedOrder.taxAmount ?? 0) > 0 ? <div className="flex justify-between text-xs text-white/55"><span>{taxLabel} included in total</span><span>{money(lastSavedOrder.taxAmount ?? 0, currency)}</span></div> : null}
+                {(lastSavedOrder.cgstAmount ?? 0) > 0 ? <div className="flex justify-between pl-3 text-[11px] text-white/45"><span>Includes CGST</span><span>{money(lastSavedOrder.cgstAmount ?? 0, currency)}</span></div> : null}
+                {(lastSavedOrder.sgstAmount ?? 0) > 0 ? <div className="flex justify-between pl-3 text-[11px] text-white/45"><span>Includes SGST</span><span>{money(lastSavedOrder.sgstAmount ?? 0, currency)}</span></div> : null}
+                {(lastSavedOrder.payment.amountPaid ?? 0) > 0 ? <div className="flex justify-between text-xs text-emerald-200"><span>Paid</span><span>{money(lastSavedOrder.payment.amountPaid ?? 0, currency)}</span></div> : null}
+              </div> : null}
               <div className="flex justify-between text-white/65">
-                <span>Subtotal</span>
+                <span>{lastSavedOrder ? "New items subtotal" : "Subtotal"}</span>
                 <span>{money(totals.itemsSubtotal, currency)}</span>
               </div>
               {totals.billDiscount > 0 ? (
@@ -707,17 +837,17 @@ export default function CaptainOrderPad({
               ) : null}
               {totals.packagingCharge > 0 ? <div className="flex justify-between text-white/65"><span>Packaging</span><span>{money(totals.packagingCharge, currency)}</span></div> : null}
               {totals.serviceCharge > 0 ? <div className="flex justify-between text-white/65"><span>Service charge</span><span>{money(totals.serviceCharge, currency)}</span></div> : null}
-              <div className="flex justify-between text-white/65">
+              {totals.taxAmount > 0 ? <div className="flex justify-between text-white/65">
                 <span>
-                  {taxLabel} ({taxRatePercent}%)
+                  {totals.taxLabel} ({totals.gstRatePercent}%)
                 </span>
                 <span>{money(totals.taxAmount, currency)}</span>
-              </div>
-              {totals.cgstAmount > 0 ? <div className="flex justify-between text-white/65"><span>CGST</span><span>{money(totals.cgstAmount, currency)}</span></div> : null}
-              {totals.sgstAmount > 0 ? <div className="flex justify-between text-white/65"><span>SGST</span><span>{money(totals.sgstAmount, currency)}</span></div> : null}
+              </div> : null}
+              {totals.cgstAmount > 0 ? <div className="flex justify-between pl-3 text-xs text-white/50"><span>Includes CGST</span><span>{money(totals.cgstAmount, currency)}</span></div> : null}
+              {totals.sgstAmount > 0 ? <div className="flex justify-between pl-3 text-xs text-white/50"><span>Includes SGST</span><span>{money(totals.sgstAmount, currency)}</span></div> : null}
               <div className="flex justify-between text-lg font-bold">
-                <span>Total</span>
-                <span>{money(totals.total, currency)}</span>
+                <span>{lastSavedOrder ? cartItemCount > 0 ? "Estimated with new items" : "Running total" : "Total"}</span>
+                <span>{money((lastSavedOrder?.total ?? 0) + totals.total, currency)}</span>
               </div>
             </div>
 
@@ -725,29 +855,17 @@ export default function CaptainOrderPad({
               <button
                 type="button"
                 disabled={pending || session.cart.length === 0 || !selectedLocation}
-                onClick={() => placeOrder(false)}
+                onClick={placeOrder}
                 className="min-h-11 w-full rounded-xl bg-[#f59e0b] text-sm font-bold text-neutral-950 disabled:opacity-40"
               >
-                {pending ? "Sending…" : "Review & submit order"}
+                {pending ? "Saving…" : "Save order"}
               </button>
-              {canRecordAny && session.cart.length > 0 ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setCheckoutOpen((open) => !open)}
-                    className="min-h-10 w-full rounded-xl border border-white/25 text-sm font-semibold text-white"
-                  >
-                    {checkoutOpen ? "Hide checkout" : "Checkout & payment options"}
-                  </button>
-                  {checkoutOpen ? <><button
-                    type="button"
-                    disabled={pending || !selectedLocation}
-                    onClick={() => placeOrder(true)}
-                    className="min-h-10 w-full rounded-xl bg-white text-sm font-bold text-neutral-900 disabled:opacity-40"
-                  >
-                    Bill &amp; pay ({payMethod})
-                  </button>
-                  <div className="flex items-center gap-1.5">
+              {lastOrderId ? (
+                <section className="space-y-2 rounded-xl border border-white/15 bg-white/5 p-3" aria-label="Saved order actions">
+                  <div className="flex items-center justify-between gap-2 text-xs"><strong>Saved order #{lastOrderNumber}</strong><span className="text-white/70">{selectedLocationName}</span></div>
+                  <div className="flex gap-2"><button type="button" disabled={kotPending || savedUnsentCount === 0} onClick={sendKot} className="min-h-10 flex-1 rounded-lg bg-amber-500 px-3 text-xs font-bold text-neutral-950 disabled:opacity-50">{kotPending ? "Sending KOT…" : savedUnsentCount > 0 ? `Send ${savedUnsentCount} new item${savedUnsentCount === 1 ? "" : "s"} to kitchen` : "All items sent"}</button>{kotSent && lastSavedOrder ? <button type="button" onClick={() => printQueuedKitchenOrderTicket(lastSavedOrder, undefined, previousKotLineIds)} className="min-h-10 rounded-lg border border-white/30 px-3 text-xs font-bold">Print KOT copy</button> : null}</div>
+                  {canRecordAny ? <>
+                  <div className="grid grid-cols-3 gap-1.5">
                     {(["CASH", "UPI", "CARD"] as PaymentMethod[]).map((method) => {
                       const allowed =
                         (method === "CASH" && permissions.recordCashPayment) ||
@@ -758,8 +876,8 @@ export default function CaptainOrderPad({
                           key={method}
                           type="button"
                           disabled={!allowed}
-                          onClick={() => setPayMethod(method)}
-                          className={`min-h-8 flex-1 rounded-lg text-[11px] font-semibold disabled:opacity-30 ${
+                          onClick={() => { setPayMethod(method); if (method === "UPI" && !upiRequest && !paymentPending) createUpiQr(); }}
+                          className={`min-h-10 rounded-lg text-xs font-semibold disabled:opacity-30 ${
                             payMethod === method ? "bg-[#f59e0b] text-neutral-950" : "bg-white/10"
                           }`}
                         >
@@ -767,31 +885,24 @@ export default function CaptainOrderPad({
                         </button>
                       );
                     })}
-                    <input
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      value={payAmount}
-                      onChange={(event) =>
-                        setPayAmount(event.target.value === "" ? "" : Number(event.target.value))
-                      }
-                      placeholder={String(roundMoney(totals.total))}
-                      className="min-h-8 w-20 rounded-lg border border-white/20 bg-transparent px-1.5 text-[11px]"
-                    />
-                    <button
-                      type="button"
-                      disabled={pending || !lastOrderId}
-                      onClick={recordPay}
-                      className="min-h-8 shrink-0 rounded-lg bg-white/15 px-2.5 text-[11px] disabled:opacity-40"
-                    >
-                      Record
-                    </button>
                   </div>
-                  </> : null}
-                </>
+                  {payMethod === "UPI" ? upiRequest ? (
+                    <div className="space-y-2 rounded-xl bg-white p-3 text-center text-neutral-900">
+                      <p className="text-xs font-bold">{upiRequest.status === "PAID" ? "Verified UPI payment" : "Scan exact-amount UPI QR"}</p>
+                      {upiRequest.qrImageUrl && !upiRequestNeedsReplacement ? <img src={upiRequest.qrImageUrl} alt={`UPI QR for order ${lastOrderNumber}`} className="mx-auto h-56 w-56 max-w-full object-contain" /> : null}
+                      <p className="text-xl font-black">{money(upiRequest.amount, currency)}</p>
+                      <p className="break-all text-[11px] text-neutral-600">Ref {upiRequest.paymentReferenceId}</p>
+                      <p className="text-xs font-semibold">{upiRequest.status === "PAID" ? "Provider confirmed · payment recorded" : upiRequestNeedsReplacement ? `Request ${upiRequest.status.toLowerCase()} · do not scan this QR` : `Status: ${upiRequest.status} · waiting for provider confirmation`}</p>
+                      {upiRequestNeedsReplacement ? <button type="button" onClick={createUpiQr} className="min-h-9 rounded-lg border px-3 text-xs">Create new request</button> : upiRequest.status !== "PAID" ? <div className="flex justify-center gap-2"><button type="button" onClick={() => void refreshUpiStatus(lastOrderId).catch((error) => setMessage(error instanceof Error ? error.message : "Refresh failed"))} className="min-h-9 rounded-lg border px-3 text-xs">Refresh status</button><button type="button" onClick={() => void fetch(`/api/captain/orders/${encodeURIComponent(lastOrderId)}/upi/cancel`, { method: "POST", body: "{}" }).then(async (response) => { const json = await response.json(); if (!response.ok || !json.success) throw new Error(json.error || "Cancel failed"); setUpiRequest(json.data); }).catch((error) => setMessage(error instanceof Error ? error.message : "Cancel failed"))} className="min-h-9 rounded-lg border px-3 text-xs">Cancel request</button></div> : null}
+                    </div>
+                  ) : <button type="button" disabled={paymentPending || pending} onClick={createUpiQr} className="min-h-10 w-full rounded-lg bg-white text-sm font-bold text-neutral-900 disabled:opacity-50">{paymentPending ? "Creating QR…" : "Generate UPI QR"}</button> : (
+                    <div className="flex gap-2"><label className="min-w-0 flex-1 text-xs text-white/70">{payMethod} received<input type="number" min="0.01" step="0.01" value={payAmount} onChange={(event) => setPayAmount(event.target.value === "" ? "" : Number(event.target.value))} className="mt-1 min-h-10 w-full rounded-lg border border-white/20 bg-transparent px-2 text-sm text-white" /></label><button type="button" disabled={pending || payAmount === ""} onClick={recordPay} className="self-end min-h-10 rounded-lg bg-white px-3 text-xs font-bold text-neutral-900 disabled:opacity-40">Confirm {payMethod}</button></div>
+                  )}
+                  </> : <p className="text-xs text-white/60">Payment is handled by an authorized cashier.</p>}
+                </section>
               ) : (
                 <p className="text-[11px] text-white/55">
-                  Payment locked — send to kitchen, then hand over to cashier.
+                  Save the order first. Send KOT and payment stay in this panel.
                 </p>
               )}
             </div>
@@ -809,9 +920,9 @@ export default function CaptainOrderPad({
             <ShoppingBag className="h-5 w-5" />
             {cartItemCount > 0 ? <span className="absolute -right-1.5 -top-1.5 grid h-5 min-w-5 place-items-center rounded-full bg-amber-500 px-1 text-[10px] font-bold text-neutral-950">{cartItemCount}</span> : null}
           </span>
-          <span><span className="block text-sm font-bold">{cartItemCount ? "View current order" : "Cart is empty"}</span><span className="block text-xs text-white/60">{selectedLocationName}</span></span>
+          <span><span className="block text-sm font-bold">{cartItemCount ? "Review new items" : lastSavedOrder ? `Order #${lastOrderNumber} · ${savedUnsentCount} unsent` : "Cart is empty"}</span><span className="block text-xs text-white/60">{selectedLocationName}</span></span>
         </span>
-        <span className="text-base font-bold">{money(totals.total, currency)}</span>
+        <span className="text-base font-bold">{money((lastSavedOrder?.total ?? 0) + totals.total, currency)}</span>
       </button>
 
       {customizing ? (

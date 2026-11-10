@@ -15,6 +15,7 @@
     "demo:workbook": "node --import tsx scripts/generate-demo-menu-workbook.ts",
     "demo:workbook:reupload": "node --import tsx scripts/generate-demo-reupload-workbook.ts",
     "demo:seed": "node --env-file=.env.local --import tsx scripts/seed-tronx-demo-kitchen.ts",
+    "qa:captain:local": "NODE_PATH=./node_modules/next/dist/compiled node --conditions=react-server --import tsx scripts/qa-captain-local.ts",
     "demo:seed:http": "curl -sS -X POST http://localhost:3000/api/dev/seed-demo-kitchen",
     "demo:verify:reupload": "node scripts/verify-demo-reupload-import.mjs",
     "bench:menu": "node scripts/load-benchmark-menu.mjs"

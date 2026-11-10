@@ -4,6 +4,7 @@ import { placeCaptainOrderSchema } from "../lib/validations";
 
 test("placeCaptainOrderSchema accepts coupon and bill discount fields", () => {
   const parsed = placeCaptainOrderSchema.parse({
+    tableId: "table-1",
     tableNumber: 1,
     idempotencyKey: "11111111-1111-4111-8111-111111111111",
     couponCode: "WELCOME10",

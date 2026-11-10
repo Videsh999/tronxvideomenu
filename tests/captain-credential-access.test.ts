@@ -59,6 +59,9 @@ test("setting a retrievable Captain password enables login and authorized retrie
       async findCredentialsByRestaurant(restaurantId: string, id: string) {
         return captain.restaurantId === restaurantId && captain.id === id ? captain : null;
       },
+      async touchLastActiveAt(restaurantId: string, id: string, at: string) {
+        if (captain.restaurantId === restaurantId && captain.id === id) captain.lastActiveAt = at;
+      },
     };
     const service = new CaptainService(repository as unknown as typeof captainRepository);
     const result = await service.resetPassword("restaurant-a", captain.id, "new-retrievable-password");

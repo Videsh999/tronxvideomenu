@@ -51,6 +51,7 @@ const staffOrderView = (order: RestaurantOrder) => ({
   orderNote: order.orderNote,
   captainAuthorization: order.captainAuthorization,
   items: order.items,
+  kotLineIds: order.kotLineIds ?? [],
   subtotal: order.subtotal,
   billDiscountAmount: order.billDiscountAmount ?? 0,
   taxRatePercent: order.taxRatePercent ?? 0,

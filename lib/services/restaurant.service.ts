@@ -49,10 +49,7 @@ const getRestaurantBySlugCached = cache(async (slug: string) => {
 });
 
 const getFullMenuCached = cache(async (idOrSlug: string): Promise<RestaurantMenu | null> => {
-  let restaurant = await restaurantRepository.findById(idOrSlug);
-  if (!restaurant) {
-    restaurant = await restaurantRepository.findBySlug(idOrSlug);
-  }
+  const restaurant = await restaurantRepository.findByIdOrSlug(idOrSlug);
   if (!restaurant) return null;
   if (restaurant.isActive === false) return null;
 

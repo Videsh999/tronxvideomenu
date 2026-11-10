@@ -4,6 +4,7 @@ import { placeCaptainOrderSchema } from "../lib/validations/index";
 
 test("captain order allows walk-in without phone", () => {
   const parsed = placeCaptainOrderSchema.safeParse({
+    tableId: "table-4",
     tableNumber: 4,
     idempotencyKey: "11111111-1111-4111-8111-111111111111",
     items: [{ dishId: "dish-1", quantity: 2, selections: [] }],
@@ -24,6 +25,7 @@ test("captain order rejects missing table", () => {
 
 test("captain order accepts optional guest name and phone", () => {
   const parsed = placeCaptainOrderSchema.safeParse({
+    tableId: "table-2",
     tableNumber: 2,
     guestName: "Walk-in guest",
     customerPhone: "9876543210",

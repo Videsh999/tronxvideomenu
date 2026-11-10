@@ -26,17 +26,18 @@ export default async function RestaurantMenuPage({
   const tableValue = Array.isArray(rawLocation) ? rawLocation[0] : rawLocation;
   const tableNumber =
     tableValue && /^\d{1,4}$/.test(tableValue) ? Number(tableValue) : null;
-  const table = tableNumber
-    ? await tableService.getActiveByNumber(menu.restaurant.id, tableNumber)
-    : null;
+  const [table, wifiConfigured] = await Promise.all([
+    tableNumber ? tableService.getActiveByNumber(menu.restaurant.id, tableNumber) : Promise.resolve(null),
+    hasRestaurantFeature(menu.restaurant, "WIFI")
+      ? restaurantService.hasWifiConfiguredForGuests(menu.restaurant.slug)
+      : Promise.resolve(false),
+  ]);
   const expectedType = rawRoom !== undefined ? "ROOM" : "TABLE";
   const invalidTable = Boolean(tableValue) && (!tableNumber || !table || (table.locationType ?? "TABLE") !== expectedType);
   const reservationsEnabled = hasRestaurantFeature(menu.restaurant, "RESERVATIONS");
   // Only show Wi-Fi when the plan allows it AND an SSID is actually configured.
   // Otherwise guests open an empty “not configured” modal.
-  const wifiEnabled =
-    hasRestaurantFeature(menu.restaurant, "WIFI") &&
-    (await restaurantService.hasWifiConfiguredForGuests(menu.restaurant.slug));
+  const wifiEnabled = wifiConfigured;
   const videoMenuEnabled = hasRestaurantFeature(menu.restaurant, "VIDEO_MENU");
   const tableOrderingEnabled = hasRestaurantFeature(menu.restaurant, "TABLE_ORDERING");
   const loyaltyEnabled =

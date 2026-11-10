@@ -41,6 +41,15 @@ export class RestaurantRepository implements IRestaurantRepository {
     return restaurant ? toDomain<Restaurant>(restaurant) : null;
   }
 
+  /** Resolve public slugs and internal IDs with one indexed database round trip. */
+  async findByIdOrSlug(value: string): Promise<Restaurant | null> {
+    await connectToDatabase();
+    const exact = await RestaurantModel.findOne({ $or: [{ id: value }, { slug: value }] }).lean();
+    if (exact) return toDomain<Restaurant>(exact);
+    const insensitive = await RestaurantModel.findOne({ slug: { $regex: `^${escapeRegExp(value)}$`, $options: "i" } }).lean();
+    return insensitive ? toDomain<Restaurant>(insensitive) : null;
+  }
+
   async findWifiById(id: string): Promise<Pick<Restaurant, "isActive" | "wifi"> | null> {
     await connectToDatabase();
     const restaurant = await RestaurantModel.findOne({ id }, { id: 1, isActive: 1, wifi: 1 }).lean();

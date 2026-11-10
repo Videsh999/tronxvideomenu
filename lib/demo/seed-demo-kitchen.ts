@@ -136,9 +136,23 @@ export async function seedTronxDemoKitchen() {
   for (let n = 1; n <= 8; n += 1) {
     await upsertById(TableModel, `tdk-table-${n}`, {
       restaurantId: RESTAURANT_ID,
+      locationType: "TABLE",
       tableNumber: n,
       label: `Demo ${n}`,
       capacity: n <= 4 ? 2 : 4,
+      isActive: true,
+      status: "OPEN",
+      updatedAt: now,
+      createdAt: now,
+    });
+  }
+  for (let n = 201; n <= 204; n += 1) {
+    await upsertById(TableModel, `tdk-room-${n}`, {
+      restaurantId: RESTAURANT_ID,
+      locationType: "ROOM",
+      tableNumber: n,
+      label: `Guest room ${n}`,
+      capacity: 2,
       isActive: true,
       status: "OPEN",
       updatedAt: now,
@@ -158,6 +172,8 @@ export async function seedTronxDemoKitchen() {
     adminUrl: `/admin/${SLUG}`,
     categories: categoryNames.length,
     dishes: dishCount,
+    tables: 8,
+    rooms: 4,
     adminEmail: ADMIN_EMAIL,
   };
 }
