@@ -61,9 +61,13 @@ export function printKitchenOrderTicket(order: OrderSummary, restaurantName?: st
   window.setTimeout(cleanup, 60_000);
 }
 
-export function printQueuedKitchenOrderTicket(order: OrderSummary, restaurantName?: string, previouslySentLineIds: string[] = []) {
-  const sent = new Set(previouslySentLineIds.length ? previouslySentLineIds : order.kotLineIds ?? []);
-  const queued = order.items.filter((item) => item.lineId !== undefined && !sent.has(item.lineId) && (item.preparationStatus ?? "QUEUED") === "QUEUED");
+export function queuedKotItems(order: OrderSummary, previouslySentLineIds?: string[]) {
+  const sent = new Set(previouslySentLineIds ?? order.kotLineIds ?? []);
+  return order.items.filter((item) => item.lineId !== undefined && !sent.has(item.lineId) && (item.preparationStatus ?? "QUEUED") === "QUEUED");
+}
+
+export function printQueuedKitchenOrderTicket(order: OrderSummary, restaurantName?: string, previouslySentLineIds?: string[]) {
+  const queued = queuedKotItems(order, previouslySentLineIds);
   if (!queued.length) return;
   printKitchenOrderTicket({ ...order, items: queued }, restaurantName);
 }

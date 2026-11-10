@@ -422,7 +422,7 @@ export class OrderRepository implements IOrderRepository {
   async markKotSent(restaurantId: string, id: string, lineIds: string[], event: OrderEvent) {
     await connectToDatabase();
     const order = await OrderModel.findOneAndUpdate(
-      { restaurantId, id, status: { $nin: ["CANCELLED", "REJECTED", "REFUNDED", "COMPLETED"] } },
+      { restaurantId, id, status: { $nin: ["CANCELLED", "REJECTED", "REFUNDED", "COMPLETED"] }, kotLineIds: { $nin: lineIds } },
       { $addToSet: { kotLineIds: { $each: lineIds } }, $set: { status: "PREPARING", updatedAt: new Date().toISOString() }, $push: { events: event } },
       { new: true, runValidators: true },
     ).lean();

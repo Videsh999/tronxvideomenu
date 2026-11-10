@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { OrderSummary } from "../types/index";
-import { buildKitchenOrderTicketHtml } from "../lib/kot-print";
+import { buildKitchenOrderTicketHtml, queuedKotItems } from "../lib/kot-print";
 
 const order = {
   id: "order-1",
@@ -35,4 +35,18 @@ test("browser KOT includes order, room, item pricing, addons, notes and totals",
     assert.ok(html.includes(expected), `missing ${expected}`);
   }
   assert.ok(!html.includes("Paneer <Hot>"), "dish names must be HTML escaped");
+});
+
+test("first and later KOT batches contain only lines not previously sent", () => {
+  const ticket = {
+    ...order,
+    kotLineIds: ["first", "second"],
+    items: [
+      { ...order.items[0], lineId: "first" },
+      { ...order.items[0], lineId: "second" },
+    ],
+  } as OrderSummary;
+  assert.deepEqual(queuedKotItems(ticket, []).map((item) => item.lineId), ["first", "second"]);
+  assert.deepEqual(queuedKotItems(ticket, ["first"]).map((item) => item.lineId), ["second"]);
+  assert.deepEqual(queuedKotItems(ticket).map((item) => item.lineId), []);
 });

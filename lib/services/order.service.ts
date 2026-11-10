@@ -293,14 +293,8 @@ export class OrderService {
       ? menu.restaurant.orderSettings.customerOrderingMode === "CAPTAIN_APPROVAL"
       : menu.restaurant.orderSettings?.qrRequiresCaptainApproval !== false;
     const captainAuthorization = authorizationForCustomerQr(requiresCaptainApproval);
-    if (customerMode === "AUTOMATIC" && existingSession) {
-      const existingOrders = await tableSessionRepository.listOrders(menu.restaurant.id, existingSession.id);
-      const active = [...existingOrders].reverse().find((entry) => !["COMPLETED", "CANCELLED", "REJECTED", "REFUNDED"].includes(entry.status));
-      if (active) {
-        const merged = await this.appendItemsToOrder(menu.restaurant.id, menu.restaurant.slug, active.id, { items: input.items, idempotencyKey: input.idempotencyKey }, { role: "CAPTAIN", id: "customer-qr", name: "Customer QR" });
-        return { order: customerOrderView(merged as never), customerToken };
-      }
-    }
+    // Each guest receives a token bound to the order created below. Reusing another
+    // guest's order would return a token that cannot authorize status tracking.
     const createdEvent = makeEvent("CREATED", requiresCaptainApproval
       ? "Order placed via QR menu — awaiting captain approval"
       : "Order placed via QR menu — ready for staff acceptance", undefined, {
@@ -865,20 +859,24 @@ export class OrderService {
   }
 
   /** Explicit additional KOT enqueue for captain append flows (idempotent print layer handles dupes). */
-  async enqueueAdditionalKot(order: RestaurantOrder, actorId?: string) {
-    return this.enqueueKotPrintSafe(order, { actorId });
+  async enqueueAdditionalKot(order: RestaurantOrder, actorId?: string, lineIds?: string[]) {
+    const items = lineIds ? order.items.filter((item) => item.lineId && lineIds.includes(item.lineId)) : order.items;
+    if (!items.length) return { warnings: ["No items to print on this KOT."], jobIds: [] as string[] };
+    const batchSubtotal = Math.round(items.reduce((sum, item) => sum + item.itemTotal, 0) * 100) / 100;
+    return this.enqueueKotPrintSafe({ ...order, items, subtotal: batchSubtotal, taxAmount: 0, total: batchSubtotal }, { actorId });
   }
 
   async sendKot(restaurantId: string, orderId: string, actor: PaymentAuditActor) {
     const current = await orderRepository.findByRestaurantAndId(restaurantId, orderId);
     if (!current) throw new OrderServiceError("Order not found.", 404);
+    if (!isCaptainKitchenEligible(current)) throw new OrderServiceError("Approve this customer order before sending a KOT.", 409);
     const sent = new Set(current.kotLineIds ?? []);
     const pendingLineIds = current.items.map((item) => item.lineId).filter((id): id is string => typeof id === "string" && !sent.has(id));
     if (!pendingLineIds.length) throw new OrderServiceError("There are no new items waiting for a KOT.", 409);
     const event = makeEvent("STATUS_CHANGED", `KOT sent for ${pendingLineIds.length} new line(s)`, actor, { kotLineIds: pendingLineIds });
     const updated = await orderRepository.markKotSent(restaurantId, orderId, pendingLineIds, event);
     if (!updated) throw new OrderServiceError("Unable to send KOT. Refresh the table and try again.", 409);
-    void this.enqueueAdditionalKot(updated, actor.id);
+    void this.enqueueAdditionalKot(updated, actor.id, pendingLineIds);
     return staffOrderView(updated);
   }
 
