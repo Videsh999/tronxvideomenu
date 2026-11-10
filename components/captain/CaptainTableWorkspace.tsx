@@ -17,7 +17,7 @@ import type { ServiceRequest, ServiceRequestType } from "@/types/service-request
 import { TABLE_STATUS_LABEL, TABLE_STATUS_STYLE } from "@/lib/captain-floor";
 import { isPendingCaptainApproval } from "@/lib/order-authorization";
 import { primaryFloorAction } from "@/lib/order-board";
-import { printKitchenOrderTicket } from "@/lib/kot-print";
+import { printSessionKitchenTicket } from "@/lib/kot-print";
 import UpiPaymentQr from "@/components/shared/UpiPaymentQr";
 
 function money(value: number, currency = "INR") {
@@ -44,6 +44,7 @@ const REQUEST_TYPES: { type: ServiceRequestType; label: string }[] = [
 
 export default function CaptainTableWorkspace({
   slug,
+  restaurantName,
   captainName,
   currency,
   initialTable,
@@ -55,6 +56,7 @@ export default function CaptainTableWorkspace({
   upiSettings,
 }: {
   slug: string;
+  restaurantName?: string;
   captainName: string;
   currency: string;
   initialTable: RestaurantTable;
@@ -76,6 +78,7 @@ export default function CaptainTableWorkspace({
   const [note, setNote] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("ALL");
+  const [billServiceCharge, setBillServiceCharge] = useState("0");
   const [pending, startTransition] = useTransition();
 
   const openRequests = useMemo(
@@ -183,7 +186,7 @@ export default function CaptainTableWorkspace({
         const response = await fetch(`/api/captain/tables/${table.id}/session`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "GENERATE_BILL", sessionId: session.id, revise }),
+          body: JSON.stringify({ action: "GENERATE_BILL", sessionId: session.id, revise, tipAmount: Number(billServiceCharge) || 0 }),
         });
         const json = await response.json();
         if (!json.success) throw new Error(json.error || "Unable to generate final bill");
@@ -240,7 +243,6 @@ export default function CaptainTableWorkspace({
           if (!json.success) throw new Error(json.error || "Unable to send to kitchen");
           setOrder(json.data);
           setMessage(`Order #${order.orderNumber} sent to kitchen`);
-          printKitchenOrderTicket(json.data);
         }
         await refreshTable();
       } catch (error) {
@@ -351,9 +353,7 @@ export default function CaptainTableWorkspace({
             <h2 className="mt-1 text-xl font-black">{session?.sessionNumber ?? "Starts with first order"}</h2>
             <p className="mt-1 text-sm text-neutral-500">{orders.length} independent order{orders.length === 1 ? "" : "s"} · Running bill {money(runningTotal, currency)} · Paid {money(previouslyPaid, currency)}</p>
           </div>
-          <button type="button" disabled={pending || !session || orders.length === 0} onClick={() => generateFinalBill(Boolean(bill))} className="min-h-11 rounded-xl bg-violet-700 px-4 text-sm font-bold text-white disabled:opacity-40">
-            {bill ? "Generate revised bill" : "Generate final bill"}
-          </button>
+          <div className="flex flex-wrap items-end gap-2"><label className="text-xs font-semibold text-neutral-600">Service charge / tip<input type="number" min="0" step="0.01" value={billServiceCharge} onChange={(event) => setBillServiceCharge(event.target.value)} className="mt-1 block h-10 w-32 rounded-lg border border-neutral-300 px-2 text-sm" /></label><button type="button" disabled={pending || !session || orders.length === 0} onClick={() => generateFinalBill(Boolean(bill))} className="min-h-11 rounded-xl bg-violet-700 px-4 text-sm font-bold text-white disabled:opacity-40">{bill ? "Generate revised bill" : "Finalize bill"}</button><button type="button" disabled={orders.length === 0} onClick={() => printSessionKitchenTicket(orders.filter((row) => !["CANCELLED", "REJECTED", "REFUNDED"].includes(row.status)), restaurantName, locationName(table))} className="min-h-11 rounded-xl border border-neutral-300 px-4 text-sm font-bold">Print session KOT</button></div>
         </div>
         {orders.length ? (
           <div className="mt-4 flex gap-2 overflow-x-auto pb-1">

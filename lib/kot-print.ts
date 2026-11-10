@@ -61,6 +61,26 @@ export function printKitchenOrderTicket(order: OrderSummary, restaurantName?: st
   window.setTimeout(cleanup, 60_000);
 }
 
+/** Prints one consolidated kitchen ticket for all orders in a table session. */
+export function printSessionKitchenTicket(orders: OrderSummary[], restaurantName = "TRONX", location = "Table") {
+  if (typeof window === "undefined" || orders.length === 0) return;
+  const merged = new Map<string, { name: string; quantity: number; total: number; note?: string }>();
+  for (const order of orders) {
+    for (const item of order.items) {
+      const key = `${item.dishId}:${item.variantId ?? ""}:${item.addons.map((addon) => addon.addonId).sort().join(",")}`;
+      const current = merged.get(key);
+      if (current) current.quantity += Math.max(0, item.quantity - (item.cancelledQuantity ?? 0));
+      else merged.set(key, { name: `${item.dishNameSnapshot}${item.variantNameSnapshot ? ` · ${item.variantNameSnapshot}` : ""}`, quantity: Math.max(0, item.quantity - (item.cancelledQuantity ?? 0)), total: item.itemTotal, note: item.note });
+    }
+  }
+  const html = `<section class="kot-ticket" aria-label="Consolidated kitchen ticket"><header><div class="brand">${escapeHtml(restaurantName)}</div><div class="kind">CONSOLIDATED KITCHEN ORDER</div><div class="order-number">${escapeHtml(location)}</div><div class="meta">${orders.length} orders · ${escapeHtml(new Date().toLocaleString())}</div></header><div class="rule"></div><table><thead><tr><th>Qty</th><th>Item</th><th class="price">Price</th></tr></thead><tbody>${[...merged.values()].map((item) => `<tr><td class="qty">${item.quantity}×</td><td class="item"><div class="dish">${escapeHtml(item.name)}</div>${item.note ? `<div class="note">NOTE: ${escapeHtml(item.note)}</div>` : ""}</td><td class="price"><strong>${money(item.total)}</strong></td></tr>`).join("")}</tbody></table><div class="rule"></div><footer>Session KOT · ${orders.map((order) => `#${order.orderNumber}`).join(", ")} · Powered by TRONX</footer></section>`;
+  document.getElementById("tronx-kot-print-root")?.remove();
+  document.getElementById("tronx-kot-print-style")?.remove();
+  const style = document.createElement("style"); style.id = "tronx-kot-print-style"; style.textContent = PRINT_CSS;
+  const root = document.createElement("div"); root.id = "tronx-kot-print-root"; root.innerHTML = html;
+  document.head.appendChild(style); document.body.appendChild(root); window.addEventListener("afterprint", () => { root.remove(); style.remove(); }, { once: true }); window.setTimeout(() => window.print(), 120);
+}
+
 function pdfMoney(value: number) {
   return `Rs. ${Number(value || 0).toFixed(2)}`;
 }

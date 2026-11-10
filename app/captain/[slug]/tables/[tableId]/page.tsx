@@ -39,6 +39,7 @@ export default async function CaptainTableWorkspacePage({
   return (
     <CaptainTableWorkspace
       slug={slug}
+      restaurantName={restaurant.name}
       captainName={captain.name}
       currency={restaurant.currency ?? restaurant.billing?.currency ?? "INR"}
       initialTable={table}
