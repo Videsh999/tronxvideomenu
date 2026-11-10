@@ -102,6 +102,25 @@ export class OrderRepository implements IOrderRepository {
     return orders.map((order) => this.mapOrder(order));
   }
 
+  async appendVersionedEvent(
+    restaurantId: string,
+    id: string,
+    event: OrderEvent,
+    expectedVersion: number,
+    session?: ClientSession,
+  ) {
+    await connectToDatabase();
+    const order = await OrderModel.findOneAndUpdate(
+      { $and: [{ restaurantId, id }, versionClause(expectedVersion)] },
+      {
+        $set: { version: expectedVersion + 1, updatedAt: new Date().toISOString() },
+        $push: { events: event },
+      },
+      { new: true, runValidators: true, session },
+    ).lean();
+    return order ? this.mapOrder(order) : null;
+  }
+
   async findByFloorActionKey(restaurantId: string, key: string) {
     await connectToDatabase();
     const order = await OrderModel.findOne({
@@ -468,6 +487,7 @@ export class OrderRepository implements IOrderRepository {
       billDiscountAmount?: number;
       expectedVersion: number;
       nextStatus?: RestaurantOrder["status"];
+      mergedIntoOrderId?: string;
       session?: ClientSession;
     },
   ) {
@@ -491,11 +511,12 @@ export class OrderRepository implements IOrderRepository {
     if (patch.billDiscountAmount !== undefined) set.billDiscountAmount = patch.billDiscountAmount;
     if (patch.reopenForKitchen) set.status = "PREPARING";
     if (patch.nextStatus) set.status = patch.nextStatus;
+    if (patch.mergedIntoOrderId) set.mergedIntoOrderId = patch.mergedIntoOrderId;
 
     const order = await OrderModel.findOneAndUpdate(
       {
         $and: [
-          { restaurantId, id, status: { $nin: ["CANCELLED", "REJECTED", "REFUNDED", "COMPLETED"] } },
+          { restaurantId, id, status: { $nin: ["CANCELLED", "REJECTED", "REFUNDED", "COMPLETED", "MERGED"] } },
           versionClause(patch.expectedVersion),
         ],
       },

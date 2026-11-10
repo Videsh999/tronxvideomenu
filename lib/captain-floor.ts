@@ -49,7 +49,7 @@ export function kotItemStatus(
   return "sent";
 }
 
-const CLOSED_ORDER = new Set(["COMPLETED", "CANCELLED", "REJECTED", "REFUNDED"]);
+const CLOSED_ORDER = new Set(["COMPLETED", "CANCELLED", "REJECTED", "REFUNDED", "MERGED"]);
 
 export function isRunningOrder(status: string) {
   return !CLOSED_ORDER.has(status);
@@ -94,6 +94,21 @@ export function partitionBillItems<T extends { lineId?: string; quantity: number
 export function nextKotNumber(items: { kotNumber?: number }[]) {
   if (items.length === 0) return 1;
   return items.reduce((max, item) => Math.max(max, item.kotNumber ?? 1), 1) + 1;
+}
+
+/** Shift moved tickets past the destination's highest number. The old number is kept. */
+export function renumberMovedKots<T extends { kotNumber?: number; previousKotNumber?: number }>(
+  destinationItems: { kotNumber?: number }[],
+  moving: T[],
+) {
+  const destMax = destinationItems.reduce((max, item) => Math.max(max, item.kotNumber ?? 0), 0);
+  const sourceKots = [...new Set(moving.map((item) => item.kotNumber ?? 1))].sort((a, b) => a - b);
+  const mapped = new Map(sourceKots.map((kot, index) => [kot, destMax + index + 1]));
+  return moving.map((item) => ({
+    ...item,
+    previousKotNumber: item.kotNumber ?? 1,
+    kotNumber: mapped.get(item.kotNumber ?? 1) ?? destMax + 1,
+  }));
 }
 
 /** Live occupied time: minutes under an hour, otherwise h:mm. */

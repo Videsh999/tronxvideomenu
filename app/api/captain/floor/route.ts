@@ -107,7 +107,7 @@ export async function POST(request: Request) {
     if (!parsed.data.tableId || !parsed.data.lineId || !parsed.data.reason) {
       return NextResponse.json({ success: false, error: "A void needs the item and a reason." }, { status: 400 });
     }
-    const data = await floorTransferService.voidItem({
+    const data = await floorTransferService.requestVoid({
       restaurantId,
       tableId: parsed.data.tableId,
       orderId: parsed.data.orderId,

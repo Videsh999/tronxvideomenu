@@ -1,5 +1,6 @@
 import { captainRepository } from "@/lib/repositories/captain.repository";
 import { captainAssignmentRepository } from "@/lib/repositories/captain-assignment.repository";
+import { restaurantRepository } from "@/lib/repositories/restaurant.repository";
 import { tableRepository } from "@/lib/repositories/table.repository";
 import { hashCaptainPassword, verifyCaptainPassword } from "@/lib/security/captain-password";
 import { decryptCredentialPassword, encryptCredentialPassword } from "@/lib/security/credential-crypto-core";
@@ -131,10 +132,14 @@ export class CaptainService {
     if (!captain || captain.restaurantId !== restaurantId || !captain.isActive) {
       throw new Error("Captain not authorized.");
     }
-    // Floor access is the captain's own outlet. Assignment is a hint, not a lock.
     const table = await tableRepository.findByRestaurantAndId(restaurantId, tableId);
     if (!table || !table.isActive || table.restaurantId !== restaurantId) {
       throw new Error("Table not found.");
+    }
+    const restaurant = await restaurantRepository.findById(restaurantId);
+    const scope = restaurant?.captainTableScope ?? "ALL";
+    if (scope === "ASSIGNED" && !(captain.assignedTableIds ?? []).includes(tableId)) {
+      throw new Error("This table is not assigned to you.");
     }
     return captain;
   }

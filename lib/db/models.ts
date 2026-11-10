@@ -128,6 +128,7 @@ const restaurantSchema = new Schema<Restaurant>(
       lowStockAlertEnabled: { type: Boolean, default: true },
       enforceStock: { type: Boolean, default: false },
     },
+    captainTableScope: { type: String, enum: ["ALL", "ASSIGNED"], default: "ALL" },
     loyaltySettings: {
       pointsPerCurrencyUnit: { type: Number, min: 0 },
       currencyPerPoint: { type: Number, min: 0 },
@@ -323,6 +324,7 @@ const orderItemSnapshotSchema = new Schema(
     itemDiscountAmount: { type: Number, min: 0 },
     note: { type: String, maxlength: 500 },
     kotNumber: { type: Number, min: 1 },
+    previousKotNumber: { type: Number, min: 1 },
     kitchenStation: {
       type: String,
       enum: ["MAIN", "BAR", "BAKERY", "DESSERT", "OTHER"],
@@ -454,6 +456,7 @@ const orderSchema = new Schema<RestaurantOrder>(
         "CANCELLED",
         "REJECTED",
         "REFUNDED",
+        "MERGED",
       ],
       required: true,
       default: "PENDING",
@@ -466,6 +469,12 @@ const orderSchema = new Schema<RestaurantOrder>(
     source: { type: String, enum: ["QR", "POS", "CAPTAIN"], default: "QR" },
     guestCount: { type: Number, min: 1 },
     orderNote: { type: String, maxlength: 1000 },
+    customerName: String,
+    customerPhone: String,
+    customerEmail: String,
+    deliveryAddress: String,
+    mergedIntoOrderId: String,
+    paymentRequestStatus: { type: String, enum: ["ACTIVE", "SUPERSEDED", "NONE"] },
     captainAuthorization: {
       status: {
         type: String,
@@ -527,6 +536,8 @@ const orderSchema = new Schema<RestaurantOrder>(
                 "TABLE_MOVED",
                 "TABLES_MERGED",
                 "BILL_SPLIT",
+                "KOT_REPRINT",
+                "VOID_REQUESTED",
               ],
               required: true,
             },
@@ -556,6 +567,49 @@ const orderSchema = new Schema<RestaurantOrder>(
 );
 orderSchema.index({ restaurantId: 1, orderNumber: 1 }, { unique: true });
 orderSchema.index({ restaurantId: 1, idempotencyKey: 1 }, { unique: true });
+
+const floorActionSchema = new Schema(
+  {
+    id: { type: String, required: true, unique: true },
+    restaurantId: { type: String, required: true },
+    action: { type: String, required: true, enum: ["MOVE", "MERGE", "SPLIT_ITEMS", "SPLIT_EQUAL"] },
+    idempotencyKey: { type: String, required: true },
+    orderIds: { type: [String], default: [] },
+    shares: { type: [Number] },
+    total: Number,
+    createdAt: { type: String, required: true },
+  },
+  { ...baseOptions, collection: "floorActions" },
+);
+floorActionSchema.index({ restaurantId: 1, action: 1, idempotencyKey: 1 }, { unique: true });
+
+const voidApprovalSchema = new Schema(
+  {
+    id: { type: String, required: true, unique: true },
+    restaurantId: { type: String, required: true, index: true },
+    orderId: { type: String, required: true },
+    tableId: { type: String, required: true },
+    lineId: { type: String, required: true },
+    quantity: { type: Number, required: true, min: 1 },
+    reason: { type: String, required: true, maxlength: 500 },
+    status: { type: String, required: true, enum: ["PENDING", "APPROVED", "REJECTED"], default: "PENDING" },
+    idempotencyKey: { type: String, required: true },
+    requestedBy: {
+      role: { type: String, required: true },
+      id: { type: String, required: true },
+      name: String,
+    },
+    approver: {
+      role: String,
+      id: String,
+      name: String,
+    },
+    approvedAt: String,
+    createdAt: { type: String, required: true },
+  },
+  { ...baseOptions, collection: "voidApprovals" },
+);
+voidApprovalSchema.index({ restaurantId: 1, idempotencyKey: 1 }, { unique: true });
 orderSchema.index({ restaurantId: 1, createdAt: -1 });
 orderSchema.index({ restaurantId: 1, status: 1, createdAt: -1 });
 orderSchema.index({ restaurantId: 1, customerId: 1, createdAt: -1 });
@@ -716,6 +770,10 @@ export const MediaModel =
 export const TableModel =
   mongoose.models.Table ??
   mongoose.model<RestaurantTable>("Table", tableSchema);
+export const FloorActionModel =
+  mongoose.models.FloorAction ?? mongoose.model("FloorAction", floorActionSchema);
+export const VoidApprovalModel =
+  mongoose.models.VoidApproval ?? mongoose.model("VoidApproval", voidApprovalSchema);
 export const OrderModel =
   mongoose.models.Order ??
   mongoose.model<RestaurantOrder>("Order", orderSchema);

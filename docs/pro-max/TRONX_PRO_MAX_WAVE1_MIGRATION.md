@@ -26,6 +26,10 @@ Approved product decision: a legacy order whose service charge was a percentage 
 
 `scripts/reconcile-cancelled-quantity.ts` prints that plan and does not write. `--apply` writes on a loopback database. A production or other non-loopback database is not written unless `--allow-production` is passed as well. Deploy does not run this script.
 
+## Captain floor
+
+`captainTableScope` is optional and defaults to `ALL`. `MERGED` is an order status for a check that moved onto another bill. It is not a void. `mergedIntoOrderId` points at the surviving order. `floorActions` has a unique index on outlet, action, and idempotency key. Void requests live in `voidApprovals` until a restaurant admin approves them.
+
 ## Captain table session
 
 `tables.guestCount`, `tables.occupiedSince`, `tables.area`, and `tables.section` are optional. `order.items.kotNumber` is optional. Order events may also be `TABLE_MOVED`, `TABLES_MERGED`, or `BILL_SPLIT`. No collection is renamed, no document is rewritten, and no index is added. Opening a table writes the guest count and the time. Freeing a table removes those two fields. Older documents without them still load.

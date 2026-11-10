@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { OrderSummary, RestaurantTable, TableStatus } from "@/types";
 import type { CaptainPermissions } from "@/types";
 import {
@@ -61,6 +61,13 @@ const LABEL: Record<TableStatus, string> = {
   CLOSED: "Closed",
 };
 
+function rupeePaise(amount: number) {
+  return `₹${(Number.isFinite(amount) ? amount : 0).toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
 function runningOrders(orders: OrderSummary[], tableNumber: number) {
   return orders.filter((order) => order.tableNumber === tableNumber && isRunningOrder(order.status));
 }
@@ -94,7 +101,7 @@ export default function CaptainFloor({
     | { kind: "guests"; tableId: string; count: number }
     | { kind: "order"; tableId: string }
     | { kind: "detail"; tableId: string }
-    | { kind: "kot"; tableId: string; kotNumber: number; lines: SentLine[]; at: string }
+    | { kind: "kot"; tableId: string; kotNumber: number; lines: SentLine[]; at: string; orderId?: string; reprint?: boolean }
     | { kind: "bill"; tableId: string }
   >({ kind: "grid" });
   const [categoryId, setCategoryId] = useState(categories[0]?.id ?? "all");
@@ -104,15 +111,48 @@ export default function CaptainFloor({
   const [error, setError] = useState("");
   const [sendKey, setSendKey] = useState<string | null>(null);
   const [menuTableId, setMenuTableId] = useState<string | null>(null);
+  const pressTimers = useRef(new Map<string, number>());
+  const openedByPress = useRef(false);
 
   useEffect(() => {
+    let timer = 0;
+    let stopped = false;
+    let inFlight = false;
+    let delay = 10000;
     const clock = window.setInterval(() => setNow(Date.now()), 30000);
-    const poll = window.setInterval(() => {
-      void refresh();
-    }, 10000);
+    const tick = () => {
+      if (stopped) return;
+      if (document.hidden || inFlight) {
+        timer = window.setTimeout(tick, document.hidden ? 30000 : delay);
+        return;
+      }
+      inFlight = true;
+      void refresh()
+        .then(() => {
+          delay = 10000;
+        })
+        .catch(() => {
+          delay = Math.min(delay * 2, 60000);
+        })
+        .finally(() => {
+          inFlight = false;
+          if (!stopped) timer = window.setTimeout(tick, delay);
+        });
+    };
+    const onVisible = () => {
+      if (!document.hidden) {
+        window.clearTimeout(timer);
+        delay = 10000;
+        tick();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    timer = window.setTimeout(tick, delay);
     return () => {
+      stopped = true;
+      window.clearTimeout(timer);
       window.clearInterval(clock);
-      window.clearInterval(poll);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, []);
 
@@ -121,6 +161,7 @@ export default function CaptainFloor({
       fetch("/api/captain/tables"),
       fetch("/api/captain/orders"),
     ]);
+    if (!tableRes.ok && !orderRes.ok) throw new Error("refresh failed");
     if (tableRes.ok) {
       const body = (await tableRes.json()) as { data?: RestaurantTable[] };
       if (body.data) setTables(body.data);
@@ -353,10 +394,31 @@ export default function CaptainFloor({
                     <div key={table.id} className={`min-h-36 rounded-3xl border p-4 text-left ${CARD[table.status]}`}>
                       <button
                         type="button"
-                        onClick={() => openTable(table)}
+                        onPointerDown={() => {
+                          const handle = window.setTimeout(() => {
+                            openedByPress.current = true;
+                            setMenuTableId(table.id);
+                          }, 500);
+                          pressTimers.current.set(table.id, handle);
+                        }}
+                        onPointerUp={() => {
+                          const handle = pressTimers.current.get(table.id);
+                          if (handle) window.clearTimeout(handle);
+                        }}
+                        onPointerCancel={() => {
+                          const handle = pressTimers.current.get(table.id);
+                          if (handle) window.clearTimeout(handle);
+                        }}
                         onContextMenu={(event) => {
                           event.preventDefault();
                           setMenuTableId(table.id);
+                        }}
+                        onClick={() => {
+                          if (openedByPress.current) {
+                            openedByPress.current = false;
+                            return;
+                          }
+                          openTable(table);
                         }}
                         className="w-full text-left"
                       >
@@ -562,7 +624,7 @@ export default function CaptainFloor({
       {view.kind === "kot" && currentTable ? (
         <section>
           <article className="print-sheet mx-auto w-[80mm] bg-white p-4 font-mono text-black">
-            <p className="text-center text-xs tracking-widest">KITCHEN TICKET</p>
+            <p className="text-center text-xs tracking-widest">{view.reprint ? "REPRINT" : "KITCHEN TICKET"}</p>
             <p className="text-center text-2xl font-black">KOT {view.kotNumber}</p>
             <p className="text-center text-sm">Table {currentTable.tableNumber}</p>
             <p className="text-center text-sm">{captainName}</p>
@@ -577,7 +639,18 @@ export default function CaptainFloor({
             <p className="mt-3 text-center text-[10px]">Browser print. No printer hardware is connected.</p>
           </article>
           <div className="no-print mt-4 flex gap-2">
-            <button type="button" onClick={() => window.print()} className="min-h-14 flex-1 rounded-2xl bg-neutral-900 font-black text-white">
+            <button
+              type="button"
+              onClick={() => {
+                const order = runningOrders(orders, currentTable.tableNumber)[0];
+                if (order) {
+                  void fetch(`/api/captain/orders/${order.id}/reprint-kot`, { method: "POST" });
+                }
+                setView({ ...view, reprint: true });
+                window.print();
+              }}
+              className="min-h-14 flex-1 rounded-2xl bg-neutral-900 font-black text-white"
+            >
               Reprint
             </button>
             <button
@@ -710,26 +783,34 @@ export default function CaptainFloor({
             <p className="text-center text-xl font-black">Table {currentTable.tableNumber}</p>
             <p className="text-center text-sm">Order {currentOrder.orderNumber}</p>
             <hr className="my-2 border-dashed" />
-            {currentOrder.items.map((line) => (
-              <p key={line.lineId ?? line.dishNameSnapshot} className="flex justify-between text-sm">
-                <span>
-                  {line.quantity} {line.dishNameSnapshot}
-                </span>
-                <span>{formatRupeeTotal(line.itemTotal)}</span>
-              </p>
-            ))}
+            {currentOrder.items.flatMap((line) => {
+              const net = line.quantity - (line.cancelledQuantity ?? 0);
+              if (net <= 0) return [];
+              return [
+                <p key={line.lineId ?? line.dishNameSnapshot} className="flex justify-between text-sm">
+                  <span>
+                    {net} {line.dishNameSnapshot}
+                  </span>
+                  <span>{rupeePaise(line.itemTotal)}</span>
+                </p>,
+              ];
+            })}
             <hr className="my-2 border-dashed" />
             <p className="flex justify-between text-sm">
               <span>Subtotal</span>
-              <span>{formatRupeeTotal(runningBillFromServer(currentOrder).subtotal)}</span>
+              <span>{rupeePaise(runningBillFromServer(currentOrder).subtotal)}</span>
             </p>
             <p className="flex justify-between text-sm">
-              <span>Tax</span>
-              <span>{formatRupeeTotal(runningBillFromServer(currentOrder).tax)}</span>
+              <span>CGST</span>
+              <span>{rupeePaise(currentOrder.cgstAmount ?? 0)}</span>
+            </p>
+            <p className="flex justify-between text-sm">
+              <span>SGST</span>
+              <span>{rupeePaise(currentOrder.sgstAmount ?? 0)}</span>
             </p>
             <p className="flex justify-between text-base font-black">
               <span>Total</span>
-              <span>{formatRupeeTotal(runningBillFromServer(currentOrder).total)}</span>
+              <span>{rupeePaise(runningBillFromServer(currentOrder).total)}</span>
             </p>
             <p className="mt-3 text-center text-[10px]">Browser print. No printer hardware is connected.</p>
           </article>

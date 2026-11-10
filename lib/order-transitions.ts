@@ -12,6 +12,7 @@ export const ORDER_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   CANCELLED: [],
   REJECTED: [],
   REFUNDED: [],
+  MERGED: [],
 };
 
 export function canTransition(from: OrderStatus, to: OrderStatus): boolean {

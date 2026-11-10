@@ -158,6 +158,88 @@ test("moving a table transfers the running order and frees the old table", async
   assert.equal((await tableRepository.findByRestaurantAndId(restaurantId, `${restaurantId}-t2`))?.status, "OCCUPIED");
 });
 
+test("a move key replays and two moves of one table cannot both land", async () => {
+  if (!enabled) return;
+  const restaurantId = await seedPair("race");
+  const { TableModel } = await import("../../lib/db/models");
+  const now = new Date().toISOString();
+  await TableModel.create({
+    id: `${restaurantId}-t3`,
+    restaurantId,
+    tableNumber: 3,
+    capacity: 4,
+    isActive: true,
+    status: "OPEN",
+    createdAt: now,
+    updatedAt: now,
+  });
+  await openOrder(restaurantId, 1, ["dal"]);
+  const { floorTransferService } = await import("../../lib/services/floor-transfer.service");
+  const { orderRepository } = await import("../../lib/repositories/order.repository");
+  const key = randomUUID();
+  const first = await floorTransferService.moveTable({
+    restaurantId,
+    fromTableId: `${restaurantId}-t1`,
+    toTableId: `${restaurantId}-t2`,
+    idempotencyKey: key,
+    actor,
+  });
+  const replay = await floorTransferService.moveTable({
+    restaurantId,
+    fromTableId: `${restaurantId}-t1`,
+    toTableId: `${restaurantId}-t2`,
+    idempotencyKey: key,
+    actor,
+  });
+  assert.equal(replay.duplicate, true);
+  assert.deepEqual(replay.orderIds, first.orderIds);
+
+  await openOrder(restaurantId, 3, ["rice"]);
+  const raced = await Promise.allSettled([
+    floorTransferService.moveTable({
+      restaurantId,
+      fromTableId: `${restaurantId}-t3`,
+      toTableId: `${restaurantId}-t1`,
+      idempotencyKey: randomUUID(),
+      actor,
+    }),
+    floorTransferService.moveTable({
+      restaurantId,
+      fromTableId: `${restaurantId}-t3`,
+      toTableId: `${restaurantId}-t2`,
+      idempotencyKey: randomUUID(),
+      actor,
+    }),
+  ]);
+  assert.equal(raced.filter((result) => result.status === "fulfilled").length, 1);
+  const rice = await orderRepository.findByRestaurantAndId(
+    restaurantId,
+    (await (await import("../../lib/db/models")).OrderModel.findOne({ restaurantId, "items.dishId": `${restaurantId}-rice` }).lean())?.id ?? "",
+  );
+  assert.ok(rice?.tableNumber === 1 || rice?.tableNumber === 2);
+  assert.notEqual(rice?.tableNumber, 3);
+});
+
+test("an active payment request blocks a move until superseding is implemented", async () => {
+  if (!enabled) return;
+  const restaurantId = await seedPair("payreq");
+  const order = await openOrder(restaurantId, 1, ["dal"]);
+  const { OrderModel } = await import("../../lib/db/models");
+  const { floorTransferService } = await import("../../lib/services/floor-transfer.service");
+  const { PaymentRequestNotImplemented } = await import("../../lib/billing/payment-request-guard");
+  await OrderModel.updateOne({ id: order.id }, { $set: { paymentRequestStatus: "ACTIVE" } });
+  await assert.rejects(
+    () => floorTransferService.moveTable({
+      restaurantId,
+      fromTableId: `${restaurantId}-t1`,
+      toTableId: `${restaurantId}-t2`,
+      idempotencyKey: randomUUID(),
+      actor,
+    }),
+    (error: unknown) => error instanceof PaymentRequestNotImplemented,
+  );
+});
+
 test("one outlet cannot move another outlet's table", async () => {
   if (!enabled) return;
   const outletA = await seedPair("a");
@@ -200,6 +282,11 @@ test("merging two occupied tables keeps one server-calculated bill", async () =>
   assert.equal((await tableRepository.findByRestaurantAndId(restaurantId, `${restaurantId}-t2`))?.status, "OPEN");
   const source = await orderRepository.findRunningForTable(restaurantId, 2);
   assert.equal(source.length, 0);
+  const { OrderModel } = await import("../../lib/db/models");
+  const closed = await OrderModel.find({ restaurantId, tableNumber: 2 }).lean();
+  assert.equal(closed[0]?.status, "MERGED");
+  assert.equal(closed[0]?.mergedIntoOrderId, result.orderIds[0]);
+  assert.notEqual(closed[0]?.status, "CANCELLED");
 });
 
 test("splitting by item or equally uses server amounts and does not collect payment", async () => {
@@ -247,12 +334,11 @@ test("voiding a KOT item needs a reason and follows the kitchen cancel rule", as
   const lineId = order.items[0]!.lineId!;
   const { floorTransferService } = await import("../../lib/services/floor-transfer.service");
   const { OrderServiceError } = await import("../../lib/services/order.service");
-  const { OrderModel } = await import("../../lib/db/models");
   const { orderRepository } = await import("../../lib/repositories/order.repository");
 
   await assert.rejects(
     () =>
-      floorTransferService.voidItem({
+      floorTransferService.requestVoid({
         restaurantId,
         tableId: `${restaurantId}-t1`,
         lineId,
@@ -264,29 +350,7 @@ test("voiding a KOT item needs a reason and follows the kitchen cancel rule", as
     (error: unknown) => error instanceof OrderServiceError,
   );
 
-  await OrderModel.updateOne(
-    { restaurantId, id: order.id },
-    { $set: { status: "PREPARING", "items.0.preparationStatus": "PREPARING" } },
-  );
-  await assert.rejects(
-    () =>
-      floorTransferService.voidItem({
-        restaurantId,
-        tableId: `${restaurantId}-t1`,
-        lineId,
-        quantity: 1,
-        reason: "Guest changed their mind",
-        idempotencyKey: randomUUID(),
-        actor,
-      }),
-    (error: unknown) => error instanceof OrderServiceError && /prepared/i.test(error.message),
-  );
-
-  await OrderModel.updateOne(
-    { restaurantId, id: order.id },
-    { $set: { status: "ACCEPTED", "items.0.preparationStatus": "QUEUED" } },
-  );
-  const voided = await floorTransferService.voidItem({
+  const requested = await floorTransferService.requestVoid({
     restaurantId,
     tableId: `${restaurantId}-t1`,
     lineId,
@@ -295,7 +359,26 @@ test("voiding a KOT item needs a reason and follows the kitchen cancel rule", as
     idempotencyKey: randomUUID(),
     actor,
   });
-  assert.equal(voided.order.total, expectedTotal(voided.order.items));
+  const stillOpen = await orderRepository.findByRestaurantAndId(restaurantId, order.id);
+  assert.equal(stillOpen?.items[0]?.cancelledQuantity ?? 0, 0);
+  assert.equal(requested.pending, true);
+
+  const manager: PaymentAuditActor = { role: "RESTAURANT_ADMIN", id: "mgr-1", name: "Manager" };
+  const approved = await floorTransferService.approveVoid({
+    restaurantId,
+    approvalId: requested.approvalId,
+    approver: manager,
+  });
+  assert.equal(approved.alreadyApproved, false);
+  if (!approved.alreadyApproved) {
+    assert.equal(approved.order.total, expectedTotal(approved.order.items));
+    assert.equal(approved.approverId, "mgr-1");
+    assert.match(approved.reason, /Guest changed their mind/);
+  }
   const stored = await orderRepository.findByRestaurantAndId(restaurantId, order.id);
   assert.equal(stored?.events?.some((event) => event.type === "LINE_CANCELLED" && /Guest changed their mind/.test(event.message)), true);
+  await assert.rejects(
+    () => floorTransferService.approveVoid({ restaurantId, approvalId: requested.approvalId, approver: actor }),
+    /manager or admin/i,
+  );
 });

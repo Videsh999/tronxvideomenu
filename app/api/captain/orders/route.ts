@@ -11,13 +11,28 @@ import {
   resolveCaptainPermissions,
 } from "@/lib/captain-permissions";
 import { lineItemTotal } from "@/lib/order-pricing";
+import { stripCaptainOrder } from "@/lib/captain/pii";
 
 export async function GET() {
   const { captain, error } = await requireCaptain("ORDER_MANAGEMENT");
   if (error) return error;
   try {
+    const restaurant = await restaurantService.getById(captain.restaurantId);
     const orders = await orderService.listForRestaurant(captain.restaurantId);
-    return NextResponse.json({ success: true, data: orders });
+    const scope = restaurant?.captainTableScope ?? "ALL";
+    const visible = scope === "ASSIGNED"
+      ? await (async () => {
+          const tables = await tableRepository.findByRestaurantId(captain.restaurantId);
+          const numbers = new Set(
+            tables.filter((table) => (captain.assignedTableIds ?? []).includes(table.id)).map((table) => table.tableNumber),
+          );
+          return orders.filter((order) => numbers.has(order.tableNumber));
+        })()
+      : orders;
+    return NextResponse.json({
+      success: true,
+      data: visible.map((order) => stripCaptainOrder(order as unknown as Record<string, unknown>)),
+    });
   } catch {
     return NextResponse.json({ success: false, error: "Unable to load orders" }, { status: 500 });
   }

@@ -271,6 +271,11 @@ export type Restaurant = {
   /** When set, this restaurant is an outlet of an organization. */
   organizationId?: string;
   inventorySettings?: RestaurantInventorySettings;
+  /**
+   * ALL: a captain may serve every table in this outlet.
+   * ASSIGNED: only assignedTableIds. Missing means ALL.
+   */
+  captainTableScope?: "ALL" | "ASSIGNED";
   loyaltySettings?: RestaurantLoyaltySettings;
 };
 
@@ -486,7 +491,8 @@ export type OrderStatus =
   | "COMPLETED"
   | "CANCELLED"
   | "REJECTED"
-  | "REFUNDED";
+  | "REFUNDED"
+  | "MERGED";
 
 export type OrderChannel = "QR" | "POS_DINE_IN" | "POS_TAKEAWAY" | "POS_DELIVERY";
 
@@ -511,6 +517,8 @@ export type OrderItemSnapshot = {
   note?: string;
   /** Kitchen ticket this line was sent on. Existing lines keep their number. */
   kotNumber?: number;
+  /** Ticket number before a merge moved the line onto another bill. */
+  previousKotNumber?: number;
   kitchenStation?: KitchenStation;
   preparationStatus?: "QUEUED" | "PREPARING" | "READY";
   /** Cumulative quantity cancelled on this line (partial cancel). */
@@ -585,7 +593,9 @@ export type OrderEventType =
   | "CAPTAIN_AUTHORIZATION"
   | "TABLE_MOVED"
   | "TABLES_MERGED"
-  | "BILL_SPLIT";
+  | "BILL_SPLIT"
+  | "KOT_REPRINT"
+  | "VOID_REQUESTED";
 
 /** Captain gate — separate from kitchen OrderStatus. QR must stay pending until approved. */
 export type CaptainAuthorizationStatus =
@@ -629,6 +639,14 @@ export type RestaurantOrder = {
   source?: "QR" | "POS" | "CAPTAIN";
   guestCount?: number;
   orderNote?: string;
+  customerName?: string;
+  customerPhone?: string;
+  customerEmail?: string;
+  deliveryAddress?: string;
+  /** Set when this check was merged into another order. Not a void. */
+  mergedIntoOrderId?: string;
+  /** Placeholder for a future payment-request document. ACTIVE blocks floor transfers. */
+  paymentRequestStatus?: "ACTIVE" | "SUPERSEDED" | "NONE";
   /** Captain authorization gate (QR pending until approved). */
   captainAuthorization?: CaptainAuthorization;
   items: OrderItemSnapshot[];

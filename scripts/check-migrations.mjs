@@ -4,13 +4,9 @@ import { readFileSync } from "node:fs";
 const base = process.argv[2] ?? "origin/pro-max/release";
 const required = ["## Deploy", "## Rollback", "## Reconciliation", "## Index check"];
 
-let diff = spawnSync("git", ["diff", "--name-only", `${base}...HEAD`], { encoding: "utf8" });
+const diff = spawnSync("git", ["diff", "--name-only", `${base}...HEAD`], { encoding: "utf8" });
 if (diff.status !== 0) {
-  // A shallow checkout has no merge base. Compare the two trees directly.
-  diff = spawnSync("git", ["diff", "--name-only", base, "HEAD"], { encoding: "utf8" });
-}
-if (diff.status !== 0) {
-  console.error(diff.stderr || "Unable to diff against the release branch.");
+  console.error(diff.stderr || "Unable to diff against the release branch. A missing merge base is a failure.");
   process.exit(1);
 }
 
