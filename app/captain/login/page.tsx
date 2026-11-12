@@ -15,7 +15,7 @@ function CaptainLoginForm() {
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault(); setBusy(true); setError("");
     try {
-      const response = await fetch("/api/captain/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ restaurantSlug, email, password }) });
+      const response = await fetch("/api/captain/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...(restaurantSlug ? { restaurantSlug } : {}), email, password }) });
       const result = await response.json() as { success: boolean; error?: string; data?: { restaurantSlug: string } };
       if (!response.ok || !result.success || !result.data) throw new Error(result.error ?? "Unable to sign in");
       const next = params.get("next") ?? "";
@@ -34,7 +34,6 @@ function CaptainLoginForm() {
   >
     <form onSubmit={submit} className="space-y-5">
       <AuthError message={error || null} />
-      <AuthField label="Restaurant ID"><input value={restaurantSlug} onChange={(e) => setRestaurantSlug(e.target.value)} autoComplete="organization" autoCapitalize="none" spellCheck={false} placeholder="e.g. moai-kitchen" required className={`${authInputClass} font-mono`} /></AuthField>
       <AuthField label="Email"><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" placeholder="captain@restaurant.com" required className={authInputClass} /></AuthField>
       <AuthField label="Password"><PasswordInput value={password} onChange={setPassword} /></AuthField>
       <AuthSubmit busy={busy} label="Sign in" busyLabel="Signing in…" />

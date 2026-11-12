@@ -33,6 +33,15 @@ export class CaptainRepository {
     return captain ? toCaptain(captain) : null;
   }
 
+  async findByEmail(email: string) {
+    await connectToDatabase();
+    const captains = await CaptainModel.find({ email: email.trim().toLowerCase(), isActive: true })
+      .select("+passwordHash")
+      .limit(11)
+      .lean();
+    return captains.map(toCaptain);
+  }
+
   async create(input: Omit<Captain, "id" | "createdAt" | "updatedAt">) {
     await connectToDatabase();
     const now = new Date().toISOString();

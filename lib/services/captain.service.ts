@@ -22,6 +22,19 @@ export class CaptainService {
     return captain;
   }
 
+  async authenticateByEmail(email: string, password: string) {
+    const candidates = await this.repository.findByEmail(email);
+    if (candidates.length > 10) return { captain: null, ambiguous: true } as const;
+    const matches: Captain[] = [];
+    for (const captain of candidates) {
+      if (await verifyCaptainPassword(password, captain.passwordHash)) matches.push(captain);
+    }
+    if (matches.length !== 1) return { captain: null, ambiguous: matches.length > 1 } as const;
+    const captain = matches[0]!;
+    void this.repository.touchLastActiveAt(captain.restaurantId, captain.id, new Date().toISOString());
+    return { captain, ambiguous: false } as const;
+  }
+
   async list(restaurantId: string) {
     return (await this.repository.findByRestaurantId(restaurantId)).map(toCaptainView);
   }

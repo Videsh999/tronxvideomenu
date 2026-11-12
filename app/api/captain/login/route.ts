@@ -4,6 +4,7 @@ import { requireRestaurantFeature } from "@/lib/feature-access";
 import { captainLoginSchema } from "@/lib/validations";
 import { restaurantService } from "@/lib/services/restaurant.service";
 import { captainService } from "@/lib/services/captain.service";
+import type { Restaurant } from "@/types";
 
 export const runtime = "nodejs";
 
@@ -25,7 +26,7 @@ export async function POST(request: Request) {
 
     const clientIp = getClientIp(request);
     const normalizedEmail = input.email.trim().toLowerCase();
-    const rateLimitKey = `captain-login:${input.restaurantSlug}:${normalizedEmail}:${clientIp}`;
+    const rateLimitKey = `captain-login:${normalizedEmail}:${clientIp}`;
 
     const rateLimit = await loginRateLimiter.check(rateLimitKey);
     if (!rateLimit.allowed) {
@@ -43,18 +44,32 @@ export async function POST(request: Request) {
       );
     }
 
-    const restaurant = await restaurantService.getBySlug(input.restaurantSlug);
-    if (!restaurant || restaurant.isActive === false) {
+    let restaurant: Restaurant | null = null;
+    let captain: Awaited<ReturnType<typeof captainService.authenticate>> = null;
+    if (input.restaurantSlug) {
+      restaurant = await restaurantService.getBySlug(input.restaurantSlug);
+      captain = restaurant && restaurant.isActive !== false
+        ? await captainService.authenticate(restaurant.id, input.email, input.password)
+        : null;
+    } else {
+      const result = await captainService.authenticateByEmail(input.email, input.password);
+      if (result.ambiguous) {
+        await loginRateLimiter.recordFailure(rateLimitKey);
+        return NextResponse.json({ success: false, error: "This email and password match more than one restaurant. Ask your admin to give each captain a unique email or use the restaurant sign-in link." }, { status: 409 });
+      }
+      captain = result.captain;
+      restaurant = captain ? await restaurantService.getById(captain.restaurantId) : null;
+      if (restaurant?.isActive === false) {
+        captain = null;
+        restaurant = null;
+      }
+    }
+    if (!restaurant || !captain) {
       await loginRateLimiter.recordFailure(rateLimitKey);
       return NextResponse.json({ success: false, error: "Invalid email or password" }, { status: 401 });
     }
     const feature = requireRestaurantFeature(restaurant, "CAPTAIN_ACCESS");
     if (!feature.allowed) return NextResponse.json({ success: false, error: feature.reason }, { status: 403 });
-    const captain = await captainService.authenticate(restaurant.id, input.email, input.password);
-    if (!captain) {
-      await loginRateLimiter.recordFailure(rateLimitKey);
-      return NextResponse.json({ success: false, error: "Invalid email or password" }, { status: 401 });
-    }
 
     await loginRateLimiter.reset(rateLimitKey);
 
