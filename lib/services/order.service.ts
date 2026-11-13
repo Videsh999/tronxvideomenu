@@ -126,6 +126,14 @@ export class OrderService {
     return (await orderRepository.findOperational(restaurantId)).map(staffOrderView);
   }
 
+  async listOpenForRestaurant(restaurantId: string) {
+    return (await orderRepository.findOpenForRestaurant(restaurantId)).map(staffOrderView);
+  }
+
+  async listOpenForTable(restaurantId: string, tableId: string) {
+    return (await orderRepository.findOpenForTable(restaurantId, tableId)).map(staffOrderView);
+  }
+
   async listDoneHistory(restaurantId: string, limit = 500) {
     return (await orderRepository.findDoneHistory(restaurantId, limit)).map(staffOrderView);
   }

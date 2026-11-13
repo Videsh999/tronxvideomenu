@@ -30,7 +30,8 @@ export async function connectToDatabase(): Promise<Mongoose> {
       bufferCommands: false,
       maxPoolSize: 10,
       minPoolSize: 1,
-      serverSelectionTimeoutMS: 8000,
+      serverSelectionTimeoutMS: 4000,
+      compressors: ["zlib"],
     });
   }
 

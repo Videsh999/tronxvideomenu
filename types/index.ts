@@ -263,6 +263,8 @@ export type Restaurant = {
   coverUrl?: string;
   /** Optional video played behind the guest-menu banner. The cover image is the poster. */
   coverVideo?: string;
+  /** True when a guest Wi-Fi name is configured. The password stays off this object. */
+  hasGuestWifi?: boolean;
   isActive?: boolean;
   // Subscription fields
   subscriptionPlan?: SubscriptionPlan;

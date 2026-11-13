@@ -26,12 +26,8 @@ export default async function RestaurantMenuPage({
   const tableValue = Array.isArray(rawLocation) ? rawLocation[0] : rawLocation;
   const tableNumber =
     tableValue && /^\d{1,4}$/.test(tableValue) ? Number(tableValue) : null;
-  const [table, wifiConfigured] = await Promise.all([
-    tableNumber ? tableService.getActiveByNumber(menu.restaurant.id, tableNumber) : Promise.resolve(null),
-    hasRestaurantFeature(menu.restaurant, "WIFI")
-      ? restaurantService.hasWifiConfiguredForGuests(menu.restaurant.slug)
-      : Promise.resolve(false),
-  ]);
+  const table = tableNumber ? await tableService.getActiveByNumber(menu.restaurant.id, tableNumber) : null;
+  const wifiConfigured = hasRestaurantFeature(menu.restaurant, "WIFI") && menu.restaurant.hasGuestWifi === true;
   const expectedType = rawRoom !== undefined ? "ROOM" : "TABLE";
   const invalidTable = Boolean(tableValue) && (!tableNumber || !table || (table.locationType ?? "TABLE") !== expectedType);
   const reservationsEnabled = hasRestaurantFeature(menu.restaurant, "RESERVATIONS");

@@ -14,7 +14,7 @@ export default async function CaptainTablesPage({ params }: { params: Promise<{ 
 
   const [tables, orders] = await Promise.all([
     tableService.list(captain.restaurantId),
-    orderService.listForRestaurant(captain.restaurantId),
+    orderService.listOpenForRestaurant(captain.restaurantId),
   ]);
 
   return (

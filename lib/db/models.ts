@@ -557,6 +557,7 @@ orderSchema.index({ restaurantId: 1, orderNumber: 1 }, { unique: true });
 orderSchema.index({ restaurantId: 1, idempotencyKey: 1 }, { unique: true });
 orderSchema.index({ restaurantId: 1, createdAt: -1 });
 orderSchema.index({ restaurantId: 1, status: 1, createdAt: -1 });
+orderSchema.index({ restaurantId: 1, tableId: 1, status: 1 });
 orderSchema.index({ restaurantId: 1, customerId: 1, createdAt: -1 });
 orderSchema.index({ restaurantId: 1, tableSessionId: 1, createdAt: 1 });
 

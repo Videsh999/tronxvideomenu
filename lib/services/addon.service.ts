@@ -7,6 +7,7 @@ import type {
   CreateAddonInput,
   UpdateAddonInput,
 } from "@/lib/validations";
+import { invalidateRestaurantMenus } from "@/lib/cache/restaurant-menu";
 
 export class AddonService {
   async getGroupsByRestaurantId(restaurantId: string): Promise<AddonGroup[]> {
@@ -22,18 +23,24 @@ export class AddonService {
     if (!restaurant) {
       throw new Error("Restaurant not found");
     }
-    return addonRepository.createGroup(input);
+    const created = await addonRepository.createGroup(input);
+    invalidateRestaurantMenus();
+    return created;
   }
 
   async updateGroup(
     id: string,
     input: UpdateAddonGroupInput,
   ): Promise<AddonGroup | null> {
-    return addonRepository.updateGroup(id, input);
+    const updated = await addonRepository.updateGroup(id, input);
+    if (updated) invalidateRestaurantMenus();
+    return updated;
   }
 
   async deleteGroup(id: string): Promise<boolean> {
-    return addonRepository.deleteGroup(id);
+    const deleted = await addonRepository.deleteGroup(id);
+    if (deleted) invalidateRestaurantMenus();
+    return deleted;
   }
 
   async getAddonsByGroupId(groupId: string): Promise<Addon[]> {
@@ -49,18 +56,24 @@ export class AddonService {
     if (!group) {
       throw new Error("Add-on group not found");
     }
-    return addonRepository.createAddon(input);
+    const created = await addonRepository.createAddon(input);
+    invalidateRestaurantMenus();
+    return created;
   }
 
   async updateAddon(
     id: string,
     input: UpdateAddonInput,
   ): Promise<Addon | null> {
-    return addonRepository.updateAddon(id, input);
+    const updated = await addonRepository.updateAddon(id, input);
+    if (updated) invalidateRestaurantMenus();
+    return updated;
   }
 
   async deleteAddon(id: string): Promise<boolean> {
-    return addonRepository.deleteAddon(id);
+    const deleted = await addonRepository.deleteAddon(id);
+    if (deleted) invalidateRestaurantMenus();
+    return deleted;
   }
 }
 

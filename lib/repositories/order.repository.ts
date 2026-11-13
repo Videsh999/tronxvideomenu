@@ -69,6 +69,32 @@ export class OrderRepository implements IOrderRepository {
     return orders.map((order) => this.mapOrder(order));
   }
 
+  /** Open tickets only. Used by the floor so a table screen does not load order history. */
+  async findOpenForRestaurant(restaurantId: string) {
+    await connectToDatabase();
+    const orders = await OrderModel.find({
+      restaurantId,
+      status: { $in: ["PENDING", "ACCEPTED", "PREPARING", "READY", "SERVED"] },
+    })
+      .sort({ createdAt: -1 })
+      .limit(200)
+      .lean();
+    return orders.map((order) => this.mapOrder(order));
+  }
+
+  async findOpenForTable(restaurantId: string, tableId: string) {
+    await connectToDatabase();
+    const orders = await OrderModel.find({
+      restaurantId,
+      tableId,
+      status: { $nin: ["COMPLETED", "CANCELLED", "REJECTED", "REFUNDED"] },
+    })
+      .sort({ createdAt: 1 })
+      .limit(50)
+      .lean();
+    return orders.map((order) => this.mapOrder(order));
+  }
+
   async findPending(restaurantId: string, tableIds?: string[]) {
     await connectToDatabase();
     if (tableIds && tableIds.length === 0) return [];

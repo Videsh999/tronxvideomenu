@@ -24,8 +24,20 @@ export function directionsUrl(restaurant: Restaurant) {
 export default function RestaurantHero({ restaurant, tableNumber, locationType = "TABLE", extraActions }: RestaurantHeroProps) {
   const { t, tc } = useI18n();
   const [hoursOpen, setHoursOpen] = useState(false);
+  const [playCoverVideo, setPlayCoverVideo] = useState(false);
   const hoursRef = useRef<HTMLDivElement>(null);
   const directions = directionsUrl(restaurant);
+
+  useEffect(() => {
+    if (!restaurant.coverVideo) return;
+    const start = () => setPlayCoverVideo(true);
+    const idle = "requestIdleCallback" in window ? window.requestIdleCallback(start, { timeout: 1500 }) : undefined;
+    const timer = window.setTimeout(start, 700);
+    return () => {
+      if (idle !== undefined) window.cancelIdleCallback(idle);
+      window.clearTimeout(timer);
+    };
+  }, [restaurant.coverVideo]);
 
   useEffect(() => {
     if (!hoursOpen) return;
@@ -40,7 +52,10 @@ export default function RestaurantHero({ restaurant, tableNumber, locationType =
     <section aria-label={restaurant.name} className="mx-auto max-w-7xl px-3 pt-3 sm:px-6 sm:pt-5 lg:px-8">
       <div className="relative isolate rounded-[1.75rem] bg-neutral-900 text-white shadow-[0_24px_60px_-30px_rgba(0,0,0,0.55)]">
         <div className="absolute inset-0 -z-10 overflow-hidden rounded-[1.75rem]">
-          {restaurant.coverVideo ? (
+          {restaurant.coverUrl || restaurant.coverImage ? (
+            <SmartImage src={(restaurant.coverUrl || restaurant.coverImage)!} alt="" sizes="(max-width: 1280px) 100vw, 1280px" priority className="object-cover" />
+          ) : null}
+          {playCoverVideo && restaurant.coverVideo ? (
             <video
               src={restaurant.coverVideo}
               poster={restaurant.coverUrl || restaurant.coverImage}
@@ -48,11 +63,11 @@ export default function RestaurantHero({ restaurant, tableNumber, locationType =
               muted
               loop
               playsInline
+              preload="none"
               className="absolute inset-0 h-full w-full object-cover"
             />
-          ) : restaurant.coverUrl ? (
-            <SmartImage src={restaurant.coverUrl} alt="" sizes="(max-width: 1280px) 100vw, 1280px" priority className="object-cover" />
-          ) : (
+          ) : null}
+          {restaurant.coverUrl || restaurant.coverImage || restaurant.coverVideo ? null : (
             <div className="absolute inset-0 bg-linear-to-br from-[var(--restaurant-primary)] via-[var(--restaurant-secondary)] to-black" />
           )}
           <div className="absolute inset-0 bg-linear-to-t from-black/85 via-black/35 to-black/10" />

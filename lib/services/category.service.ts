@@ -7,6 +7,7 @@ import type {
 } from "@/lib/validations";
 
 import { dishRepository } from "@/lib/repositories/dish.repository";
+import { invalidateRestaurantMenus } from "@/lib/cache/restaurant-menu";
 
 export class CategoryService {
   async getByRestaurantId(restaurantId: string): Promise<Category[]> {
@@ -22,14 +23,18 @@ export class CategoryService {
     if (!restaurant) {
       throw new Error("Restaurant not found");
     }
-    return categoryRepository.create(input);
+    const created = await categoryRepository.create(input);
+    invalidateRestaurantMenus();
+    return created;
   }
 
   async update(
     id: string,
     input: UpdateCategoryInput,
   ): Promise<Category | null> {
-    return categoryRepository.update(id, input);
+    const updated = await categoryRepository.update(id, input);
+    if (updated) invalidateRestaurantMenus();
+    return updated;
   }
 
   async delete(id: string): Promise<boolean> {
@@ -37,7 +42,9 @@ export class CategoryService {
     if (dishes.length > 0) {
       throw new Error("Cannot delete category with active dishes. Reassign or delete dishes first.");
     }
-    return categoryRepository.delete(id);
+    const deleted = await categoryRepository.delete(id);
+    if (deleted) invalidateRestaurantMenus();
+    return deleted;
   }
 }
 

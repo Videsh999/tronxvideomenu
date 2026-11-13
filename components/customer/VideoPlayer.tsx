@@ -4,11 +4,12 @@ import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type HlsType from "hls.js";
 
 /**
- * Every visible card video plays at the same time. While a priority player (the
- * dish detail) is open, the cards behind it pause and resume when it closes.
+ * Only one video downloads at a time. The open dish detail wins. Otherwise the
+ * card that fills the most of the screen plays, and the rest stay on their photo.
  */
 type Candidate = {
   visible: boolean;
+  ratio: number;
   priority: boolean;
   setActive: (active: boolean) => void;
 };
@@ -16,8 +17,15 @@ type Candidate = {
 const candidates = new Map<symbol, Candidate>();
 
 function syncPlayers() {
-  const detailOpen = [...candidates.values()].some((candidate) => candidate.priority && candidate.visible);
-  candidates.forEach((candidate) => candidate.setActive(candidate.visible && (candidate.priority || !detailOpen)));
+  const detail = [...candidates.values()].find((candidate) => candidate.priority && candidate.visible);
+  let chosen = detail ?? null;
+  if (!chosen) {
+    for (const candidate of candidates.values()) {
+      if (!candidate.visible) continue;
+      if (!chosen || candidate.ratio > chosen.ratio) chosen = candidate;
+    }
+  }
+  candidates.forEach((candidate) => candidate.setActive(candidate === chosen));
 }
 
 function isHlsSource(url: string) {
@@ -94,7 +102,7 @@ function VideoPlayer({
   // playing videos are not interrupted while the page scrolls.
   useEffect(() => {
     const playerId = idRef.current;
-    candidates.set(playerId, { visible: false, priority: false, setActive: setPlayerActive });
+    candidates.set(playerId, { visible: false, ratio: 0, priority: false, setActive: setPlayerActive });
     return () => {
       candidates.delete(playerId);
       syncPlayers();
@@ -117,7 +125,8 @@ function VideoPlayer({
     const candidate = candidates.get(idRef.current);
     if (!candidate) return;
     candidate.priority = playbackPriority;
-    candidate.visible = !hasError && (playbackPriority || viewportRatio >= 0.3);
+    candidate.ratio = viewportRatio;
+    candidate.visible = !hasError && (playbackPriority || viewportRatio >= 0.6);
     syncPlayers();
   }, [hasError, playbackPriority, viewportRatio]);
 
@@ -148,7 +157,7 @@ function VideoPlayer({
           setErrorUrl(videoUrl);
           return;
         }
-        const hls = new Hls({ enableWorker: true, maxBufferLength: 30 });
+        const hls = new Hls({ enableWorker: true, maxBufferLength: 8, maxMaxBufferLength: 12 });
         hlsRef.current = hls;
         hls.loadSource(videoUrl);
         hls.attachMedia(video);

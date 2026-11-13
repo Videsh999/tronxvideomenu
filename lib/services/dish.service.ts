@@ -4,6 +4,7 @@ import { categoryRepository } from "@/lib/repositories/category.repository";
 import type { AddonGroup, Dish } from "@/types";
 import type { CreateDishInput, UpdateDishInput } from "@/lib/validations";
 import { resolveDishAddonGroups } from "@/lib/dish-addons";
+import { invalidateRestaurantMenus } from "@/lib/cache/restaurant-menu";
 
 async function hydrateAddonGroupsForDish(
   restaurantId: string,
@@ -61,13 +62,15 @@ export class DishService {
       addonGroupIds,
     );
 
-    return dishRepository.create({
+    const created = await dishRepository.create({
       ...input,
       addonGroupIds,
       addonGroups,
       isCustomizable: input.isCustomizable ?? addonGroupIds.length > 0,
       isVeg: input.type === "VEG",
     });
+    invalidateRestaurantMenus();
+    return created;
   }
 
   async update(id: string, input: UpdateDishInput): Promise<Dish | null> {
@@ -90,7 +93,7 @@ export class DishService {
         ? await hydrateAddonGroupsForDish(restaurantId, addonGroupIds)
         : existing.addonGroups;
 
-    return dishRepository.update(id, {
+    const updated = await dishRepository.update(id, {
       ...input,
       addonGroupIds,
       addonGroups,
@@ -101,10 +104,14 @@ export class DishService {
           : existing.isCustomizable),
       isVeg: input.type !== undefined ? input.type === "VEG" : existing.isVeg,
     });
+    if (updated) invalidateRestaurantMenus();
+    return updated;
   }
 
   async delete(id: string): Promise<boolean> {
-    return dishRepository.delete(id);
+    const deleted = await dishRepository.delete(id);
+    if (deleted) invalidateRestaurantMenus();
+    return deleted;
   }
 }
 

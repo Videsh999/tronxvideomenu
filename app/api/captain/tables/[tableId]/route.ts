@@ -46,8 +46,10 @@ export async function GET(
     return NextResponse.json({ success: false, error: "Table not found" }, { status: 404 });
   }
 
-  let overview = await tableSessionService.overview(captain.restaurantId, table.id);
-  const tableOrders = (await orderService.listForRestaurant(captain.restaurantId)).filter((order) => order.tableId === table.id);
+  let [overview, tableOrders] = await Promise.all([
+    tableSessionService.overview(captain.restaurantId, table.id),
+    orderService.listOpenForTable(captain.restaurantId, table.id),
+  ]);
   if (!overview.session && tableOrders.some((order) => !["COMPLETED", "CANCELLED", "REJECTED", "REFUNDED"].includes(order.status))) {
     await tableSessionService.ensureActive({ restaurant, table, openedBy: { role: "CAPTAIN", id: captain.id, name: captain.name, email: captain.email } });
     overview = await tableSessionService.overview(captain.restaurantId, table.id);

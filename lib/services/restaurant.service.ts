@@ -1,4 +1,6 @@
+import { unstable_cache } from "next/cache";
 import { cache } from "react";
+import { invalidateRestaurantMenus } from "@/lib/cache/restaurant-menu";
 import { restaurantRepository } from "@/lib/repositories/restaurant.repository";
 import { categoryRepository } from "@/lib/repositories/category.repository";
 import { dishRepository } from "@/lib/repositories/dish.repository";
@@ -48,10 +50,9 @@ const getRestaurantBySlugCached = cache(async (slug: string) => {
   return restaurant ? normalizeRestaurant(restaurant) : null;
 });
 
-const getFullMenuCached = cache(async (idOrSlug: string): Promise<RestaurantMenu | null> => {
+async function loadFullMenu(idOrSlug: string): Promise<RestaurantMenu | null> {
   const restaurant = await restaurantRepository.findByIdOrSlug(idOrSlug);
-  if (!restaurant) return null;
-  if (restaurant.isActive === false) return null;
+  if (!restaurant || restaurant.isActive === false) return null;
 
   const [categories, rawDishes, addonGroups] = await Promise.all([
     categoryRepository.findByRestaurantId(restaurant.id),
@@ -60,17 +61,36 @@ const getFullMenuCached = cache(async (idOrSlug: string): Promise<RestaurantMenu
   ]);
 
   const dishes = rawDishes.map((dish) => toCustomerDish(dish, addonGroups));
+  const normalized = normalizeRestaurant(restaurant);
+  normalized.hasGuestWifi = Boolean(restaurant.wifi?.ssid?.trim());
 
   return {
-    restaurant: normalizeRestaurant(restaurant),
-    categories: categories.filter((c) => c.isActive),
+    restaurant: normalized,
+    categories: categories.filter((category) => category.isActive),
     dishes,
   };
-});
+}
+
+function readFullMenu(idOrSlug: string) {
+  const key = idOrSlug.trim();
+  return unstable_cache(() => loadFullMenu(key), ["full-menu", key.toLowerCase()], {
+    revalidate: 30,
+    tags: ["restaurant-menus"],
+  })();
+}
+
+const readAllRestaurants = unstable_cache(
+  async () => (await restaurantRepository.findAll()).map(normalizeRestaurant),
+  ["restaurants-all"],
+  { revalidate: 60, tags: ["restaurant-menus"] },
+);
+
+// Per-request dedupe on top of the 30-second shared cache.
+const getFullMenuCached = cache((idOrSlug: string) => readFullMenu(idOrSlug));
 
 export class RestaurantService {
   async getAll(): Promise<Restaurant[]> {
-    return (await restaurantRepository.findAll()).map(normalizeRestaurant);
+    return readAllRestaurants();
   }
 
   async getById(id: string): Promise<Restaurant | null> {
@@ -117,7 +137,9 @@ export class RestaurantService {
     if (existing) {
       throw new Error(`A restaurant with slug '${input.slug}' already exists`);
     }
-    return normalizeRestaurant(await restaurantRepository.create(input));
+    const created = normalizeRestaurant(await restaurantRepository.create(input));
+    invalidateRestaurantMenus();
+    return created;
   }
 
   async update(
@@ -140,10 +162,12 @@ export class RestaurantService {
 
     if (patch.slug && patch.slug !== id) {
       const renamed = await restaurantRepository.renameIdentity(id, patch.slug, patch);
+      if (renamed) invalidateRestaurantMenus();
       return renamed ? normalizeRestaurant(renamed) : null;
     }
 
     const updated = await restaurantRepository.update(id, patch);
+    if (updated) invalidateRestaurantMenus();
     return updated ? normalizeRestaurant(updated) : null;
   }
 

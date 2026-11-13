@@ -64,7 +64,7 @@ export default function FeaturedCarousel({ title, dishes, onSelect, videoMenuEna
             <div key={dish.id} className="group relative aspect-[3/4] w-[44%] shrink-0 snap-start overflow-hidden rounded-[1.25rem] bg-neutral-200 sm:w-[30%] md:w-[23%] lg:w-[18.5%]">
               <button type="button" onClick={() => onSelect(dish)} aria-label={`${name}, ₹${dish.price}`} className="absolute inset-0 z-10" />
               {dish.imageUrl ? (
-                <SmartImage src={dish.imageUrl} alt="" sizes="(max-width: 640px) 45vw, 240px" priority={index < 3} className="object-cover transition duration-700 group-hover:scale-105" />
+                <SmartImage src={dish.imageUrl} alt="" sizes="(max-width: 640px) 45vw, 240px" priority={index === 0} className="object-cover transition duration-700 group-hover:scale-105" />
               ) : (
                 <span className="grid h-full w-full place-items-center text-neutral-400"><Utensils className="h-8 w-8" /></span>
               )}
