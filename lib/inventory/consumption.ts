@@ -15,6 +15,7 @@ const STATUS_RANK: Record<OrderStatus, number> = {
   CANCELLED: -1,
   REJECTED: -1,
   REFUNDED: -1,
+  MERGED: -1,
 };
 
 export function consumptionPointReached(

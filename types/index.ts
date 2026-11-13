@@ -243,6 +243,8 @@ export type Restaurant = {
   slug: string;
   logo?: string;
   coverImage?: string;
+  /** Optional video played behind the guest-menu banner. The cover image is the poster. */
+  coverVideo?: string;
   description?: string;
   tagline?: string;
   phone?: string;
@@ -271,6 +273,11 @@ export type Restaurant = {
   /** When set, this restaurant is an outlet of an organization. */
   organizationId?: string;
   inventorySettings?: RestaurantInventorySettings;
+  /**
+   * ALL: a captain may serve every table in this outlet.
+   * ASSIGNED: only assignedTableIds. Missing means ALL.
+   */
+  captainTableScope?: "ALL" | "ASSIGNED";
   loyaltySettings?: RestaurantLoyaltySettings;
 };
 
@@ -424,8 +431,16 @@ export type RestaurantTable = {
   restaurantId: string;
   tableNumber: number;
   label?: string;
+  /** Floor area, when the outlet uses one. Optional on older documents. */
+  area?: string;
+  /** Alternate section label. Optional. */
+  section?: string;
   capacity?: number;
   reservationRevision?: number;
+  /** Guests seated on the current session. Cleared when the table is freed. */
+  guestCount?: number;
+  /** ISO time the current session started. Cleared when the table is freed. */
+  occupiedSince?: string;
   isActive: boolean;
   status: TableStatus;
   createdAt: string;
@@ -478,7 +493,8 @@ export type OrderStatus =
   | "COMPLETED"
   | "CANCELLED"
   | "REJECTED"
-  | "REFUNDED";
+  | "REFUNDED"
+  | "MERGED";
 
 export type OrderChannel = "QR" | "POS_DINE_IN" | "POS_TAKEAWAY" | "POS_DELIVERY";
 
@@ -501,6 +517,10 @@ export type OrderItemSnapshot = {
   addons: OrderAddonSnapshot[];
   itemDiscountAmount?: number;
   note?: string;
+  /** Kitchen ticket this line was sent on. Existing lines keep their number. */
+  kotNumber?: number;
+  /** Ticket number before a merge moved the line onto another bill. */
+  previousKotNumber?: number;
   kitchenStation?: KitchenStation;
   preparationStatus?: "QUEUED" | "PREPARING" | "READY";
   /** Cumulative quantity cancelled on this line (partial cancel). */
@@ -572,7 +592,12 @@ export type OrderEventType =
   | "RECEIPT_REPRINT"
   | "REFUND"
   | "LINE_CANCELLED"
-  | "CAPTAIN_AUTHORIZATION";
+  | "CAPTAIN_AUTHORIZATION"
+  | "TABLE_MOVED"
+  | "TABLES_MERGED"
+  | "BILL_SPLIT"
+  | "KOT_REPRINT"
+  | "VOID_REQUESTED";
 
 /** Captain gate — separate from kitchen OrderStatus. QR must stay pending until approved. */
 export type CaptainAuthorizationStatus =
@@ -616,6 +641,14 @@ export type RestaurantOrder = {
   source?: "QR" | "POS" | "CAPTAIN";
   guestCount?: number;
   orderNote?: string;
+  customerName?: string;
+  customerPhone?: string;
+  customerEmail?: string;
+  deliveryAddress?: string;
+  /** Set when this check was merged into another order. Not a void. */
+  mergedIntoOrderId?: string;
+  /** Placeholder for a future payment-request document. ACTIVE blocks floor transfers. */
+  paymentRequestStatus?: "ACTIVE" | "SUPERSEDED" | "NONE";
   /** Captain authorization gate (QR pending until approved). */
   captainAuthorization?: CaptainAuthorization;
   items: OrderItemSnapshot[];
@@ -635,6 +668,8 @@ export type RestaurantOrder = {
   igstAmount?: number;
   /** Immutable financial breakdown captured at create/append time. */
   billSnapshot?: BillBreakdown;
+  /** Outlet billing settings frozen when the order was opened. */
+  billingSettingsSnapshot?: RestaurantBillingSettings;
   total: number;
   payment: PaymentSummary;
   events?: OrderEvent[];
@@ -1060,7 +1095,8 @@ export type OrderLineCancellation = {
   orderLineId: string;
   quantityCancelled: number;
   reason: string;
-  inventoryRestoreStatus: "RESTORED" | "BLOCKED" | "NONE";
+  inventoryRestoreStatus: "RESTORED" | "BLOCKED" | "NONE" | "PENDING" | "APPLIED" | "FAILED";
+  priorOrderStatus?: string;
   idempotencyKey: string;
   actor: PaymentAuditActor;
   createdAt: string;

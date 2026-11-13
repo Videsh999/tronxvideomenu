@@ -1,25 +1,72 @@
 # Wave 1 data changes
 
-No collection is renamed, dropped, or backfilled. No index is added or removed. Existing documents stay valid.
+No collection is renamed or dropped. New fields are optional. Old documents stay valid.
 
-## Additive order fields
+## Deploy
 
-| Place | Field | Meaning for old documents |
+1. Deploy the application. Mongoose accepts documents that do not yet have `version`, `gstRateSnapshot`, `billingSettingsSnapshot`, or `cancelledQuantity`.
+2. Do not run a backfill during deploy. The first append or cancel of a legacy order freezes billing from its stored `billSnapshot` (see Reconciliation).
+3. Confirm the unique indexes listed under Index check before taking payment traffic.
+
+## Rollback
+
+1. Roll the application back to the previous build.
+2. Leave the new fields in place. The previous build ignores unknown strict-schema paths on write and does not require them on read.
+3. Orders created by this build keep `billingSettingsSnapshot` and `version`. The previous build will not update `version`. After a rollback, do not run this build's cancel path against those orders until the forward build is restored.
+
+## Reconciliation
+
+Legacy mixed-rate orders have no `gstRateSnapshot` on some lines. Recompute uses the line snapshot when it exists, otherwise the order's stored `taxRatePercent`. It does not read the dish's current tax rate.
+
+Legacy orders also have no `billingSettingsSnapshot`. Packaging and service charge are frozen as a fixed per-order amount equal to the amounts already stored on `billSnapshot`, with that snapshot's price mode and supply type. A later change to the outlet's packaging percent does not change an open legacy check.
+
+Approved product decision: a legacy order whose service charge was a percentage is frozen as the fixed amount already charged. Historical bills must not change when the outlet later edits its service-charge percent.
+
+`cancelledQuantity` was stripped by Mongoose strict mode before this wave. A line can have a lower `itemTotal` while `cancelledQuantity` is missing. Do not guess the quantity from the price. Compare `orderLineCancellations` for that order and line, sum `quantityCancelled` where `orderLineId` is the line, and set `cancelledQuantity` to that sum when the field is missing. Lines with no cancellation rows stay at 0.
+
+`scripts/reconcile-cancelled-quantity.ts` prints that plan and does not write. `--apply` writes on a loopback database. A production or other non-loopback database is not written unless `--allow-production` is passed as well. Deploy does not run this script.
+
+## Captain floor
+
+`captainTableScope` is optional and defaults to `ALL`. `MERGED` is an order status for a check that moved onto another bill. It is not a void. `mergedIntoOrderId` points at the surviving order. `floorActions` has a unique index on outlet, action, and idempotency key. Void requests live in `voidApprovals` until a restaurant admin approves them.
+
+## Captain table session
+
+`tables.guestCount`, `tables.occupiedSince`, `tables.area`, and `tables.section` are optional. `order.items.kotNumber` is optional. Order events may also be `TABLE_MOVED`, `TABLES_MERGED`, or `BILL_SPLIT`. No collection is renamed, no document is rewritten, and no index is added. Opening a table writes the guest count and the time. Freeing a table removes those two fields. Older documents without them still load.
+
+## Index check
+
+This wave does not create or drop indexes. Before deploy, confirm the existing unique indexes are present:
+
+- `orders`: `{ restaurantId: 1, orderNumber: 1 }` unique, `{ restaurantId: 1, idempotencyKey: 1 }` unique
+- `orderLineCancellations`: `{ restaurantId: 1, idempotencyKey: 1 }` unique
+
+In mongosh, against the target database only:
+
+```
+db.orders.getIndexes()
+db.orderLineCancellations.getIndexes()
+```
+
+If either unique index is missing, stop and create it before serving writes. Do not build it in the request path.
+
+## Additive fields
+
+| Place | Field | Old documents |
 | --- | --- | --- |
-| `orders` | `version` | Missing means 0. Writers match version 0 or a missing field, then store the next integer. |
-| `orders.items` | `gstRateSnapshot` | Missing lines keep the order's stored `taxRatePercent` on recompute. They are not re-read from the live dish. |
-| `orders.items` | `cancelledQuantity` | Missing means 0. This field was already set by cancel code but Mongoose `strict` dropped it. It is stored from this wave on. |
-| `orders.payment.ledger` | `idempotencyKey` | Optional. Old ledger rows have none. |
-| `orderLineCancellations` | `applyStatus`, `baseVersion`, `plannedCancelled` | Missing `applyStatus` is treated as `APPLIED`, so a cancellation written before this wave stays idempotent. |
+| `orders` | `version` | Missing means 0. |
+| `orders` | `billingSettingsSnapshot` | Missing uses the legacy freeze above. |
+| `orders.items` | `gstRateSnapshot` | Missing uses `order.taxRatePercent`. |
+| `orders.items` | `cancelledQuantity` | Missing means 0 until reconciliation. |
+| `orders.payment.ledger` | `idempotencyKey` | Missing on old rows. New payments require one. |
+| `orderLineCancellations` | `applyStatus` | Missing means the cancellation already applied. |
 
-The unique indexes `{ restaurantId, idempotencyKey }` on orders and on line cancellations are unchanged.
+## Cancellation atomicity
 
-## Snapshot policy
+The marker is inserted or updated to `APPLIED` in the same MongoDB transaction as the order totals, line rows, and `CANCELLED` status. A crash after the totals statement and before commit aborts the transaction, so the totals are not visible.
 
-Documented in code as `ORDER_BILL_SNAPSHOT_POLICY` in `lib/billing/order-bill.ts`.
-
-Line unit price, variant, add-on prices, item discount, and `gstRateSnapshot` stay as they were when the line was added. Append and cancel do not re-price those lines from the current catalog. `priceMode` and `supplyType` stay on the order's first `billSnapshot` when one exists, so a later outlet toggle cannot tax a line twice or flip CGST/SGST to IGST. Packaging and service charge are recomputed from the current outlet settings because they depend on the open check.
+Inventory restore runs after that commit. The marker is `PENDING` until the restore finishes, then `APPLIED` or `FAILED`. A full cancel also runs the whole-order restore. `POST /api/orders/:orderId/restore-inventory` retries `PENDING` and `FAILED` markers, and reading the cancellation list retries them too. Movement keys keep a retry from restoring the same stock twice. Old rows may still say `NONE`, `RESTORED`, or `BLOCKED`.
 
 ## What was not migrated
 
-Staff memberships, cashier logins, and kitchen logins are not in this wave. Recoverable password ciphertext already in the database is not re-encrypted. See `TRONX_PRO_MAX_CREDENTIAL_ROTATION.md`.
+Staff memberships are not in this wave. Password ciphertext is not rewritten. See `TRONX_PRO_MAX_CREDENTIAL_ROTATION.md`.

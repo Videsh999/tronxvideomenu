@@ -37,6 +37,7 @@ const orderStatusMessage: Record<OrderSummary["status"], MessageKey> = {
   CANCELLED: "statusCancelled",
   REJECTED: "statusRejected",
   REFUNDED: "statusRefunded",
+  MERGED: "statusCompleted",
 };
 
 const orderSteps: { status: OrderSummary["status"]; label: MessageKey }[] = [

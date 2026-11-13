@@ -1,3 +1,4 @@
+import type { ClientSession } from "mongoose";
 import type { RestaurantOrder, KitchenStation, OrderEvent } from "@/types";
 import type { IOrderRepository } from "./types";
 import { connectToDatabase } from "@/lib/db/mongodb";
@@ -25,7 +26,7 @@ function amountPaidClause(expectedAmountPaid: number): Record<string, unknown> {
 }
 
 export class OrderRepository implements IOrderRepository {
-  async create(data: Omit<RestaurantOrder, "orderNumber" | "createdAt" | "updatedAt">) {
+  async create(data: Omit<RestaurantOrder, "orderNumber" | "createdAt" | "updatedAt">, session?: ClientSession) {
     await connectToDatabase();
     const now = new Date().toISOString();
     try {
@@ -42,12 +43,15 @@ export class OrderRepository implements IOrderRepository {
       { $inc: { value: 1 } },
       { new: true },
     ).lean();
-    const created = await OrderModel.create({
+    const doc = {
       ...data,
       orderNumber: Number(counter?.value ?? 1001),
       createdAt: now,
       updatedAt: now,
-    });
+    };
+    const created = session
+      ? (await OrderModel.create([doc], { session }))[0]!
+      : await OrderModel.create(doc);
     return this.mapOrder(created.toObject());
   }
 
@@ -83,6 +87,72 @@ export class OrderRepository implements IOrderRepository {
     if (tableNumbers && tableNumbers.length > 0) filter.tableNumber = { $in: tableNumbers };
     const orders = await OrderModel.find(filter).sort({ createdAt: -1 }).limit(200).lean();
     return orders.map((order) => this.mapOrder(order));
+  }
+
+  async findRunningForTable(restaurantId: string, tableNumber: number, session?: ClientSession) {
+    await connectToDatabase();
+    const orders = await OrderModel.find({
+      restaurantId,
+      tableNumber,
+      status: { $in: ["PENDING", "ACCEPTED", "PREPARING", "READY", "SERVED"] },
+    })
+      .session(session ?? null)
+      .sort({ createdAt: 1 })
+      .lean();
+    return orders.map((order) => this.mapOrder(order));
+  }
+
+  async appendVersionedEvent(
+    restaurantId: string,
+    id: string,
+    event: OrderEvent,
+    expectedVersion: number,
+    session?: ClientSession,
+  ) {
+    await connectToDatabase();
+    const order = await OrderModel.findOneAndUpdate(
+      { $and: [{ restaurantId, id }, versionClause(expectedVersion)] },
+      {
+        $set: { version: expectedVersion + 1, updatedAt: new Date().toISOString() },
+        $push: { events: event },
+      },
+      { new: true, runValidators: true, session },
+    ).lean();
+    return order ? this.mapOrder(order) : null;
+  }
+
+  async findByFloorActionKey(restaurantId: string, key: string) {
+    await connectToDatabase();
+    const order = await OrderModel.findOne({
+      restaurantId,
+      "events.meta.floorActionKey": key,
+    }).lean();
+    return order ? this.mapOrder(order) : null;
+  }
+
+  async relocate(
+    restaurantId: string,
+    id: string,
+    table: { tableId: string; tableNumber: number },
+    event: OrderEvent,
+    expectedVersion: number,
+    session?: ClientSession,
+  ) {
+    await connectToDatabase();
+    const order = await OrderModel.findOneAndUpdate(
+      { $and: [{ restaurantId, id }, versionClause(expectedVersion)] },
+      {
+        $set: {
+          tableId: table.tableId,
+          tableNumber: table.tableNumber,
+          version: expectedVersion + 1,
+          updatedAt: new Date().toISOString(),
+        },
+        $push: { events: event },
+      },
+      { new: true, runValidators: true, session },
+    ).lean();
+    return order ? this.mapOrder(order) : null;
   }
 
   async findActiveForTable(restaurantId: string, tableNumber: number) {
@@ -122,9 +192,9 @@ export class OrderRepository implements IOrderRepository {
       .filter((order) => order.items.length > 0);
   }
 
-  async findByRestaurantAndId(restaurantId: string, id: string) {
+  async findByRestaurantAndId(restaurantId: string, id: string, session?: ClientSession) {
     await connectToDatabase();
-    const order = await OrderModel.findOne({ restaurantId, id }).lean();
+    const order = await OrderModel.findOne({ restaurantId, id }).session(session ?? null).lean();
     return order ? this.mapOrder(order) : null;
   }
 
@@ -140,10 +210,13 @@ export class OrderRepository implements IOrderRepository {
     expectedStatus: RestaurantOrder["status"],
     status: RestaurantOrder["status"],
     event?: OrderEvent,
+    expectedVersion?: number,
+    session?: ClientSession,
   ) {
     await connectToDatabase();
     const now = new Date().toISOString();
     const set: Record<string, unknown> = { status, updatedAt: now };
+    if (expectedVersion != null) set.version = expectedVersion + 1;
     if (status === "COMPLETED" || status === "SERVED") {
       set.completedAt = now;
     }
@@ -151,10 +224,13 @@ export class OrderRepository implements IOrderRepository {
     if (event) {
       update.$push = { events: event };
     }
+    const filter: Record<string, unknown> = expectedVersion == null
+      ? { restaurantId, id, status: expectedStatus }
+      : { $and: [{ restaurantId, id, status: expectedStatus }, versionClause(expectedVersion)] };
     const order = await OrderModel.findOneAndUpdate(
-      { restaurantId, id, status: expectedStatus },
+      filter,
       update,
-      { new: true, runValidators: true },
+      { new: true, runValidators: true, session },
     ).lean();
     return order ? this.mapOrder(order) : null;
   }
@@ -178,14 +254,21 @@ export class OrderRepository implements IOrderRepository {
     lineId: string,
     preparationStatus: "QUEUED" | "PREPARING" | "READY",
     event: OrderEvent,
+    expectedVersion: number,
   ) {
     await connectToDatabase();
     const now = new Date().toISOString();
     const order = await OrderModel.findOneAndUpdate(
-      { restaurantId, id, "items.lineId": lineId },
+      {
+        $and: [
+          { restaurantId, id, "items.lineId": lineId },
+          versionClause(expectedVersion),
+        ],
+      },
       {
         $set: {
           "items.$.preparationStatus": preparationStatus,
+          version: expectedVersion + 1,
           updatedAt: now,
         },
         $push: { events: event },
@@ -278,24 +361,27 @@ export class OrderRepository implements IOrderRepository {
     auditEvent: import("@/types").PaymentAuditEvent,
     ledgerEntry: import("@/types").PaymentLedgerEntry,
     orderEvent: OrderEvent,
-    orderStatus?: RestaurantOrder["status"],
+    orderStatus: RestaurantOrder["status"] | undefined,
+    expectedVersion: number,
   ) {
     await connectToDatabase();
     const now = new Date().toISOString();
     const set: Record<string, unknown> = {
       "payment.status": paymentStatus,
       "payment.amountPaid": amountPaid,
+      version: expectedVersion + 1,
       updatedAt: now,
     };
     if (orderStatus) set.status = orderStatus;
+    const filter: Record<string, unknown>[] = [{
+      restaurantId,
+      id,
+      "payment.status": { $in: ["PAID", "PARTIAL"] },
+      status: { $nin: ["CANCELLED", "REJECTED", "REFUNDED"] },
+    }, versionClause(expectedVersion)];
 
     const order = await OrderModel.findOneAndUpdate(
-      {
-        restaurantId,
-        id,
-        "payment.status": { $in: ["PAID", "PARTIAL"] },
-        status: { $nin: ["CANCELLED", "REJECTED", "REFUNDED"] },
-      },
+      { $and: filter },
       {
         $set: set,
         $push: {
@@ -400,6 +486,10 @@ export class OrderRepository implements IOrderRepository {
       reopenForKitchen?: boolean;
       billDiscountAmount?: number;
       expectedVersion: number;
+      nextStatus?: RestaurantOrder["status"];
+      mergedIntoOrderId?: string;
+      billingSettingsSnapshot?: RestaurantOrder["billingSettingsSnapshot"];
+      session?: ClientSession;
     },
   ) {
     await connectToDatabase();
@@ -421,11 +511,14 @@ export class OrderRepository implements IOrderRepository {
     if (patch.orderNote !== undefined) set.orderNote = patch.orderNote;
     if (patch.billDiscountAmount !== undefined) set.billDiscountAmount = patch.billDiscountAmount;
     if (patch.reopenForKitchen) set.status = "PREPARING";
+    if (patch.nextStatus) set.status = patch.nextStatus;
+    if (patch.mergedIntoOrderId) set.mergedIntoOrderId = patch.mergedIntoOrderId;
+    if (patch.billingSettingsSnapshot) set.billingSettingsSnapshot = patch.billingSettingsSnapshot;
 
     const order = await OrderModel.findOneAndUpdate(
       {
         $and: [
-          { restaurantId, id, status: { $nin: ["CANCELLED", "REJECTED", "REFUNDED", "COMPLETED"] } },
+          { restaurantId, id, status: { $nin: ["CANCELLED", "REJECTED", "REFUNDED", "COMPLETED", "MERGED"] } },
           versionClause(patch.expectedVersion),
         ],
       },
@@ -433,7 +526,7 @@ export class OrderRepository implements IOrderRepository {
         $set: set,
         $push: { events: patch.event },
       },
-      { new: true, runValidators: true },
+      { new: true, runValidators: true, session: patch.session },
     ).lean();
     return order ? this.mapOrder(order) : null;
   }
