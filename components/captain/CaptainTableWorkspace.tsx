@@ -18,6 +18,7 @@ import { isPendingCaptainApproval } from "@/lib/order-authorization";
 import { primaryFloorAction } from "@/lib/order-board";
 import { printQueuedKitchenOrderTicket, printSessionKitchenTicket } from "@/lib/kot-print";
 import UpiPaymentQr from "@/components/shared/UpiPaymentQr";
+import { serviceTaxAmount, type ServiceTaxMode } from "@/lib/billing/service-tax";
 
 function money(value: number, currency = "INR") {
   return new Intl.NumberFormat(undefined, {
@@ -78,7 +79,9 @@ export default function CaptainTableWorkspace({
   const [note, setNote] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("ALL");
-  const [billServiceCharge, setBillServiceCharge] = useState("0");
+  const [serviceTaxMode, setServiceTaxMode] = useState<ServiceTaxMode>("PERCENT");
+  const [serviceTaxPercent, setServiceTaxPercent] = useState("");
+  const [serviceTaxAmountInput, setServiceTaxAmountInput] = useState("");
   const [destinationTableId, setDestinationTableId] = useState("");
   const [pending, startTransition] = useTransition();
 
@@ -86,7 +89,10 @@ export default function CaptainTableWorkspace({
     () => requests.filter((request) => !["DONE", "CANCELLED"].includes(request.status)),
     [requests],
   );
-  const runningTotal = useMemo(() => orders.filter((row) => !["CANCELLED", "REJECTED", "REFUNDED"].includes(row.status)).reduce((sum, row) => sum + row.total, 0), [orders]);
+  const billableOrders = useMemo(() => orders.filter((row) => !["CANCELLED", "REJECTED", "REFUNDED"].includes(row.status)), [orders]);
+  const runningTotal = useMemo(() => billableOrders.reduce((sum, row) => sum + row.total, 0), [billableOrders]);
+  const foodBase = useMemo(() => Math.max(0, billableOrders.reduce((sum, row) => sum + row.subtotal - (row.billDiscountAmount ?? 0), 0)), [billableOrders]);
+  const serviceTaxRupees = serviceTaxAmount(foodBase, serviceTaxMode, serviceTaxPercent, serviceTaxAmountInput);
   const previouslyPaid = useMemo(() => orders.reduce((sum, row) => sum + (row.payment?.amountPaid ?? 0), 0), [orders]);
   const historyOrders = useMemo(
     () => orders.filter((row) => historyFilter === "ALL" || row.status === historyFilter),
@@ -187,7 +193,7 @@ export default function CaptainTableWorkspace({
         const response = await fetch(`/api/captain/tables/${table.id}/session`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "GENERATE_BILL", sessionId: session.id, revise, tipAmount: Number(billServiceCharge) || 0 }),
+          body: JSON.stringify({ action: "GENERATE_BILL", sessionId: session.id, revise, tipAmount: serviceTaxRupees }),
         });
         const json = await response.json();
         if (!json.success) throw new Error(json.error || "Unable to generate final bill");
@@ -358,7 +364,7 @@ export default function CaptainTableWorkspace({
             <h2 className="mt-1 text-xl font-black">{session?.sessionNumber ?? "Starts with first order"}</h2>
             <p className="mt-1 text-sm text-neutral-500">{orders.length} independent order{orders.length === 1 ? "" : "s"} · Running bill {money(runningTotal, currency)} · Paid {money(previouslyPaid, currency)}</p>
           </div>
-          <div className="flex flex-wrap items-end gap-2"><div><p className="text-xs font-semibold text-neutral-600">Service tax</p><div className="mt-1 flex flex-wrap gap-1">{[0, 5, 10, 15, 20].map((percent) => <button key={percent} type="button" onClick={() => setBillServiceCharge((Math.round(orders.reduce((sum, row) => sum + row.subtotal, 0) * percent) / 100).toFixed(2))} className="min-h-10 rounded-lg bg-neutral-900 px-2 text-xs font-black text-white">{percent}%</button>)}</div><label className="mt-2 block text-xs font-semibold text-neutral-600">Amount in ₹<input type="number" min="0" step="0.01" value={billServiceCharge} onChange={(event) => setBillServiceCharge(event.target.value)} className="mt-1 block h-10 w-32 rounded-lg border border-neutral-300 px-2 text-sm" /></label></div><button type="button" disabled={pending || !session || orders.length === 0} onClick={() => generateFinalBill(Boolean(bill))} className="min-h-11 rounded-xl bg-violet-700 px-4 text-sm font-bold text-white disabled:opacity-40">{bill ? "Generate revised bill" : "Finalize bill"}</button><button type="button" disabled={orders.length === 0} onClick={() => printSessionKitchenTicket(orders.filter((row) => !["CANCELLED", "REJECTED", "REFUNDED"].includes(row.status)), restaurantName, locationName(table))} className="min-h-11 rounded-xl border border-neutral-300 px-4 text-sm font-bold">Print session KOT</button></div>
+          <div className="flex flex-wrap items-end gap-2"><div className="rounded-2xl border border-neutral-200 p-3"><p className="text-xs font-semibold text-neutral-600">Service tax</p><div className="mt-2 flex flex-wrap gap-2"><label className="text-xs font-semibold">Percent<input type="number" inputMode="decimal" min="0" max="100" step="0.1" placeholder="2.7" value={serviceTaxPercent} onChange={(event) => { setServiceTaxMode("PERCENT"); setServiceTaxPercent(event.target.value); }} className="mt-1 block h-10 w-24 rounded-lg border border-neutral-300 px-2 text-sm" /></label><label className="text-xs font-semibold">Amount in ₹<input type="number" inputMode="decimal" min="0" step="0.01" placeholder="0" value={serviceTaxAmountInput} onChange={(event) => { setServiceTaxMode("AMOUNT"); setServiceTaxAmountInput(event.target.value); }} className="mt-1 block h-10 w-28 rounded-lg border border-neutral-300 px-2 text-sm" /></label></div><p className="mt-2 text-xs font-semibold text-neutral-700">{serviceTaxMode === "PERCENT" && Number(serviceTaxPercent) > 0 ? `${serviceTaxPercent}% = ${money(serviceTaxRupees, currency)}` : money(serviceTaxRupees, currency)}</p></div><button type="button" disabled={pending || !session || orders.length === 0} onClick={() => generateFinalBill(Boolean(bill))} className="min-h-11 rounded-xl bg-violet-700 px-4 text-sm font-bold text-white disabled:opacity-40">{bill ? "Generate revised bill" : "Finalize bill"}</button><button type="button" disabled={orders.length === 0} onClick={() => printSessionKitchenTicket(orders.filter((row) => !["CANCELLED", "REJECTED", "REFUNDED"].includes(row.status)), restaurantName, locationName(table))} className="min-h-11 rounded-xl border border-neutral-300 px-4 text-sm font-bold">Print session KOT</button></div>
         </div>
         {orders.length ? (
           <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
