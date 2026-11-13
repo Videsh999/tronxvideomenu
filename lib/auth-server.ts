@@ -60,6 +60,25 @@ export const getRestaurantAdminContext = cache(async () => {
 
 export const getSuperAdminContext = () => getContextFromCookie(SUPER_ADMIN_SESSION_COOKIE, "SUPER_ADMIN");
 
+type CaptainSessionOk = {
+  status: "ok";
+  captain: Awaited<ReturnType<typeof captainService.getById>> & object;
+  restaurant: NonNullable<Awaited<ReturnType<typeof restaurantService.getById>>>;
+};
+
+const captainAuthCache = new Map<string, { at: number; value: CaptainSessionOk }>();
+const locationIdCache = new Map<string, { at: number; ids: string[] }>();
+const AUTH_CACHE_MS = 20_000;
+
+async function activeLocationIds(restaurantId: string) {
+  const hit = locationIdCache.get(restaurantId);
+  if (hit && Date.now() - hit.at < AUTH_CACHE_MS) return hit.ids;
+  const locations = await tableService.list(restaurantId);
+  const ids = locations.filter((location) => location.isActive && location.status !== "CLOSED").map((location) => location.id);
+  locationIdCache.set(restaurantId, { at: Date.now(), ids });
+  return ids;
+}
+
 /** One captain + restaurant lookup per request, shared by layout and page. */
 const loadCaptainSession = cache(async () => {
   const cookieStore = await cookies();
@@ -67,18 +86,25 @@ const loadCaptainSession = cache(async () => {
   if (session?.role !== "CAPTAIN" || !session.captainId || !session.captainUpdatedAt || !session.restaurantId || !session.restaurantSlug) {
     return { status: "unauthorized" as const };
   }
-  const captain = await captainService.getById(session.captainId);
+  const cacheKey = `${session.captainId}:${session.captainUpdatedAt}:${session.restaurantSlug}`;
+  const cached = captainAuthCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < AUTH_CACHE_MS) return cached.value;
+
+  const [captain, restaurant] = await Promise.all([
+    captainService.getById(session.captainId),
+    restaurantService.getById(session.restaurantId),
+  ]);
   if (!captain || !captain.isActive || captain.restaurantId !== session.restaurantId || captain.updatedAt !== session.captainUpdatedAt) {
     return { status: "forbidden" as const };
   }
-  const restaurant = await restaurantService.getById(captain.restaurantId);
   if (!restaurant || restaurant.isActive === false || restaurant.slug !== session.restaurantSlug) {
     return { status: "forbidden" as const };
   }
   // Floor staff serve any active location in their outlet; stale manual assignments must not hide tables.
-  const locations = await tableService.list(captain.restaurantId);
-  const accessibleIds = locations.filter((location) => location.isActive && location.status !== "CLOSED").map((location) => location.id);
-  return { status: "ok" as const, captain: { ...captain, assignedTableIds: accessibleIds }, restaurant };
+  const accessibleIds = await activeLocationIds(captain.restaurantId);
+  const value: CaptainSessionOk = { status: "ok", captain: { ...captain, assignedTableIds: accessibleIds }, restaurant };
+  captainAuthCache.set(cacheKey, { at: Date.now(), value });
+  return value;
 });
 
 export async function requireCaptain(requiredFeature?: FeatureKey) {

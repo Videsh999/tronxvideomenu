@@ -32,23 +32,27 @@ export async function GET(
   if (error) return error;
   const { tableId } = await params;
 
+  let table;
   try {
-    await captainService.assertCaptainMayServeTable(captain.id, captain.restaurantId, tableId);
+    const [allowedTable] = await Promise.all([
+      tableRepository.findByRestaurantAndId(captain.restaurantId, tableId),
+      captainService.assertCaptainMayServeTable(captain.id, captain.restaurantId, tableId),
+    ]);
+    table = allowedTable;
   } catch (authError) {
     return NextResponse.json(
       { success: false, error: authError instanceof Error ? authError.message : "Forbidden" },
       { status: 403 },
     );
   }
-
-  const table = await tableRepository.findByRestaurantAndId(captain.restaurantId, tableId);
   if (!table) {
     return NextResponse.json({ success: false, error: "Table not found" }, { status: 404 });
   }
 
-  let [overview, tableOrders] = await Promise.all([
+  let [overview, tableOrders, requests] = await Promise.all([
     tableSessionService.overview(captain.restaurantId, table.id),
     orderService.listOpenForTable(captain.restaurantId, table.id),
+    serviceRequestService.listForTable(captain.restaurantId, tableId),
   ]);
   if (!overview.session && tableOrders.some((order) => !["COMPLETED", "CANCELLED", "REJECTED", "REFUNDED"].includes(order.status))) {
     await tableSessionService.ensureActive({ restaurant, table, openedBy: { role: "CAPTAIN", id: captain.id, name: captain.name, email: captain.email } });
@@ -56,9 +60,6 @@ export async function GET(
   }
   const ordersById = new Map([...overview.orders, ...tableOrders].map((order) => [order.id, order]));
   const orders = [...ordersById.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-  const [requests] = await Promise.all([
-    serviceRequestService.listForTable(captain.restaurantId, tableId),
-  ]);
   const activeOrder = [...orders].reverse().find((order) => !["COMPLETED", "CANCELLED", "REJECTED", "REFUNDED"].includes(order.status)) ?? null;
 
   return NextResponse.json({

@@ -1,13 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Plus, Printer, RefreshCw } from "lucide-react";
 import QRCode from "qrcode";
 import UpiPaymentQr from "@/components/shared/UpiPaymentQr";
-import type { DynamicPaymentRequest, MasterBill, OrderSummary, RestaurantTable, TableSession } from "@/types";
+import type { DynamicPaymentRequest, MasterBill, MasterBillLine, OrderSummary, RestaurantTable, TableSession } from "@/types";
 import { locationName } from "@/lib/service-location";
 import { printQueuedKitchenOrderTicket, printSessionKitchenTicket } from "@/lib/kot-print";
 import { buildUpiPaymentUri, isValidUpiId } from "@/lib/upi-payment";
@@ -89,6 +89,7 @@ export default function CaptainTableService({ slug, restaurantName, table, curre
   initialBill: MasterBill | null;
 }) {
   const router = useRouter();
+  const saveLock = useRef(false);
   const [orders, setOrders] = useState(initialOrders);
   const [session, setSession] = useState(initialSession);
   const [bill, setBill] = useState(initialBill);
@@ -150,39 +151,120 @@ export default function CaptainTableService({ slug, restaurantName, table, curre
     return batch;
   }
 
+  function localBill(): MasterBill | null {
+    if (!session) return null;
+    const round2 = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+    const lines: MasterBillLine[] = [];
+    for (const order of activeOrders) {
+      order.items.forEach((item, index) => {
+        const billableQuantity = Math.max(0, item.quantity - (item.cancelledQuantity ?? 0));
+        if (!billableQuantity || item.quantity <= 0) return;
+        const lineId = item.lineId ?? `${item.dishId}-${index}`;
+        lines.push({
+          allocationKey: `${order.id}:${lineId}`,
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+          lineId,
+          dishNameSnapshot: item.dishNameSnapshot,
+          quantity: item.quantity,
+          billableQuantity,
+          lineTotal: round2(item.itemTotal * (billableQuantity / item.quantity)),
+        });
+      });
+    }
+    const now = new Date().toISOString();
+    const total = round2(orderTotal + serviceTaxRupees);
+    const alreadyPaid = bill?.amountPaid ?? activeOrders.reduce((sum, order) => sum + (order.payment?.amountPaid ?? 0), 0);
+    const amountPaid = round2(Math.min(total, alreadyPaid));
+    const outstandingAmount = round2(Math.max(0, total - amountPaid));
+    return {
+      id: bill?.id && bill.id !== "local-bill" ? bill.id : "local-bill",
+      billNumber: bill?.billNumber && bill.id !== "local-bill" ? bill.billNumber : "…",
+      restaurantId: bill?.restaurantId ?? "",
+      tableSessionId: session.id,
+      serviceLocationId: table.id,
+      version: bill?.version ?? 0,
+      status: outstandingAmount === 0 ? "PAID" : "ISSUED",
+      orderIds: activeOrders.map((order) => order.id),
+      lines,
+      subtotal: round2(activeOrders.reduce((sum, order) => sum + order.subtotal, 0)),
+      discountAmount: round2(activeOrders.reduce((sum, order) => sum + (order.billDiscountAmount ?? 0), 0)),
+      taxAmount: round2(activeOrders.reduce((sum, order) => sum + (order.taxAmount ?? 0), 0)),
+      packagingCharge: round2(activeOrders.reduce((sum, order) => sum + (order.packagingCharge ?? 0), 0)),
+      serviceCharge: round2(activeOrders.reduce((sum, order) => sum + (order.serviceCharge ?? 0), 0)),
+      tipAmount: serviceTaxRupees,
+      total,
+      amountPaid,
+      outstandingAmount,
+      fingerprint: bill?.fingerprint ?? "",
+      splitMode: "NONE",
+      allocations: [],
+      paymentLedger: bill?.paymentLedger ?? [],
+      issuedAt: now,
+      issuedBy: bill?.issuedBy ?? { role: "CAPTAIN", id: "local", name: "Captain" },
+      createdAt: bill?.createdAt ?? now,
+      updatedAt: now,
+    };
+  }
+
   function sendKot() {
-    void run(async () => {
-      const batch = await dispatchUnsentOrders();
-      if (batch.length === 1) printQueuedKitchenOrderTicket(batch[0], restaurantName, []);
-      else if (batch.length > 1) printSessionKitchenTicket(batch, restaurantName, locationName(table));
-      await refresh();
-      setMessage("New items sent to kitchen. KOT ready to print.");
-    });
+    const previous = orders;
+    setOrders((current) => current.map((order) => {
+      const lineIds = order.items.map((item) => item.lineId).filter((id): id is string => Boolean(id));
+      return { ...order, status: order.status === "ACCEPTED" ? "PREPARING" : order.status, kotLineIds: [...new Set([...(order.kotLineIds ?? []), ...lineIds])] };
+    }));
+    setMessage("Sent to the kitchen.");
+    void dispatchUnsentOrders()
+      .then((batch) => {
+        if (batch.length === 1) printQueuedKitchenOrderTicket(batch[0], restaurantName, []);
+        else if (batch.length > 1) printSessionKitchenTicket(batch, restaurantName, locationName(table));
+      })
+      .catch((error) => {
+        setOrders(previous);
+        setMessage(error instanceof Error ? error.message : "Could not send the KOT.");
+      });
   }
 
   function showBill() {
-    void run(async () => {
-      if (activeOrders.some((order) => order.status === "PENDING")) {
-        throw new Error("Approve the customer’s pending order first, then show the final bill.");
-      }
-      const currentSession = session ?? (await refresh()).session;
-      if (!currentSession) throw new Error("No active table visit was found. Refresh the table and try again.");
-      const updated = await postSession({ action: "GENERATE_BILL", sessionId: currentSession.id, tipAmount: serviceTaxRupees, revise: Boolean(bill) });
-      setBill(updated);
-      await refresh();
-      setMessage("Bill ready to show the guest.");
-    });
+    if (saveLock.current) return;
+    if (activeOrders.some((order) => order.status === "PENDING")) {
+      setMessage("Approve the customer’s pending order first, then show the final bill.");
+      return;
+    }
+    if (!session) {
+      setMessage("No active table visit was found. Refresh the table and try again.");
+      return;
+    }
+    const previous = bill;
+    const preview = localBill();
+    if (preview) setBill(preview);
+    setMessage("Bill updated.");
+    saveLock.current = true;
+    void postSession({ action: "GENERATE_BILL", sessionId: session.id, tipAmount: serviceTaxRupees, revise: Boolean(previous) })
+      .then((updated) => setBill(updated))
+      .catch((error) => {
+        setBill(previous);
+        setMessage(error instanceof Error ? error.message : "Could not save the bill.");
+      })
+      .finally(() => { saveLock.current = false; });
   }
 
   function recordPayment() {
-    if (!bill || billNeedsUpdate || unsentOrders.length) return;
+    if (!bill || bill.id === "local-bill" || billNeedsUpdate || unsentOrders.length || saveLock.current) return;
     const amount = bill.outstandingAmount;
     if (!window.confirm(`Confirm ${money(amount, currency)} received by ${method}?`)) return;
-    void run(async () => {
-      await postSession({ action: "RECORD_PAYMENT", billId: bill.id, amount, method, idempotencyKey: crypto.randomUUID() });
-      await refresh();
-      setMessage("Payment recorded. You can finish the table now.");
-    });
+    const previous = bill;
+    const paid = Math.round((bill.amountPaid + amount) * 100) / 100;
+    setBill({ ...bill, amountPaid: paid, outstandingAmount: Math.max(0, Math.round((bill.total - paid) * 100) / 100), status: paid + 0.001 >= bill.total ? "PAID" : "PARTIALLY_PAID" });
+    setMessage("Payment recorded. You can finish the table now.");
+    saveLock.current = true;
+    void postSession({ action: "RECORD_PAYMENT", billId: bill.id, amount, method, idempotencyKey: crypto.randomUUID() })
+      .then((updated) => setBill(updated))
+      .catch((error) => {
+        setBill(previous);
+        setMessage(error instanceof Error ? error.message : "Could not record the payment.");
+      })
+      .finally(() => { saveLock.current = false; });
   }
 
   function createUpi() {
@@ -263,13 +345,13 @@ export default function CaptainTableService({ slug, restaurantName, table, curre
     <section className="rounded-3xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-bold">Table order</h2><p className="text-sm text-neutral-500">Add more items whenever the guest asks.</p></div><Link href={`/captain/${slug}/take-order?table=${encodeURIComponent(table.id)}`} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-neutral-900 px-4 text-sm font-bold text-white"><Plus className="h-4 w-4" /> {activeOrders.length ? "Add items" : "Take order"}</Link></div>
       {activeOrders.length ? <div className="mt-5 space-y-3">{activeOrders.map((order) => <div key={order.id} className="rounded-2xl border border-neutral-100 bg-neutral-50 p-4"><div className="mb-2 flex justify-between gap-2 text-xs font-semibold text-neutral-500"><span>Order #{order.orderNumber}</span><span>{order.status === "PREPARING" ? "Cooking" : order.status === "READY" ? "Ready" : order.status === "SERVED" ? "Served" : order.status === "PENDING" ? "New" : order.kotLineIds?.length ? "Sent to kitchen" : "KOT waiting"}</span></div>{order.items.filter((item) => item.quantity > (item.cancelledQuantity ?? 0)).map((item, index) => <div key={item.lineId ?? index} className="flex justify-between gap-3 border-t border-neutral-200 py-2 text-sm"><span>{item.quantity - (item.cancelledQuantity ?? 0)}× {item.dishNameSnapshot}{item.note ? <small className="block text-neutral-500">{item.note}</small> : null}</span><strong>{money(item.itemTotal, currency)}</strong></div>)}</div>)}</div> : <p className="mt-5 rounded-2xl border border-dashed border-neutral-200 p-8 text-center text-sm text-neutral-500">No items yet. Tap Take order to start.</p>}
-      {activeOrders.length ? <div className="mt-4 flex flex-wrap gap-2">{unsentOrders.length ? <button type="button" disabled={busy} onClick={sendKot} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-amber-500 px-4 text-sm font-bold text-neutral-950 disabled:opacity-50"><Printer className="h-4 w-4" /> Send order to kitchen &amp; print KOT</button> : null}<button type="button" disabled={busy} onClick={() => printSessionKitchenTicket(activeOrders.map((order) => ({ ...order, items: order.items.filter((item) => item.lineId && (order.kotLineIds ?? []).includes(item.lineId)) })).filter((order) => order.items.length), restaurantName, locationName(table))} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-neutral-300 px-4 text-sm font-semibold disabled:opacity-50"><Printer className="h-4 w-4" /> Print KOT copy</button><button type="button" disabled={busy} onClick={() => void run(async () => { await refresh(); setMessage("Table updated."); })} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-neutral-300 px-4 text-sm font-semibold disabled:opacity-50"><RefreshCw className="h-4 w-4" /> Refresh</button><p className="w-full text-xs text-neutral-500">Sending creates the Kitchen “New” ticket and keeps this order in Orders and today’s reports.</p></div> : null}
+      {activeOrders.length ? <div className="mt-4 flex flex-wrap gap-2">{unsentOrders.length ? <button type="button" disabled={busy} onClick={sendKot} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-amber-500 px-4 text-sm font-bold text-neutral-950 disabled:opacity-50"><Printer className="h-4 w-4" /> Send order to kitchen &amp; print KOT</button> : null}<button type="button" disabled={busy} onClick={() => printSessionKitchenTicket(activeOrders.map((order) => ({ ...order, items: order.items.filter((item) => item.lineId && (order.kotLineIds ?? []).includes(item.lineId)) })).filter((order) => order.items.length), restaurantName, locationName(table))} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-neutral-300 px-4 text-sm font-semibold disabled:opacity-50"><Printer className="h-4 w-4" /> Print KOT copy</button><button type="button" disabled={busy} onClick={() => { setMessage("Table updated."); void refresh().catch((error) => setMessage(error instanceof Error ? error.message : "Could not refresh.")); }} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-neutral-300 px-4 text-sm font-semibold disabled:opacity-50"><RefreshCw className="h-4 w-4" /> Refresh</button><p className="w-full text-xs text-neutral-500">Sending creates the Kitchen “New” ticket and keeps this order in Orders and today’s reports.</p></div> : null}
     </section>
     {session || activeOrders.length ? <section className="rounded-3xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-6"><div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-xl font-bold">Customer bill</h2><p className="text-sm text-neutral-500">Item price, quantity, service charge and each GST amount before payment.</p></div><button type="button" disabled={busy || !activeOrders.length || activeOrders.some((order) => order.status === "PENDING")} onClick={showBill} className="min-h-11 rounded-xl bg-neutral-900 px-4 text-sm font-bold text-white disabled:opacity-40">{bill ? "Update bill" : "Show bill"}</button></div>{activeOrders.some((order) => order.status === "PENDING") ? <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Approve pending customer orders before preparing the final bill.</p> : null}
       {(!bill || bill.amountPaid === 0) ? <div className="mt-4 rounded-2xl border border-neutral-200 p-4"><p className="text-sm font-semibold">Service tax (optional)</p><p className="text-xs text-neutral-500">Type any percent, such as 2.7 or 3.5, or type a rupee amount. The guest can say no.</p><div className="mt-3 grid gap-3 sm:grid-cols-2"><label className={`rounded-2xl border p-3 ${serviceTaxMode === "PERCENT" ? "border-neutral-900" : "border-neutral-200"}`}><span className="flex items-center gap-2 text-sm font-bold"><input type="radio" name="service-tax-mode" checked={serviceTaxMode === "PERCENT"} onChange={() => setServiceTaxMode("PERCENT")} /> Percent</span><input type="number" inputMode="decimal" min="0" max="100" step="0.1" placeholder="2.7" value={serviceTaxPercent} onChange={(event) => { setServiceTaxMode("PERCENT"); setServiceTaxPercent(event.target.value); }} className="mt-2 h-12 w-full rounded-xl border border-neutral-300 px-3 text-lg" /></label><label className={`rounded-2xl border p-3 ${serviceTaxMode === "AMOUNT" ? "border-neutral-900" : "border-neutral-200"}`}><span className="flex items-center gap-2 text-sm font-bold"><input type="radio" name="service-tax-mode" checked={serviceTaxMode === "AMOUNT"} onChange={() => setServiceTaxMode("AMOUNT")} /> Amount in ₹</span><input type="number" inputMode="decimal" min="0" step="0.01" placeholder="0" value={serviceTaxAmountInput} onChange={(event) => { setServiceTaxMode("AMOUNT"); setServiceTaxAmountInput(event.target.value); }} className="mt-2 h-12 w-full rounded-xl border border-neutral-300 px-3 text-lg" /></label></div><p className="mt-3 text-sm font-semibold">{serviceTaxMode === "PERCENT" && Number(serviceTaxPercent) > 0 ? `${serviceTaxPercent}% of ${money(foodBase, currency)} = ${money(serviceTaxRupees, currency)}` : `Service tax ${money(serviceTaxRupees, currency)}`}</p></div> : null}
       {!bill ? <div className="mt-4 space-y-3"><div className="divide-y divide-neutral-100 rounded-2xl border border-neutral-200 p-4">{activeOrders.flatMap((order) => order.items.filter((item) => item.quantity > (item.cancelledQuantity ?? 0)).map((item, index) => <div key={`${order.id}-${item.lineId ?? index}`} className="flex justify-between gap-3 py-2 text-sm"><span><span className="font-semibold">#{order.orderNumber} · {item.quantity - (item.cancelledQuantity ?? 0)}× {item.dishNameSnapshot}</span><small className="block text-neutral-500">{money(item.itemTotal / Math.max(1, item.quantity), currency)} each</small></span><span className="font-semibold">{money(item.itemTotal * (item.quantity - (item.cancelledQuantity ?? 0)) / Math.max(1, item.quantity), currency)}</span></div>))}</div><dl className="space-y-2 text-sm">{[["Items subtotal", activeOrders.reduce((sum, order) => sum + order.subtotal, 0)], ["Discount", -activeOrders.reduce((sum, order) => sum + (order.billDiscountAmount ?? 0), 0)], ["Packaging", activeOrders.reduce((sum, order) => sum + (order.packagingCharge ?? 0), 0)], ["Service charge", activeOrders.reduce((sum, order) => sum + (order.serviceCharge ?? 0), 0)], [serviceTaxLabel, serviceTaxRupees], ...billTaxLines.map(({ label, amount }) => [label, amount] as [string, number])].filter(([label, value]) => Number(value) > 0.01 || (label === "Discount" && Number(value) < -0.01)).map(([label, value]) => <div key={label} className="flex justify-between"><dt>{label}</dt><dd>{money(Number(value), currency)}</dd></div>)}<div className="flex justify-between border-t border-neutral-200 pt-3 text-lg font-black"><dt>Estimated total</dt><dd>{money(orderTotal + (serviceTaxRupees), currency)}</dd></div><p className="text-xs text-neutral-500">This itemized estimate uses the saved order prices. Tap Show bill to save the final bill.</p></dl></div> : <div className="mt-5 space-y-3"><div className="flex items-center justify-between"><strong>Bill {bill.billNumber}</strong><button type="button" onClick={() => void printBill(bill, orders, restaurantName, locationName(table), currency, upiSettings).catch((error) => setMessage(error instanceof Error ? error.message : "Unable to print bill."))} className="inline-flex items-center gap-1 rounded-lg border border-neutral-300 px-3 py-2 text-sm font-semibold"><Printer className="h-4 w-4" /> Print customer bill</button></div><div className="divide-y divide-neutral-100 rounded-2xl border border-neutral-200 p-4">{bill.lines.map((line) => { const unitPrice = line.lineTotal / Math.max(1, line.billableQuantity); const orderNumber = orders.find((order) => order.id === line.orderId)?.orderNumber ?? line.orderNumber; return <div key={line.allocationKey} className="flex justify-between gap-3 py-2 text-sm"><span><span className="font-semibold">#{orderNumber} · {line.billableQuantity}× {line.dishNameSnapshot}</span><small className="block text-neutral-500">{money(unitPrice, currency)} each</small></span><span>{money(line.lineTotal, currency)}</span></div>; })}</div><dl className="space-y-2 text-sm">{[["Subtotal", bill.subtotal], ["Discount", -bill.discountAmount], ["Packaging", bill.packagingCharge], ["Service charge", bill.serviceCharge], ["Service tax", bill.tipAmount], ...billTaxLines.map(({ label, amount }) => [label, amount] as [string, number])].filter(([label, value]) => Number(value) > 0.01 || (label === "Discount" && Number(value) < -0.01)).map(([label, value]) => <div key={label} className="flex justify-between"><dt>{label}</dt><dd>{money(Number(value), currency)}</dd></div>)}<div className="flex justify-between border-t border-neutral-200 pt-3 text-lg font-black"><dt>Total</dt><dd>{money(bill.total, currency)}</dd></div><div className="flex justify-between font-bold"><dt>Remaining</dt><dd>{money(bill.outstandingAmount, currency)}</dd></div></dl>
         {bill.outstandingAmount > 0 && upiSettings.enabled && (isValidUpiId(upiSettings.upiId) || upiSettings.staticQrUrl) ? <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-3"><h3 className="mb-3 text-sm font-bold">Customer payment QR</h3><UpiPaymentQr upiId={upiSettings.upiId} payeeName={upiSettings.payeeName} staticQrUrl={upiSettings.staticQrUrl} amount={bill.outstandingAmount} orderNumber={bill.billNumber} compact /></div> : null}
-        {billNeedsUpdate ? <p className="rounded-xl bg-amber-50 p-3 text-sm font-semibold text-amber-900">The table order changed. Tap Update bill before taking payment.</p> : bill.outstandingAmount > 0 ? <div className="space-y-3 border-t border-neutral-200 pt-4"><div className="flex flex-wrap gap-2"><button type="button" onClick={() => setMethod("CASH")} className={`rounded-xl px-4 py-2 text-sm font-bold ${method === "CASH" ? "bg-neutral-900 text-white" : "border border-neutral-300"}`}>Cash</button><button type="button" onClick={() => setMethod("CARD")} className={`rounded-xl px-4 py-2 text-sm font-bold ${method === "CARD" ? "bg-neutral-900 text-white" : "border border-neutral-300"}`}>Card</button><button type="button" disabled={busy || !upiOrder} onClick={createUpi} className="rounded-xl border border-neutral-300 px-4 py-2 text-sm font-bold disabled:opacity-40">UPI QR</button></div><button type="button" disabled={busy || unsentOrders.length > 0} onClick={recordPayment} className="min-h-11 w-full rounded-xl bg-emerald-700 px-4 text-sm font-bold text-white disabled:opacity-50">Record {method} received · {money(bill.outstandingAmount, currency)}</button>{!upiOrder ? <p className="text-xs text-neutral-500">A verified UPI QR is available when this bill matches one unpaid order without an extra tip. Cash or card can settle a consolidated bill.</p> : null}{upi ? <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4 text-center"><p className="font-bold">{restaurantName} · {locationName(table)} · {money(upi.amount, currency)}</p>{upi.qrImageUrl ? <Image unoptimized src={upi.qrImageUrl} alt={`UPI payment QR for bill ${bill.billNumber}`} width={280} height={280} className="mx-auto mt-3 h-70 w-70 max-w-full object-contain" /> : null}<p className="mt-2 text-sm">{upi.status === "PAID" ? "Payment verified" : upi.status === "PENDING" ? "Waiting for verified payment…" : `Payment ${upi.status.toLowerCase()}`}</p><button type="button" onClick={() => upiOrder && session && void run(() => refreshUpi(upiOrder.id, session))} className="mt-2 rounded-lg border border-neutral-300 px-3 py-2 text-sm font-semibold">Refresh status</button></div> : null}</div> : <p className="border-t border-neutral-200 pt-4 font-semibold text-emerald-700">Bill paid in full.</p>}
+        {billNeedsUpdate ? <p className="rounded-xl bg-amber-50 p-3 text-sm font-semibold text-amber-900">The table order changed. Tap Update bill before taking payment.</p> : bill.id !== "local-bill" && bill.outstandingAmount > 0 ? <div className="space-y-3 border-t border-neutral-200 pt-4"><div className="flex flex-wrap gap-2"><button type="button" onClick={() => setMethod("CASH")} className={`rounded-xl px-4 py-2 text-sm font-bold ${method === "CASH" ? "bg-neutral-900 text-white" : "border border-neutral-300"}`}>Cash</button><button type="button" onClick={() => setMethod("CARD")} className={`rounded-xl px-4 py-2 text-sm font-bold ${method === "CARD" ? "bg-neutral-900 text-white" : "border border-neutral-300"}`}>Card</button><button type="button" disabled={busy || !upiOrder} onClick={createUpi} className="rounded-xl border border-neutral-300 px-4 py-2 text-sm font-bold disabled:opacity-40">UPI QR</button></div><button type="button" disabled={busy || unsentOrders.length > 0} onClick={recordPayment} className="min-h-11 w-full rounded-xl bg-emerald-700 px-4 text-sm font-bold text-white disabled:opacity-50">Record {method} received · {money(bill.outstandingAmount, currency)}</button>{!upiOrder ? <p className="text-xs text-neutral-500">A verified UPI QR is available when this bill matches one unpaid order without an extra tip. Cash or card can settle a consolidated bill.</p> : null}{upi ? <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4 text-center"><p className="font-bold">{restaurantName} · {locationName(table)} · {money(upi.amount, currency)}</p>{upi.qrImageUrl ? <Image unoptimized src={upi.qrImageUrl} alt={`UPI payment QR for bill ${bill.billNumber}`} width={280} height={280} className="mx-auto mt-3 h-70 w-70 max-w-full object-contain" /> : null}<p className="mt-2 text-sm">{upi.status === "PAID" ? "Payment verified" : upi.status === "PENDING" ? "Waiting for verified payment…" : `Payment ${upi.status.toLowerCase()}`}</p><button type="button" onClick={() => upiOrder && session && void run(() => refreshUpi(upiOrder.id, session))} className="mt-2 rounded-lg border border-neutral-300 px-3 py-2 text-sm font-semibold">Refresh status</button></div> : null}</div> : <p className="border-t border-neutral-200 pt-4 font-semibold text-emerald-700">Bill paid in full.</p>}
       </div>}
     </section> : null}
     {session || activeOrders.length ? <section className="rounded-3xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-6"><h2 className="text-lg font-bold">End table visit</h2><p className="mt-1 text-sm text-neutral-600">{bill ? bill.outstandingAmount > 0 ? `${money(bill.outstandingAmount, currency)} is still due. Record the received payment before the order can be marked completed and the table freed.` : "The bill is paid. End the visit to make this table available for the next guests." : "After the guest confirms they are finished, finalize the bill and payment to free the table."}</p><button type="button" disabled={busy} onClick={endTableVisit} className="mt-4 min-h-12 w-full rounded-xl bg-neutral-900 px-4 text-base font-bold text-white disabled:opacity-40">{busy ? "Finishing table…" : "Finish visit & free table"}</button>{unsentOrders.length ? <p className="mt-2 text-xs font-medium text-neutral-500">Any accepted items not yet sent will be sent to Kitchen before this visit closes.</p> : null}</section> : null}

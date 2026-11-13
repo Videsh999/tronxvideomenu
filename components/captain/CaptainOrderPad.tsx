@@ -296,23 +296,27 @@ export default function CaptainOrderPad({
       return;
     }
 
-    startTransition(async () => {
+    const snapshot = session;
+    setMessage(`Sending ${selectedLocationName} to the kitchen…`);
+    setCartOpen(false);
+    patchSession(emptyCartState());
+    void (async () => {
       try {
-        const phone = session.customerPhone.trim();
+        const phone = snapshot.customerPhone.trim();
         const response = await fetch("/api/captain/orders", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             tableId: selectedLocation.id,
             tableNumber: selectedLocation.tableNumber,
-            guestName: session.guestName.trim() || undefined,
-            orderNote: session.orderNote.trim() || undefined,
+            guestName: snapshot.guestName.trim() || undefined,
+            orderNote: snapshot.orderNote.trim() || undefined,
             customerPhone: phone || undefined,
-            billDiscountAmount: session.billDiscount || undefined,
-            couponCode: session.couponCode.trim() || undefined,
-            redeemLoyaltyPoints: session.redeemLoyaltyPoints || undefined,
-            idempotencyKey: session.idempotencyKey,
-            items: session.cart.map((line) => ({
+            billDiscountAmount: snapshot.billDiscount || undefined,
+            couponCode: snapshot.couponCode.trim() || undefined,
+            redeemLoyaltyPoints: snapshot.redeemLoyaltyPoints || undefined,
+            idempotencyKey: snapshot.idempotencyKey,
+            items: snapshot.cart.map((line) => ({
               dishId: line.dishId,
               variantId: line.variantId,
               quantity: line.quantity,
@@ -340,8 +344,6 @@ export default function CaptainOrderPad({
         setPreviousKotLineIds(json.data?.kotLineIds ?? []);
         setPayAmount(roundMoney(Math.max(0, (json.data?.total ?? totals.total) - (json.data?.payment?.amountPaid ?? 0))));
         setUpiRequest(null);
-        setCartOpen(false);
-        patchSession(emptyCartState());
         if (orderId) {
           const kotResponse = await fetch(`/api/captain/orders/${encodeURIComponent(orderId)}/send-kot`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
           const kotJson = await kotResponse.json().catch(() => ({}));
@@ -358,9 +360,10 @@ export default function CaptainOrderPad({
           setMessage(`Order saved for ${selectedLocationName}.`);
         }
       } catch (error) {
+        patchSession(snapshot);
         setMessage(error instanceof Error ? error.message : "Unable to place order");
       }
-    });
+    })();
   }
 
   function recordPay() {

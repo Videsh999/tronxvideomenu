@@ -5,7 +5,6 @@ import { captainService } from "@/lib/services/captain.service";
 import { tableRepository } from "@/lib/repositories/table.repository";
 import { orderRepository } from "@/lib/repositories/order.repository";
 import { tableSessionService, TableSessionServiceError } from "@/lib/services/table-session.service";
-import { restaurantService } from "@/lib/services/restaurant.service";
 import { resolveCaptainPermissions } from "@/lib/captain-permissions";
 import { buildUpiPaymentUri, isValidUpiId } from "@/lib/upi-payment";
 
@@ -84,7 +83,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tab
         data = await tableSessionService.merge(auth.captain.restaurantId, parsed.data.sessionId, destinationOverview.session.id);
       }
     }
-    const restaurant = await restaurantService.getById(auth.captain.restaurantId);
+    const restaurant = auth.restaurant;
     const upiId = restaurant?.billing?.upiId ?? "";
     const paymentUri = data && "outstandingAmount" in data && data.outstandingAmount > 0 && restaurant?.billing?.upiEnabled && isValidUpiId(upiId)
       ? buildUpiPaymentUri({ upiId, payeeName: restaurant.billing?.upiPayeeName || restaurant.name, amount: data.outstandingAmount, orderNumber: "billNumber" in data ? data.billNumber : String((data as { id?: string }).id ?? "bill") })
