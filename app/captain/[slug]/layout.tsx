@@ -25,7 +25,7 @@ export default async function CaptainLayout({
         pendingApprovals={0}
       />
       <main className="min-w-0 flex-1 px-4 pb-32 pt-5 sm:px-6 lg:px-10 lg:py-8">
-        <div className="mx-auto max-w-6xl animate-fade-up">{children}</div>
+        <div className="mx-auto max-w-6xl">{children}</div>
       </main>
     </div>
   );

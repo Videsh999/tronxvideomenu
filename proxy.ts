@@ -16,13 +16,13 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const restaurantSession = await readAdminSession(request.cookies.get(RESTAURANT_ADMIN_SESSION_COOKIE)?.value, process.env.AUTH_SECRET);
-  const superSession = await readAdminSession(request.cookies.get(SUPER_ADMIN_SESSION_COOKIE)?.value, process.env.AUTH_SECRET);
-  const captainSession = await readAdminSession(request.cookies.get(CAPTAIN_SESSION_COOKIE)?.value, process.env.AUTH_SECRET);
-
   if (pathname === "/captain/login") {
     return NextResponse.next();
   }
+
+  const captainSession = pathname.startsWith("/captain/") || isApiRequest
+    ? await readAdminSession(request.cookies.get(CAPTAIN_SESSION_COOKIE)?.value, process.env.AUTH_SECRET)
+    : null;
 
   if (pathname.startsWith("/captain/")) {
     if (!captainSession || captainSession.role !== "CAPTAIN" || !captainSession.restaurantSlug) {
@@ -36,6 +36,9 @@ export async function proxy(request: NextRequest) {
     }
     return NextResponse.next();
   }
+
+  const restaurantSession = await readAdminSession(request.cookies.get(RESTAURANT_ADMIN_SESSION_COOKIE)?.value, process.env.AUTH_SECRET);
+  const superSession = await readAdminSession(request.cookies.get(SUPER_ADMIN_SESSION_COOKIE)?.value, process.env.AUTH_SECRET);
 
   if (isAdminLoginRoute || isSuperAdminLoginRoute) {
     if (isSuperAdminLoginRoute && superSession?.role === "SUPER_ADMIN") return NextResponse.redirect(new URL("/super-admin", request.url));

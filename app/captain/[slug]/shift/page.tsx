@@ -20,10 +20,12 @@ export default async function CaptainShiftPage({ params }: { params: Promise<{ s
   if (error || !captain || !restaurant) redirect(`/captain/${slug}`);
 
   const assigned = new Set(captain.assignedTableIds ?? []);
-  const [orders, tables] = await Promise.all([
-    orderService.listForRestaurant(captain.restaurantId),
+  const [openOrders, doneOrders, tables] = await Promise.all([
+    orderService.listOpenForRestaurant(captain.restaurantId),
+    orderService.listDoneHistory(captain.restaurantId, 80),
     tableService.list(captain.restaurantId),
   ]);
+  const orders = [...openOrders, ...doneOrders];
   const myTables = enrichCaptainTables(tables, orders, assigned);
   const today = new Date().toISOString().slice(0, 10);
   const mineToday = orders.filter(

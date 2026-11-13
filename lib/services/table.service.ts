@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { cache } from "react";
 import { restaurantRepository } from "@/lib/repositories/restaurant.repository";
 import { tableRepository } from "@/lib/repositories/table.repository";
@@ -5,7 +6,15 @@ import type { RestaurantTable } from "@/types";
 
 export class TableServiceError extends Error {}
 
-const listTablesCached = cache((restaurantId: string) => tableRepository.findByRestaurantId(restaurantId));
+const listTablesCached = cache((restaurantId: string) => (
+  process.env.NODE_ENV === "test"
+    ? tableRepository.findByRestaurantId(restaurantId)
+    : unstable_cache(
+      () => tableRepository.findByRestaurantId(restaurantId),
+      ["restaurant-tables", restaurantId],
+      { revalidate: 15 },
+    )()
+));
 
 export class TableService {
   async list(restaurantId: string) {

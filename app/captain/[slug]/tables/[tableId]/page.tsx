@@ -1,6 +1,5 @@
 import { redirect, notFound } from "next/navigation";
 import { requireCaptain } from "@/lib/auth-server";
-import { captainService } from "@/lib/services/captain.service";
 import { resolveStaticMerchantQrUrl } from "@/lib/upi-payment";
 import { tableRepository } from "@/lib/repositories/table.repository";
 import { orderService } from "@/lib/services/order.service";
@@ -19,18 +18,14 @@ export default async function CaptainTableWorkspacePage({
   if (error || !captain || !restaurant) redirect(`/captain/${slug}`);
   if (restaurant.slug !== slug) redirect(`/captain/${restaurant.slug}/tables/${tableId}`);
 
-  try {
-    await captainService.assertCaptainMayServeTable(captain.id, captain.restaurantId, tableId);
-  } catch {
-    redirect(`/captain/${slug}/tables`);
-  }
+  if (!(captain.assignedTableIds ?? []).includes(tableId)) redirect(`/captain/${slug}/tables`);
 
-  const table = await tableRepository.findByRestaurantAndId(captain.restaurantId, tableId);
-  if (!table) notFound();
-  let [overview, tableOrders] = await Promise.all([
-    tableSessionService.overview(captain.restaurantId, table.id),
-    orderService.listOpenForTable(captain.restaurantId, table.id),
+  let [table, overview, tableOrders] = await Promise.all([
+    tableRepository.findByRestaurantAndId(captain.restaurantId, tableId),
+    tableSessionService.overview(captain.restaurantId, tableId),
+    orderService.listOpenForTable(captain.restaurantId, tableId),
   ]);
+  if (!table) notFound();
   if (!overview.session && tableOrders.some((order) => !["COMPLETED", "CANCELLED", "REJECTED", "REFUNDED"].includes(order.status))) {
     await tableSessionService.ensureActive({ restaurant, table, openedBy: { role: "CAPTAIN", id: captain.id, name: captain.name, email: captain.email } });
     overview = await tableSessionService.overview(captain.restaurantId, table.id);

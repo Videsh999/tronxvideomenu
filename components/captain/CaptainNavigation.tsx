@@ -77,6 +77,7 @@ export default function CaptainNavigation({
               <Link
                 key={link.href}
                 href={link.href}
+                prefetch
                 aria-current={active ? "page" : undefined}
                 className={`group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
                   active
@@ -152,6 +153,7 @@ export default function CaptainNavigation({
               <li key={link.href}>
                 <Link
                   href={link.href}
+                  prefetch
                   aria-current={active ? "page" : undefined}
                   className={`relative flex flex-col items-center gap-0.5 rounded-xl py-1 text-[9px] font-semibold transition ${
                     active ? "text-neutral-900" : "text-neutral-500"

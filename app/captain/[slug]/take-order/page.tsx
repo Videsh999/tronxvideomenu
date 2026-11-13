@@ -1,6 +1,6 @@
 import { requireCaptain } from "@/lib/auth-server";
 import { restaurantService } from "@/lib/services/restaurant.service";
-import { tableRepository } from "@/lib/repositories/table.repository";
+import { tableService } from "@/lib/services/table.service";
 import CaptainOrderPad from "@/components/captain/CaptainOrderPad";
 import { redirect } from "next/navigation";
 
@@ -17,11 +17,13 @@ export default async function CaptainTakeOrderPage({
   const { captain, error } = await requireCaptain("ORDER_MANAGEMENT");
   if (error || !captain) redirect(`/captain/login?next=/captain/${slug}/take-order`);
 
-  const menu = await restaurantService.getFullMenu(slug);
+  const [menu, allTables] = await Promise.all([
+    restaurantService.getFullMenu(slug),
+    tableService.list(captain.restaurantId),
+  ]);
   if (!menu || menu.restaurant.id !== captain.restaurantId) redirect(`/captain/${slug}`);
 
   const assignedIds = new Set(captain.assignedTableIds ?? []);
-  const allTables = await tableRepository.findByRestaurantId(captain.restaurantId);
   const tables = allTables.filter(
     (table) => table.isActive && table.status !== "CLOSED" && assignedIds.has(table.id),
   );

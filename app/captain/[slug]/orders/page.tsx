@@ -14,8 +14,8 @@ export default async function CaptainOrdersPage({ params }: { params: Promise<{ 
 
   const assigned = new Set(captain.assignedTableIds ?? []);
   const [activeOrders, doneOrders] = await Promise.all([
-    orderService.listForRestaurant(captain.restaurantId),
-    orderService.listDoneHistory(captain.restaurantId, 500),
+    orderService.listOpenForRestaurant(captain.restaurantId),
+    orderService.listDoneHistory(captain.restaurantId, 24),
   ]);
   const orders = [...activeOrders, ...doneOrders];
   const scoped = orders.filter(

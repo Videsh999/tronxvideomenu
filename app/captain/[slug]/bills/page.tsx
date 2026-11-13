@@ -33,7 +33,7 @@ export default async function CaptainBillsPage({ params }: { params: Promise<{ s
   }
 
   const assigned = new Set(captain.assignedTableIds ?? []);
-  const orders = (await orderService.listForRestaurant(captain.restaurantId))
+  const orders = (await orderService.listOpenForRestaurant(captain.restaurantId))
     .filter((order) => assigned.has(order.tableId))
     .filter((order) => !["CANCELLED", "REJECTED"].includes(order.status))
     .slice(0, 40);

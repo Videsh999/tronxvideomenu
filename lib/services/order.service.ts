@@ -1,4 +1,5 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { unstable_cache } from "next/cache";
 import { orderRepository } from "@/lib/repositories/order.repository";
 import { restaurantService } from "@/lib/services/restaurant.service";
 import { tableRepository } from "@/lib/repositories/table.repository";
@@ -120,6 +121,11 @@ export class OrderServiceError extends Error {
   }
 }
 
+function remember<T>(key: string[], seconds: number, load: () => Promise<T>) {
+  if (process.env.NODE_ENV === "test") return load();
+  return unstable_cache(load, key, { revalidate: seconds })();
+}
+
 export class OrderService {
   /** Live floor orders (open + last 36h). Use repository.findByRestaurantId for full history reports. */
   async listForRestaurant(restaurantId: string) {
@@ -127,19 +133,27 @@ export class OrderService {
   }
 
   async listOpenForRestaurant(restaurantId: string) {
-    return (await orderRepository.findOpenForRestaurant(restaurantId)).map(staffOrderView);
+    const rows = await remember(["open-orders", restaurantId], 8, () => orderRepository.findOpenForRestaurant(restaurantId));
+    return rows.map(staffOrderView);
   }
 
   async listOpenForTable(restaurantId: string, tableId: string) {
-    return (await orderRepository.findOpenForTable(restaurantId, tableId)).map(staffOrderView);
+    const rows = await remember(["open-table-orders", restaurantId, tableId], 8, () => orderRepository.findOpenForTable(restaurantId, tableId));
+    return rows.map(staffOrderView);
   }
 
   async listDoneHistory(restaurantId: string, limit = 500) {
-    return (await orderRepository.findDoneHistory(restaurantId, limit)).map(staffOrderView);
+    const rows = await remember(["done-orders", restaurantId, String(limit)], 20, () => orderRepository.findDoneHistory(restaurantId, limit));
+    return rows.map(staffOrderView);
   }
 
   async listKitchen(restaurantId: string, station?: KitchenStation) {
-    return (await orderRepository.findKitchenActive(restaurantId, station))
+    const rows = await remember(
+      ["kitchen-orders", restaurantId, station ?? "ALL"],
+      8,
+      () => orderRepository.findKitchenActive(restaurantId, station),
+    );
+    return rows
       .filter((order) => isCaptainKitchenEligible(order))
       .map(staffOrderView);
   }
