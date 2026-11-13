@@ -55,6 +55,7 @@ const restaurantSchema = new Schema<Restaurant>(
     isActive: { type: Boolean, default: true },
     logoUrl: String,
     coverUrl: String,
+    coverVideo: String,
     createdAt: String,
     updatedAt: String,
     subscriptionPlan: {

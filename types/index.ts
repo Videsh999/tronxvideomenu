@@ -243,6 +243,8 @@ export type Restaurant = {
   slug: string;
   logo?: string;
   coverImage?: string;
+  /** Optional video played behind the guest-menu banner. The cover image is the poster. */
+  coverVideo?: string;
   description?: string;
   tagline?: string;
   phone?: string;

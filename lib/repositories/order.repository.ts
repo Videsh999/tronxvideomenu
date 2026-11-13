@@ -488,6 +488,7 @@ export class OrderRepository implements IOrderRepository {
       expectedVersion: number;
       nextStatus?: RestaurantOrder["status"];
       mergedIntoOrderId?: string;
+      billingSettingsSnapshot?: RestaurantOrder["billingSettingsSnapshot"];
       session?: ClientSession;
     },
   ) {
@@ -512,6 +513,7 @@ export class OrderRepository implements IOrderRepository {
     if (patch.reopenForKitchen) set.status = "PREPARING";
     if (patch.nextStatus) set.status = patch.nextStatus;
     if (patch.mergedIntoOrderId) set.mergedIntoOrderId = patch.mergedIntoOrderId;
+    if (patch.billingSettingsSnapshot) set.billingSettingsSnapshot = patch.billingSettingsSnapshot;
 
     const order = await OrderModel.findOneAndUpdate(
       {

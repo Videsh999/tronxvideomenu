@@ -214,6 +214,44 @@ export default function CaptainFloor({
     setView({ kind: "order", tableId: view.tableId });
   }
 
+  async function sendDish(dish: MenuDish, variant?: { id: string; name: string; price: number }) {
+    if (view.kind !== "order") return;
+    const table = tableOf(view.tableId);
+    if (!table) return;
+    setBusy(true);
+    setError("");
+    const response = await fetch("/api/captain/orders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        tableNumber: table.tableNumber,
+        guestCount: table.guestCount,
+        idempotencyKey: crypto.randomUUID(),
+        sendToKitchen: true,
+        items: [{
+          dishId: dish.id,
+          variantId: variant?.id,
+          quantity: 1,
+          selections: [],
+        }],
+      }),
+    });
+    const body = (await response.json().catch(() => ({}))) as { error?: string; data?: OrderSummary };
+    setBusy(false);
+    if (!response.ok || !body.data) {
+      setError(body.error || "Could not send to the kitchen.");
+      return;
+    }
+    setOrders((current) => [body.data!, ...current.filter((order) => order.id !== body.data!.id)]);
+    setView({
+      kind: "kot",
+      tableId: table.id,
+      kotNumber: body.data.items.reduce((max, item) => Math.max(max, item.kotNumber ?? 1), 1),
+      lines: [{ name: variant ? `${dish.name} (${variant.name})` : dish.name, quantity: 1 }],
+      at: new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }),
+    });
+  }
+
   function addDish(dish: MenuDish, variant?: { id: string; name: string; price: number }) {
     if (dish.variants.length > 0 && !variant) return;
     setCart((current) => {
@@ -300,6 +338,23 @@ export default function CaptainFloor({
     if (body.data) setTables((current) => current.map((table) => (table.id === tableId ? body.data! : table)));
   }
 
+  async function applyServiceTax(orderId: string, mode: "PERCENT" | "AMOUNT", value: number) {
+    setBusy(true);
+    setError("");
+    const response = await fetch(`/api/captain/orders/${orderId}/service-tax`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode, value }),
+    });
+    const body = (await response.json().catch(() => ({}))) as { error?: string; data?: OrderSummary };
+    setBusy(false);
+    if (!response.ok || !body.data) {
+      setError(body.error || "Could not set service tax.");
+      return;
+    }
+    setOrders((current) => current.map((order) => (order.id === body.data!.id ? body.data! : order)));
+  }
+
   async function requestBill(tableId: string) {
     setBusy(true);
     setError("");
@@ -383,7 +438,7 @@ export default function CaptainFloor({
           {visible.map((group) => (
             <section key={group.name}>
               <h2 className="mb-2 text-sm font-bold uppercase tracking-widest text-neutral-500">{group.name}</h2>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <div className="grid grid-cols-2 gap-3">
                 {group.tables.map((table) => {
                   const tableOrders = runningOrders(orders, table.tableNumber);
                   const order = tableOrders[0];
@@ -530,7 +585,7 @@ export default function CaptainFloor({
             {shownDishes.map((dish) => (
               <div key={dish.id} className="rounded-2xl bg-white p-3">
                 {dish.variants.length === 0 ? (
-                  <button type="button" onClick={() => addDish(dish)} className="min-h-14 w-full text-left text-lg font-bold">
+                  <button type="button" onClick={() => void sendDish(dish)} className="min-h-16 w-full text-left text-xl font-black">
                     {dish.name}
                   </button>
                 ) : (
@@ -541,7 +596,7 @@ export default function CaptainFloor({
                         <button
                           key={variant.id}
                           type="button"
-                          onClick={() => addDish(dish, variant)}
+                          onClick={() => void sendDish(dish, variant)}
                           className="min-h-12 rounded-full bg-neutral-100 px-4 font-bold"
                         >
                           {variant.name}
@@ -730,6 +785,24 @@ export default function CaptainFloor({
             <p className="rounded-3xl bg-white p-4">No running order.</p>
           )}
           <div className="grid gap-2">
+            {currentOrder && gates.viewBill ? (
+              <div className="rounded-3xl bg-white p-4">
+                <p className="text-lg font-black">Service tax</p>
+                <p className="text-sm text-neutral-500">Optional. The guest can say no.</p>
+                <div className="mt-3 grid grid-cols-5 gap-2">
+                  {[0, 5, 10, 15, 20].map((percent) => (
+                    <button
+                      key={percent}
+                      type="button"
+                      onClick={() => void applyServiceTax(currentOrder.id, "PERCENT", percent)}
+                      className="min-h-14 rounded-2xl bg-neutral-900 text-sm font-black text-white"
+                    >
+                      {percent}%
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             {gates.requestBill ? (
               <button
                 type="button"
@@ -800,6 +873,11 @@ export default function CaptainFloor({
               <span>Subtotal</span>
               <span>{rupeePaise(runningBillFromServer(currentOrder).subtotal)}</span>
             </p>
+            <p className="flex justify-between text-sm">
+              <span>Service tax</span>
+              <span>{rupeePaise(currentOrder.serviceCharge ?? 0)}</span>
+            </p>
+            <p className="text-center text-[10px]">Service tax is voluntary.</p>
             <p className="flex justify-between text-sm">
               <span>CGST</span>
               <span>{rupeePaise(currentOrder.cgstAmount ?? 0)}</span>
