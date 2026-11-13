@@ -40,7 +40,17 @@ export default function RestaurantHero({ restaurant, tableNumber, locationType =
     <section aria-label={restaurant.name} className="mx-auto max-w-7xl px-3 pt-3 sm:px-6 sm:pt-5 lg:px-8">
       <div className="relative isolate rounded-[1.75rem] bg-neutral-900 text-white shadow-[0_24px_60px_-30px_rgba(0,0,0,0.55)]">
         <div className="absolute inset-0 -z-10 overflow-hidden rounded-[1.75rem]">
-          {restaurant.coverUrl ? (
+          {restaurant.coverVideo ? (
+            <video
+              src={restaurant.coverVideo}
+              poster={restaurant.coverUrl || restaurant.coverImage}
+              autoPlay
+              muted
+              loop
+              playsInline
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+          ) : restaurant.coverUrl ? (
             <SmartImage src={restaurant.coverUrl} alt="" sizes="(max-width: 1280px) 100vw, 1280px" priority className="object-cover" />
           ) : (
             <div className="absolute inset-0 bg-linear-to-br from-[var(--restaurant-primary)] via-[var(--restaurant-secondary)] to-black" />

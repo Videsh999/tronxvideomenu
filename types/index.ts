@@ -261,6 +261,8 @@ export type Restaurant = {
   // Compatibility fields for customer menu UI
   logoUrl?: string;
   coverUrl?: string;
+  /** Optional video played behind the guest-menu banner. The cover image is the poster. */
+  coverVideo?: string;
   isActive?: boolean;
   // Subscription fields
   subscriptionPlan?: SubscriptionPlan;

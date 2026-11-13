@@ -1,14 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronLeft, ChevronRight, Dices, Lock, LockOpen, ShoppingBag, Utensils, X } from "lucide-react";
+import { Check, ChevronLeft, Dices, Lock, LockOpen, ShoppingBag, Utensils, X } from "lucide-react";
 import type { Category, Dish } from "@/types";
 import SmartImage from "@/components/shared/SmartImage";
 import { buildMeal, defaultSelections, mealPool, PARTY_DISH_COUNT, type MealMood, type PartySize } from "@/lib/meal-builder";
 import { useI18n } from "./I18nProvider";
 import type { MessageKey } from "@/lib/i18n/messages";
 
-type Step = "mood" | "party" | "diet" | "meal";
+type Step = "ask" | "meal";
 
 type SurpriseMeProps = {
   dishes: Dish[];
@@ -32,11 +32,9 @@ const parties: { value: PartySize; label: MessageKey }[] = [
   { value: "large", label: "partyLarge" },
 ];
 
-const optionClass = "flex w-full items-center justify-between gap-3 rounded-2xl border border-[var(--customer-border)] bg-white px-4 py-3.5 text-left text-sm font-semibold text-neutral-900 transition hover:border-neutral-900 hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-40";
-
 export default function SurpriseMe({ dishes, categories, canOrder, onClose, onOpenDish, onAddToCart, onViewCart }: SurpriseMeProps) {
   const { t, tn, tc } = useI18n();
-  const [step, setStep] = useState<Step>("mood");
+  const [step, setStep] = useState<Step>("ask");
   const [mood, setMood] = useState<MealMood>("eat");
   const [party, setParty] = useState<PartySize>("two");
   const [vegOnly, setVegOnly] = useState(false);
@@ -121,7 +119,7 @@ export default function SurpriseMe({ dishes, categories, canOrder, onClose, onOp
   };
 
   const startOver = () => {
-    setStep("mood");
+    setStep("ask");
     setMeal([]);
     setLocked(new Set());
     setAdded(null);
@@ -129,7 +127,8 @@ export default function SurpriseMe({ dishes, categories, canOrder, onClose, onOp
 
   const shown = spinning ? preview : meal;
   const total = meal.reduce((sum, dish) => sum + dish.price, 0);
-  const stepIndex = { mood: 0, party: 1, diet: 2, meal: 3 }[step];
+  const chosen = (active: boolean) =>
+    active ? "border-neutral-900 bg-neutral-900 text-white" : "border-[var(--customer-border)] bg-white text-neutral-900";
 
   return (
     <div
@@ -142,62 +141,47 @@ export default function SurpriseMe({ dishes, categories, canOrder, onClose, onOp
       <section className="safe-bottom relative flex max-h-[94dvh] w-full max-w-xl animate-sheet-up flex-col overflow-hidden rounded-t-[2rem] bg-white text-neutral-900 shadow-2xl sm:animate-scale-in sm:rounded-[2rem]">
         <div className="flex justify-center pt-3 sm:hidden"><span className="h-1.5 w-12 rounded-full bg-neutral-200" /></div>
         <header className="flex items-center justify-between gap-3 px-5 pb-2 pt-3 sm:px-7 sm:pt-6">
-          {step !== "mood" && step !== "meal" ? (
-            <button type="button" onClick={() => setStep(step === "diet" ? "party" : "mood")} className="inline-flex h-10 items-center gap-1 rounded-full pr-3 text-sm font-semibold text-neutral-500 hover:text-neutral-900"><ChevronLeft className="h-4 w-4" />{t("back")}</button>
+          {step === "meal" ? (
+            <button type="button" onClick={() => setStep("ask")} className="inline-flex h-10 items-center gap-1 rounded-full pr-3 text-sm font-semibold text-neutral-500 hover:text-neutral-900"><ChevronLeft className="h-4 w-4" />{t("back")}</button>
           ) : <span className="h-10" />}
-          {step !== "meal" ? (
-            <ol className="flex items-center gap-1.5" aria-hidden="true">
-              {[0, 1, 2].map((index) => <li key={index} className={`h-1.5 rounded-full transition-all ${index === stepIndex ? "w-6 bg-neutral-900" : index < stepIndex ? "w-1.5 bg-neutral-900" : "w-1.5 bg-neutral-200"}`} />)}
-            </ol>
-          ) : null}
           <button ref={closeRef} type="button" onClick={onClose} aria-label={t("closeDetails")} className="grid h-10 w-10 place-items-center rounded-full bg-neutral-100 text-neutral-700 transition hover:bg-neutral-200"><X className="h-5 w-5" /></button>
         </header>
 
         <div className="overflow-y-auto overscroll-contain px-5 pb-6 sm:px-7 sm:pb-7">
-          {step === "mood" && (
-            <div className="animate-fade-up">
-              <p className="text-center text-[11px] font-bold uppercase tracking-[0.2em] text-neutral-400">{t("surpriseHint")}</p>
-              <h2 id="surprise-title" className="font-condensed mt-2 text-center text-4xl uppercase">{t("surpriseMood")}</h2>
-              <div className="mt-6 space-y-2.5">
+          {step === "ask" && (
+            <div className="animate-fade-up space-y-5">
+              <h2 id="surprise-title" className="font-condensed text-center text-4xl uppercase">{t("surpriseMood")}</h2>
+              <div className="grid grid-cols-3 gap-2">
                 {moods.map(({ value, label }) => (
-                  <button key={value} type="button" disabled={!moodCount(value)} onClick={() => { setMood(value); setStep("party"); }} className={optionClass}>
-                    <span>{t(label)}</span>
-                    <span className="flex items-center gap-2 text-xs font-medium text-neutral-400">{tn("itemCount", moodCount(value))}<ChevronRight className="h-4 w-4" /></span>
+                  <button key={value} type="button" disabled={!moodCount(value)} onClick={() => setMood(value)} className={`min-h-16 rounded-2xl border px-2 text-sm font-bold ${chosen(mood === value)}`}>
+                    {t(label)}
                   </button>
                 ))}
               </div>
-              <button type="button" onClick={() => { setMood("both"); setParty("two"); setVegOnly(false); setLocked(new Set()); setStep("meal"); spin({ mood: "both", party: "two", vegOnly: false, keep: new Set(), current: [] }); }} className="mx-auto mt-5 block text-sm font-semibold text-neutral-500 underline underline-offset-4 hover:text-neutral-900">{t("surpriseMe")}</button>
-            </div>
-          )}
-
-          {step === "party" && (
-            <div className="animate-fade-up">
-              <h2 id="surprise-title" className="font-condensed mt-2 text-center text-4xl uppercase">{t("surpriseParty")}</h2>
-              <div className="mt-6 space-y-2.5">
-                {parties.map(({ value, label }) => (
-                  <button key={value} type="button" onClick={() => { setParty(value); setStep("diet"); }} className={optionClass}>
-                    <span>{t(label)}</span>
-                    <span className="flex items-center gap-2 text-xs font-medium text-neutral-400">{tn("itemCount", PARTY_DISH_COUNT[value])}<ChevronRight className="h-4 w-4" /></span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {step === "diet" && (
-            <div className="animate-fade-up">
-              <h2 id="surprise-title" className="font-condensed mt-2 text-center text-4xl uppercase">{t("surpriseDiet")}</h2>
-              <div className="mt-6 space-y-2.5">
-                {[{ veg: true, label: "dietVeg" as const }, { veg: false, label: "dietAny" as const }].map(({ veg, label }) => {
-                  const count = moodCount(mood, mealPool(dishes, categories, veg));
-                  return (
-                    <button key={label} type="button" disabled={!count} onClick={() => { setVegOnly(veg); setLocked(new Set()); setStep("meal"); setMeal([]); spin({ vegOnly: veg, keep: new Set(), current: [] }); }} className={optionClass}>
-                      <span className="flex items-center gap-2">{veg ? <span className="grid h-4 w-4 place-items-center rounded-[4px] border-[1.5px] border-emerald-600"><span className="h-2 w-2 rounded-full bg-emerald-600" /></span> : null}{t(label)}</span>
-                      <span className="flex items-center gap-2 text-xs font-medium text-neutral-400">{tn("itemCount", count)}<ChevronRight className="h-4 w-4" /></span>
+              <div>
+                <p className="text-center text-sm font-bold text-neutral-500">{t("surpriseParty")}</p>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  {parties.map(({ value, label }) => (
+                    <button key={value} type="button" onClick={() => setParty(value)} className={`min-h-14 rounded-2xl border px-2 text-sm font-bold ${chosen(party === value)}`}>
+                      {t(label)}
                     </button>
-                  );
-                })}
+                  ))}
+                </div>
               </div>
+              <div className="grid grid-cols-2 gap-2">
+                {[{ veg: true, label: "dietVeg" as const }, { veg: false, label: "dietAny" as const }].map(({ veg, label }) => (
+                  <button key={label} type="button" onClick={() => setVegOnly(veg)} className={`min-h-14 rounded-2xl border px-2 text-sm font-bold ${chosen(vegOnly === veg)}`}>
+                    {t(label)}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => { setLocked(new Set()); setStep("meal"); spin({ mood, party, vegOnly, keep: new Set(), current: [] }); }}
+                className="min-h-16 w-full rounded-2xl bg-neutral-900 text-lg font-black text-white"
+              >
+                {t("surpriseMe")}
+              </button>
             </div>
           )}
 

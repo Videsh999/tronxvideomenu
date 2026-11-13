@@ -50,7 +50,7 @@ export default function CaptainTables({ slug, initialTables, initialOrders, assi
       <label className="relative min-w-48 flex-1 sm:max-w-72"><Search className="absolute left-3 top-3.5 h-4 w-4 text-neutral-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Find table or area" className="min-h-11 w-full rounded-xl border border-neutral-200 bg-white pl-9 pr-3 text-sm" /></label>
     </div>
     <nav aria-label="Areas" className="flex gap-2 overflow-x-auto pb-1">{["ALL", ...areas].map((value) => <button key={value} type="button" onClick={() => setArea(value)} className={`min-h-10 shrink-0 rounded-full px-4 text-sm font-semibold ${area === value ? "bg-neutral-900 text-white" : "border border-neutral-200 bg-white text-neutral-700"}`}>{value === "ALL" ? "All areas" : value}</button>)}</nav>
-    {visibleRows.length ? <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{visibleRows.map(({ table, activeOrder, activeOrders, runningTotal, unsentItems, startedAt }) => {
+    {visibleRows.length ? <div className="grid grid-cols-2 gap-3">{visibleRows.map(({ table, activeOrder, activeOrders, runningTotal, unsentItems, startedAt }) => {
       const timer = elapsed(startedAt, now);
       const itemCount = activeOrders.reduce((sum, order) => sum + order.items.reduce((count, item) => count + item.quantity - (item.cancelledQuantity ?? 0), 0), 0);
       return <Link key={table.id} href={`/captain/${slug}/tables/${encodeURIComponent(table.id)}`} className="group block rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm transition hover:border-neutral-900 hover:shadow-md focus-visible:outline-2 focus-visible:outline-neutral-900">

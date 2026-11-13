@@ -338,12 +338,25 @@ export default function CaptainOrderPad({
         setLastOrderNumber(json.data?.orderNumber ?? null);
         setLastSavedOrder(json.data);
         setPreviousKotLineIds(json.data?.kotLineIds ?? []);
-        setKotSent(false);
         setPayAmount(roundMoney(Math.max(0, (json.data?.total ?? totals.total) - (json.data?.payment?.amountPaid ?? 0))));
         setUpiRequest(null);
         setCartOpen(false);
         patchSession(emptyCartState());
-        setMessage(`Items saved to ${selectedLocationName}. Add anything else, then open the table to send one KOT when the guest is finished ordering.`);
+        if (orderId) {
+          const kotResponse = await fetch(`/api/captain/orders/${encodeURIComponent(orderId)}/send-kot`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+          const kotJson = await kotResponse.json().catch(() => ({}));
+          if (kotResponse.ok && kotJson.success) {
+            setLastSavedOrder(kotJson.data);
+            setKotSent(true);
+            setMessage(`Sent to the kitchen for ${selectedLocationName}.`);
+          } else {
+            setKotSent(false);
+            setMessage(typeof kotJson.error === "string" ? kotJson.error : `Order saved for ${selectedLocationName}. Tap Send KOT if the kitchen did not get it.`);
+          }
+        } else {
+          setKotSent(false);
+          setMessage(`Order saved for ${selectedLocationName}.`);
+        }
       } catch (error) {
         setMessage(error instanceof Error ? error.message : "Unable to place order");
       }
