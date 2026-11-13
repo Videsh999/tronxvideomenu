@@ -2,6 +2,7 @@ import { requireCaptain } from "@/lib/auth-server";
 import { restaurantService } from "@/lib/services/restaurant.service";
 import { tableService } from "@/lib/services/table.service";
 import CaptainOrderPad from "@/components/captain/CaptainOrderPad";
+import RememberCaptainScreen from "@/components/captain/RememberCaptainScreen";
 import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -33,6 +34,8 @@ export default async function CaptainTakeOrderPage({
   const initialTableId = tableValue && tables.some((table) => table.id === tableValue) ? tableValue : null;
 
   return (
+    <>
+    <RememberCaptainScreen path={`/captain/${slug}/take-order`} snap={{ kind: "title", title: "New order", detail: "Add items. They go straight to the kitchen." }} />
     <CaptainOrderPad
       slug={slug}
       currency={menu.restaurant.currency ?? "INR"}
@@ -49,5 +52,6 @@ export default async function CaptainTakeOrderPage({
       initialTableId={initialTableId}
       permissions={captain.permissions}
     />
+    </>
   );
 }

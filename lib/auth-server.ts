@@ -1,12 +1,13 @@
 import "server-only";
 
+import { unstable_cache } from "next/cache";
 import { cache } from "react";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { CAPTAIN_SESSION_COOKIE, RESTAURANT_ADMIN_SESSION_COOKIE, SUPER_ADMIN_SESSION_COOKIE, readAdminSession } from "@/lib/auth-core";
 import { restaurantService } from "@/lib/services/restaurant.service";
 import { captainService } from "@/lib/services/captain.service";
-import { tableService } from "@/lib/services/table.service";
+import { tableRepository } from "@/lib/repositories/table.repository";
 import { requireRestaurantFeature } from "@/lib/feature-access";
 import { restaurantAdminService } from "@/lib/services/restaurant-admin.service";
 import { restaurantAdminRepository } from "@/lib/repositories/restaurant-admin.repository";
@@ -67,16 +68,25 @@ type CaptainSessionOk = {
 };
 
 const captainAuthCache = new Map<string, { at: number; value: CaptainSessionOk }>();
-const locationIdCache = new Map<string, { at: number; ids: string[] }>();
-const AUTH_CACHE_MS = 20_000;
+const AUTH_CACHE_MS = 30_000;
 
-async function activeLocationIds(restaurantId: string) {
-  const hit = locationIdCache.get(restaurantId);
-  if (hit && Date.now() - hit.at < AUTH_CACHE_MS) return hit.ids;
-  const locations = await tableService.list(restaurantId);
-  const ids = locations.filter((location) => location.isActive && location.status !== "CLOSED").map((location) => location.id);
-  locationIdCache.set(restaurantId, { at: Date.now(), ids });
-  return ids;
+function readCaptainBundle(captainId: string, updatedAt: string, restaurantId: string) {
+  return unstable_cache(
+    async () => {
+      const [captain, restaurant, locations] = await Promise.all([
+        captainService.getById(captainId),
+        restaurantService.getById(restaurantId),
+        tableRepository.findByRestaurantId(restaurantId),
+      ]);
+      return {
+        captain,
+        restaurant,
+        accessibleIds: locations.filter((location) => location.isActive && location.status !== "CLOSED").map((location) => location.id),
+      };
+    },
+    ["captain-bundle", captainId, updatedAt, restaurantId],
+    { revalidate: 30 },
+  )();
 }
 
 /** One captain + restaurant lookup per request, shared by layout and page. */
@@ -90,10 +100,9 @@ const loadCaptainSession = cache(async () => {
   const cached = captainAuthCache.get(cacheKey);
   if (cached && Date.now() - cached.at < AUTH_CACHE_MS) return cached.value;
 
-  const [captain, restaurant] = await Promise.all([
-    captainService.getById(session.captainId),
-    restaurantService.getById(session.restaurantId),
-  ]);
+  const bundle = await readCaptainBundle(session.captainId, session.captainUpdatedAt, session.restaurantId);
+  const captain = bundle.captain;
+  const restaurant = bundle.restaurant;
   if (!captain || !captain.isActive || captain.restaurantId !== session.restaurantId || captain.updatedAt !== session.captainUpdatedAt) {
     return { status: "forbidden" as const };
   }
@@ -101,7 +110,7 @@ const loadCaptainSession = cache(async () => {
     return { status: "forbidden" as const };
   }
   // Floor staff serve any active location in their outlet; stale manual assignments must not hide tables.
-  const accessibleIds = await activeLocationIds(captain.restaurantId);
+  const accessibleIds = bundle.accessibleIds;
   const value: CaptainSessionOk = { status: "ok", captain: { ...captain, assignedTableIds: accessibleIds }, restaurant };
   captainAuthCache.set(cacheKey, { at: Date.now(), value });
   return value;

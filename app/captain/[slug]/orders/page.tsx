@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { requireCaptain } from "@/lib/auth-server";
 import { orderService } from "@/lib/services/order.service";
 import CaptainOrders from "@/components/captain/CaptainOrders";
+import RememberCaptainScreen from "@/components/captain/RememberCaptainScreen";
 import { resolveStaticMerchantQrUrl } from "@/lib/upi-payment";
 
 export const dynamic = "force-dynamic";
@@ -31,6 +32,7 @@ export default async function CaptainOrdersPage({ params }: { params: Promise<{ 
           Full table order history, items, status and visit duration.
         </p>
       </header>
+      <RememberCaptainScreen path={`/captain/${slug}/orders`} snap={{ kind: "list", title: "Orders", rows: scoped.slice(0, 20).map((order) => ({ title: `Order #${order.orderNumber}`, detail: `${order.status} · ₹${order.total}` })) }} />
       <CaptainOrders
         restaurantName={restaurant.name}
         initialOrders={scoped}

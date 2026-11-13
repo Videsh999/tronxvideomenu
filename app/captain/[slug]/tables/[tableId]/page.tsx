@@ -4,6 +4,8 @@ import { resolveStaticMerchantQrUrl } from "@/lib/upi-payment";
 import { tableRepository } from "@/lib/repositories/table.repository";
 import { orderService } from "@/lib/services/order.service";
 import CaptainTableService from "@/components/captain/CaptainTableService";
+import RememberCaptainScreen from "@/components/captain/RememberCaptainScreen";
+import { locationName } from "@/lib/service-location";
 import { tableSessionService } from "@/lib/services/table-session.service";
 
 export const dynamic = "force-dynamic";
@@ -33,7 +35,10 @@ export default async function CaptainTableWorkspacePage({
   const ordersById = new Map([...overview.orders, ...tableOrders].map((order) => [order.id, order]));
   const orders = [...ordersById.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   const isTriparna = restaurant.name.toLowerCase().includes("triparna");
+  const running = orders.reduce((sum, order) => sum + order.total, 0);
   return (
+    <>
+    <RememberCaptainScreen path={`/captain/${slug}/tables/${table.id}`} snap={{ kind: "title", title: locationName(table), detail: orders.length ? `₹${running.toFixed(2)} on the table` : "Ready for an order" }} />
     <CaptainTableService
       slug={slug}
       restaurantName={restaurant.name}
@@ -49,5 +54,6 @@ export default async function CaptainTableWorkspacePage({
       initialSession={overview.session}
       initialBill={overview.bill}
     />
+    </>
   );
 }

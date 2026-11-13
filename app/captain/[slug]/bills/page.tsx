@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { requireCaptain } from "@/lib/auth-server";
 import { orderService } from "@/lib/services/order.service";
 import { resolveCaptainPermissions } from "@/lib/captain-permissions";
+import RememberCaptainScreen from "@/components/captain/RememberCaptainScreen";
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +43,7 @@ export default async function CaptainBillsPage({ params }: { params: Promise<{ s
 
   return (
     <div className="space-y-5 pb-24 lg:pb-6">
+      <RememberCaptainScreen path={`/captain/${slug}/bills`} snap={{ kind: "list", title: "Bills", rows: orders.slice(0, 20).map((order) => ({ title: `Table ${order.tableNumber} · #${order.orderNumber}`, detail: `${order.payment?.status ?? order.status} · ₹${order.total}` })) }} />
       <header>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Bills & payments</h1>
         <p className="mt-1 text-sm text-neutral-500">

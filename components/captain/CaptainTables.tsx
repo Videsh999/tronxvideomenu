@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Clock3, Search, UtensilsCrossed } from "lucide-react";
 import type { OrderSummary, RestaurantTable } from "@/types";
 import { enrichCaptainTables } from "@/lib/captain-floor";
+import RememberCaptainScreen from "@/components/captain/RememberCaptainScreen";
 import { locationName, locationType } from "@/lib/service-location";
 
 function money(value: number, currency: string) {
@@ -44,6 +45,7 @@ export default function CaptainTables({ slug, initialTables, initialOrders, assi
   });
 
   return <div className="space-y-5">
+    <RememberCaptainScreen path={`/captain/${slug}/tables`} snap={{ kind: "tables", cards: visibleRows.slice(0, 24).map(({ table, activeOrder, runningTotal }) => ({ name: locationName(table), detail: activeOrder ? money(runningTotal, currency) : "Free" })) }} />
     <header><h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Tables</h1><p className="mt-1 text-sm text-neutral-500">Choose the guest’s table. Every item, KOT and bill stays with that table until you finish it.</p></header>
     <div className="flex flex-wrap items-center gap-2">
       {(["TABLE", "ROOM"] as const).map((value) => <button key={value} type="button" onClick={() => { setKind(value); setArea("ALL"); }} className={`min-h-11 rounded-xl px-4 text-sm font-bold ${kind === value ? "bg-neutral-900 text-white" : "border border-neutral-200 bg-white text-neutral-700"}`}>{value === "TABLE" ? "Tables" : "Rooms"} ({rows.filter(({ table }) => locationType(table) === value).length})</button>)}
@@ -53,7 +55,7 @@ export default function CaptainTables({ slug, initialTables, initialOrders, assi
     {visibleRows.length ? <div className="grid grid-cols-2 gap-3">{visibleRows.map(({ table, activeOrder, activeOrders, runningTotal, unsentItems, startedAt }) => {
       const timer = elapsed(startedAt, now);
       const itemCount = activeOrders.reduce((sum, order) => sum + order.items.reduce((count, item) => count + item.quantity - (item.cancelledQuantity ?? 0), 0), 0);
-      return <Link prefetch={false} key={table.id} href={`/captain/${slug}/tables/${encodeURIComponent(table.id)}`} className="group block rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm transition hover:border-neutral-900 hover:shadow-md focus-visible:outline-2 focus-visible:outline-neutral-900">
+      return <Link prefetch key={table.id} href={`/captain/${slug}/tables/${encodeURIComponent(table.id)}`} className="group block rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm transition hover:border-neutral-900 hover:shadow-md focus-visible:outline-2 focus-visible:outline-neutral-900">
         <p className="text-xs font-semibold uppercase tracking-wide text-neutral-400">{areaFor(table)}</p>
         <div className="mt-1 flex items-start justify-between gap-3"><h2 className="text-2xl font-black">{locationName(table)}</h2><span className="text-sm font-bold text-neutral-700">{activeOrder ? money(runningTotal, currency) : "Start order"}</span></div>
         {activeOrder ? <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-neutral-600"><span>{itemCount} item{itemCount === 1 ? "" : "s"}</span>{timer ? <span className="inline-flex items-center gap-1"><Clock3 className="h-4 w-4" />{timer}</span> : null}</div> : <p className="mt-3 text-sm text-neutral-500">Tap to take an order</p>}
