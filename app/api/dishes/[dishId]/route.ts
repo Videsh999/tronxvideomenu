@@ -93,7 +93,10 @@ export async function PATCH(
         );
       }
     }
-    const updated = await dishService.update(dishId, validated);
+    const patch = Object.fromEntries(
+      Object.entries(validated).filter(([key]) => Object.prototype.hasOwnProperty.call(body, key)),
+    );
+    const updated = await dishService.update(dishId, patch);
 
     if (!updated) {
       return NextResponse.json(

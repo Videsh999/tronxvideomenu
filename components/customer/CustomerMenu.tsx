@@ -175,12 +175,12 @@ export default function CustomerMenu({
         .filter((value): value is string => Boolean(value))
         .some((value) => value.toLocaleLowerCase().includes(query));
       return matchesQuery
+        && dish.isAvailable !== false
         && (!vegetarianOnly || dish.isVeg)
         && (!videoOnly || !videoMenuEnabled || Boolean(dish.videoUrl))
-        && (!availableOnly || dish.isAvailable)
         && (maxPrice === null || dish.price <= maxPrice);
     });
-  }, [availableOnly, maxPrice, menu.dishes, searchQuery, tc, vegetarianOnly, videoMenuEnabled, videoOnly]);
+  }, [maxPrice, menu.dishes, searchQuery, tc, vegetarianOnly, videoMenuEnabled, videoOnly]);
   const [selectedDishId, setSelectedDishId] = useState<string | null>(null);
   const selectedDish =
     menu.dishes.find((dish) => dish.id === selectedDishId) ?? null;

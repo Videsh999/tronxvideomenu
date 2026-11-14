@@ -60,7 +60,9 @@ async function loadFullMenu(idOrSlug: string): Promise<RestaurantMenu | null> {
     addonRepository.findGroupsByRestaurantId(restaurant.id),
   ]);
 
-  const dishes = rawDishes.map((dish) => toCustomerDish(dish, addonGroups));
+  const dishes = rawDishes
+    .map((dish) => toCustomerDish(dish, addonGroups))
+    .filter((dish) => dish.isAvailable !== false);
   const normalized = normalizeRestaurant(restaurant);
   normalized.hasGuestWifi = Boolean(restaurant.wifi?.ssid?.trim());
 

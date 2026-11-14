@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -64,6 +64,9 @@ export default function DishesManager({
   const [dishes, setDishes] = useState(initialDishes);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Dish | null>(null);
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const photoDishRef = useRef<Dish | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{
     type: "success" | "error";
@@ -240,22 +243,56 @@ export default function DishesManager({
     }
   };
 
-  const toggleAvailability = async (dish: Dish) => {
+  const saveQuick = async (dish: Dish, patch: Partial<Dish>, success: string) => {
+    setSavingId(dish.id);
+    setDishes((prev) => prev.map((item) => (item.id === dish.id ? { ...item, ...patch } : item)));
     try {
-      const updated = await api.updateDish(dish.id, {
-        isAvailable: !dish.isAvailable,
-      });
-      setDishes((prev) => prev.map((d) => (d.id === updated.id ? updated : d)));
-      setFeedback({
-        type: "success",
-        message: `Dish ${updated.isAvailable ? "marked available" : "marked unavailable"}.`,
-      });
-      router.refresh();
+      const updated = await api.updateDish(dish.id, patch);
+      setDishes((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+      setFeedback({ type: "success", message: success });
     } catch (err) {
+      setDishes((prev) => prev.map((item) => (item.id === dish.id ? dish : item)));
       setFeedback({
         type: "error",
         message: err instanceof Error ? err.message : "Update failed",
       });
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const toggleAvailability = (dish: Dish) => {
+    const next = !dish.isAvailable;
+    void saveQuick(
+      dish,
+      { isAvailable: next },
+      next ? `${dish.name} is back on the guest menu.` : `${dish.name} is sold out and hidden from the guest menu.`,
+    );
+  };
+
+  const savePrice = (dish: Dish, raw: string) => {
+    const price = Number(raw);
+    if (!Number.isFinite(price) || price < 0) return;
+    if (price === dish.price) return;
+    void saveQuick(dish, { price }, `${dish.name} is now ₹${price} on the guest menu.`);
+  };
+
+  const savePhoto = async (file: File) => {
+    const dish = photoDishRef.current;
+    if (!dish) return;
+    setSavingId(dish.id);
+    try {
+      const media = await api.uploadMedia(file, restaurantId);
+      const updated = await api.updateDish(dish.id, { imageUrl: media.url, image: media.url });
+      setDishes((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+      setFeedback({ type: "success", message: `Photo added to ${dish.name}. Guests can see it now.` });
+    } catch (err) {
+      setFeedback({
+        type: "error",
+        message: err instanceof Error ? err.message : "Photo upload failed",
+      });
+    } finally {
+      setSavingId(null);
     }
   };
 
@@ -274,7 +311,7 @@ export default function DishesManager({
             Dishes
           </h1>
           <p className="mt-1 text-sm text-neutral-500">
-            Catalogue your food and drink offerings, prices, and video previews.
+            Change a price or photo right on this list. Sold out dishes are hidden from guests.
           </p>
         </div>
 
@@ -308,6 +345,18 @@ export default function DishesManager({
         </div>
       ) : null}
 
+      <input
+        ref={photoInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (file) void savePhoto(file);
+        }}
+      />
+
       {feedback ? (
         <p
           role="status"
@@ -340,10 +389,15 @@ export default function DishesManager({
                 const imageSrc = dish.imageUrl || dish.image;
 
                 return (
-                  <tr key={dish.id} className="hover:bg-white transition">
+                  <tr key={dish.id} className={`hover:bg-white transition ${savingId === dish.id ? "opacity-60" : ""}`}>
                     <td className="py-4 pl-4 pr-3">
                       <div className="flex items-center gap-3">
-                        <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-neutral-200 bg-neutral-100">
+                        <button
+                          type="button"
+                          onClick={() => { photoDishRef.current = dish; photoInputRef.current?.click(); }}
+                          className="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-neutral-200 bg-neutral-100"
+                          aria-label={`Add a photo for ${dish.name}`}
+                        >
                           {imageSrc ? (
                             canUseNextImage(imageSrc) ? (
                               <Image
@@ -370,7 +424,8 @@ export default function DishesManager({
                               ▶
                             </span>
                           ) : null}
-                        </div>
+                          <span className="absolute inset-0 grid place-items-center bg-black/45 text-[9px] font-bold uppercase text-white opacity-0 transition hover:opacity-100">Photo</span>
+                        </button>
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="font-semibold text-neutral-900">
@@ -395,7 +450,22 @@ export default function DishesManager({
                       {categoryName}
                     </td>
                     <td className="py-4 px-4 font-bold text-neutral-900">
-                      ₹{dish.price}
+                      <label className="flex items-center gap-1">
+                        <span className="text-neutral-400">₹</span>
+                        <input
+                          key={`${dish.id}-${dish.price}`}
+                          type="number"
+                          inputMode="decimal"
+                          min="0"
+                          step="0.01"
+                          defaultValue={dish.price}
+                          aria-label={`Price for ${dish.name}`}
+                          disabled={savingId === dish.id}
+                          onBlur={(event) => savePrice(dish, event.target.value)}
+                          onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
+                          className="h-10 w-24 rounded-lg border border-neutral-200 px-2 text-sm font-bold text-neutral-900"
+                        />
+                      </label>
                     </td>
                     <td className="py-4 px-4 text-center">
                       <span
@@ -683,7 +753,7 @@ export default function DishesManager({
             <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-neutral-200 px-4 py-3">
               <span>
                 <span className="block text-sm font-semibold text-neutral-900">Available to order</span>
-                <span className="block text-xs text-neutral-500">Turn off when it&apos;s sold out. It stays on the menu, marked unavailable.</span>
+                <span className="block text-xs text-neutral-500">Turn off when it is sold out. Guests will not see it until you turn it back on.</span>
               </span>
               <input type="checkbox" {...register("isAvailable")} className="h-5 w-5 shrink-0 accent-neutral-900" />
             </label>
