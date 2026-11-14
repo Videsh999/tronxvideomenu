@@ -32,6 +32,7 @@ export default function CategoriesManager({
   restaurantId,
 }: CategoriesManagerProps) {
   const router = useRouter();
+  const [query, setQuery] = useState("");
   const [categories, setCategories] = useState(initialCategories);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Category | null>(null);
@@ -168,8 +169,7 @@ export default function CategoriesManager({
             Categories
           </h1>
           <p className="mt-1 text-sm text-neutral-500">
-            Define menu sections and control their customer-facing presentation
-            order.
+            Search a section, or open it to edit only those dishes.
           </p>
         </div>
 
@@ -194,6 +194,14 @@ export default function CategoriesManager({
         </p>
       ) : null}
 
+      <input
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+        placeholder="Search a category, for example Hot Coffee"
+        aria-label="Search categories"
+        className="h-12 w-full rounded-xl border border-neutral-200 bg-white px-4 text-base text-neutral-900"
+      />
+
       <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
@@ -207,7 +215,10 @@ export default function CategoriesManager({
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100">
-              {categories.map((category) => (
+              {categories.filter((category) => {
+                const text = query.trim().toLowerCase();
+                return !text || category.name.toLowerCase().includes(text);
+              }).map((category) => (
                 <tr key={category.id} className="hover:bg-white transition">
                   <td className="py-4 pl-4 pr-2 text-center">
                     <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-neutral-50 text-xs font-bold text-neutral-700">
@@ -217,7 +228,9 @@ export default function CategoriesManager({
                   <td className="py-4 px-4 font-semibold text-neutral-900">
                     <div className="flex items-center gap-2.5">
                       <FolderTree className="h-4 w-4 text-neutral-400 shrink-0" />
-                      <span>{category.name}</span>
+                      <Link href={`/admin/${encodeURIComponent(restaurantId)}/menu/dishes?category=${encodeURIComponent(category.id)}`} className="hover:underline">
+                        {category.name}
+                      </Link>
                     </div>
                   </td>
                   <td className="py-4 px-4 text-xs font-mono text-neutral-500 hidden sm:table-cell">

@@ -50,6 +50,7 @@ type DishesManagerProps = {
   restaurantId: string;
   videoMenuEnabled?: boolean;
   mediaLibraryEnabled?: boolean;
+  initialCategoryId?: string;
 };
 
 export default function DishesManager({
@@ -59,9 +60,14 @@ export default function DishesManager({
   restaurantId,
   videoMenuEnabled = true,
   mediaLibraryEnabled = true,
+  initialCategoryId,
 }: DishesManagerProps) {
   const router = useRouter();
   const [dishes, setDishes] = useState(initialDishes);
+  const [categoryId, setCategoryId] = useState(
+    initialCategoryId && categories.some((category) => category.id === initialCategoryId) ? initialCategoryId : "all",
+  );
+  const [query, setQuery] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Dish | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -80,6 +86,12 @@ export default function DishesManager({
   const [galleryUrlType, setGalleryUrlType] = useState<DishMediaItem["type"]>("IMAGE");
 
   const categoryMap = new Map(categories.map((c) => [c.id, c.name]));
+  const searchText = query.trim().toLowerCase();
+  const visibleDishes = dishes.filter((dish) => {
+    const matchesQuery = !searchText || dish.name.toLowerCase().includes(searchText) || (dish.description ?? "").toLowerCase().includes(searchText);
+    if (searchText) return matchesQuery;
+    return categoryId === "all" || dish.categoryId === categoryId;
+  });
 
   const {
     register,
@@ -311,7 +323,7 @@ export default function DishesManager({
             Dishes
           </h1>
           <p className="mt-1 text-sm text-neutral-500">
-            Change a price or photo right on this list. Sold out dishes are hidden from guests.
+            Pick a category, like the guest menu, or search a dish. Change the price, photo, or stock right there.
           </p>
         </div>
 
@@ -368,6 +380,42 @@ export default function DishesManager({
         </p>
       ) : null}
 
+      <div className="sticky top-16 z-20 space-y-3 rounded-2xl border border-neutral-200 bg-white/95 p-3 shadow-sm backdrop-blur">
+        <input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search a dish, for example Food Ball"
+          aria-label="Search dishes"
+          className="h-12 w-full rounded-xl border border-neutral-200 px-4 text-base text-neutral-900"
+        />
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          <button
+            type="button"
+            onClick={() => setCategoryId("all")}
+            className={`min-h-11 shrink-0 rounded-full px-4 text-sm font-bold ${categoryId === "all" && !query.trim() ? "bg-neutral-900 text-white" : "border border-neutral-200 bg-white text-neutral-800"}`}
+          >
+            All ({dishes.length})
+          </button>
+          {[...categories]
+            .filter((category) => category.isActive !== false)
+            .sort((left, right) => left.sortOrder - right.sortOrder)
+            .map((category) => {
+              const count = dishes.filter((dish) => dish.categoryId === category.id).length;
+              const selected = categoryId === category.id && !query.trim();
+              return (
+                <button
+                  key={category.id}
+                  type="button"
+                  onClick={() => { setCategoryId(category.id); setQuery(""); }}
+                  className={`min-h-11 shrink-0 rounded-full px-4 text-sm font-bold ${selected ? "bg-neutral-900 text-white" : "border border-neutral-200 bg-white text-neutral-800"}`}
+                >
+                  {category.name} ({count})
+                </button>
+              );
+            })}
+        </div>
+      </div>
+
       <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
@@ -382,7 +430,14 @@ export default function DishesManager({
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100">
-              {dishes.map((dish) => {
+              {visibleDishes.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-10 text-center text-sm text-neutral-500">
+                    {searchText ? `No dish matches “${query.trim()}”.` : "No dishes in this category yet."}
+                  </td>
+                </tr>
+              ) : null}
+              {visibleDishes.map((dish) => {
                 const categoryName =
                   categoryMap.get(dish.categoryId) || "Uncategorized";
                 const hasVideo = videoMenuEnabled && Boolean(dish.videoUrl || dish.video);
@@ -438,6 +493,7 @@ export default function DishesManager({
                               </span>
                             ) : null}
                           </div>
+                          <p className="text-xs font-medium text-neutral-400 md:hidden">{categoryName}</p>
                           {dish.description ? (
                             <p className="line-clamp-1 text-xs text-neutral-500 max-w-sm">
                               {dish.description}

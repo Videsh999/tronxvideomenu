@@ -9,10 +9,14 @@ export const dynamic = "force-dynamic";
 
 export default async function RestaurantDishesSlugPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ category?: string | string[] }>;
 }) {
   const { slug } = await params;
+  const { category } = await searchParams;
+  const initialCategoryId = Array.isArray(category) ? category[0] : category;
   const [restaurant, dishes, categories, addonGroups] = await Promise.all([
     restaurantService.getBySlug(slug),
     dishService.getByRestaurantId(slug),
@@ -26,6 +30,7 @@ export default async function RestaurantDishesSlugPage({
       categories={categories}
       addonGroups={addonGroups}
       restaurantId={slug}
+      initialCategoryId={initialCategoryId}
       videoMenuEnabled={restaurant ? hasRestaurantFeature(restaurant, "VIDEO_MENU") : false}
       mediaLibraryEnabled={restaurant ? hasRestaurantFeature(restaurant, "MEDIA_LIBRARY") : false}
     />
