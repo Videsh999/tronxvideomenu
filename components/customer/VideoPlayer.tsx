@@ -4,28 +4,70 @@ import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type HlsType from "hls.js";
 
 /**
- * Only one video downloads at a time. The open dish detail wins. Otherwise the
- * card that fills the most of the screen plays, and the rest stay on their photo.
+ * Platepost-style grid: every dish you can see plays at once. The menu paints
+ * first, then visible loops start a few at a time. Off-screen videos stay on
+ * their photo so opening the menu does not freeze.
  */
+const VISIBLE_PLAYER_CAP = 8;
+
 type Candidate = {
   visible: boolean;
   ratio: number;
   priority: boolean;
+  playing: boolean;
   setActive: (active: boolean) => void;
 };
 
 const candidates = new Map<symbol, Candidate>();
+let staggerTimers: number[] = [];
+let playbackArmed = false;
+const armWaiters = new Set<() => void>();
+
+function armPlayback() {
+  if (playbackArmed || typeof window === "undefined") return;
+  const start = () => {
+    playbackArmed = true;
+    armWaiters.forEach((wake) => wake());
+    armWaiters.clear();
+    syncPlayers();
+  };
+  if (typeof window.requestIdleCallback === "function") window.requestIdleCallback(start, { timeout: 600 });
+  else window.setTimeout(start, 280);
+}
+
+function whenArmed(wake: () => void) {
+  if (playbackArmed) wake();
+  else armWaiters.add(wake);
+}
 
 function syncPlayers() {
-  const detail = [...candidates.values()].find((candidate) => candidate.priority && candidate.visible);
-  let chosen = detail ?? null;
-  if (!chosen) {
-    for (const candidate of candidates.values()) {
-      if (!candidate.visible) continue;
-      if (!chosen || candidate.ratio > chosen.ratio) chosen = candidate;
+  staggerTimers.forEach((timer) => window.clearTimeout(timer));
+  staggerTimers = [];
+  if (!playbackArmed) return;
+
+  const detailOpen = [...candidates.values()].some((candidate) => candidate.priority && candidate.visible);
+  const onScreen = [...candidates.values()]
+    .filter((candidate) => !candidate.priority && candidate.visible)
+    .sort((left, right) => right.ratio - left.ratio);
+  const playing = new Set(onScreen.slice(0, VISIBLE_PLAYER_CAP));
+  let delay = 0;
+
+  candidates.forEach((candidate) => {
+    const shouldPlay = candidate.priority
+      ? detailOpen && candidate.visible
+      : !detailOpen && playing.has(candidate);
+    if (!shouldPlay) {
+      candidate.setActive(false);
+      return;
     }
-  }
-  candidates.forEach((candidate) => candidate.setActive(candidate === chosen));
+    if (candidate.playing) {
+      candidate.setActive(true);
+      return;
+    }
+    const wait = delay;
+    delay += 90;
+    staggerTimers.push(window.setTimeout(() => candidate.setActive(true), wait));
+  });
 }
 
 function isHlsSource(url: string) {
@@ -77,12 +119,9 @@ function VideoPlayer({
   }, []);
 
   const setPlayerActive = useCallback((active: boolean) => {
-    const wasActive = activeRef.current;
     activeRef.current = active;
     const video = videoRef.current;
     if (!active) video?.pause();
-    // Each time a video comes back into play it starts again from the beginning.
-    else if (!wasActive && video && video.currentTime > 0) video.currentTime = 0;
     setIsActive((current) => (current === active ? current : active));
   }, []);
 
@@ -102,7 +141,8 @@ function VideoPlayer({
   // playing videos are not interrupted while the page scrolls.
   useEffect(() => {
     const playerId = idRef.current;
-    candidates.set(playerId, { visible: false, ratio: 0, priority: false, setActive: setPlayerActive });
+    candidates.set(playerId, { visible: false, ratio: 0, priority: false, playing: false, setActive: setPlayerActive });
+    armPlayback();
     return () => {
       candidates.delete(playerId);
       syncPlayers();
@@ -115,19 +155,24 @@ function VideoPlayer({
     const observer = new IntersectionObserver(
       ([entry]) =>
         setViewportRatio(entry.isIntersecting ? entry.intersectionRatio : 0),
-      { threshold: [0, 0.3, 0.6, 0.9, 1] },
+      { rootMargin: "35% 0px", threshold: [0, 0.15, 0.4, 0.75, 1] },
     );
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
-    const candidate = candidates.get(idRef.current);
-    if (!candidate) return;
-    candidate.priority = playbackPriority;
-    candidate.ratio = viewportRatio;
-    candidate.visible = !hasError && (playbackPriority || viewportRatio >= 0.6);
-    syncPlayers();
+    const apply = () => {
+      const candidate = candidates.get(idRef.current);
+      if (!candidate) return;
+      candidate.priority = playbackPriority;
+      candidate.ratio = viewportRatio;
+      candidate.playing = activeRef.current;
+      candidate.visible = !hasError && (playbackPriority || viewportRatio >= 0.12);
+      syncPlayers();
+    };
+    whenArmed(apply);
+    return () => armWaiters.delete(apply);
   }, [hasError, playbackPriority, viewportRatio]);
 
   const loadVideo = useCallback(async () => {
@@ -223,7 +268,7 @@ function VideoPlayer({
     >
       <video
         ref={videoRef}
-        poster={isActive ? posterUrl : undefined}
+        poster={posterUrl}
         autoPlay={autoPlay && isActive}
         muted={muted}
         loop={loop}
