@@ -99,9 +99,8 @@ export default function RestaurantPortalLogin({
     >
       <form onSubmit={submit} className="space-y-5">
         <AuthError message={error} />
-        <p className="rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 text-xs text-neutral-500">
-          Signing in to <span className="font-semibold text-neutral-900">{restaurantName}</span>
-          <span className="mt-0.5 block font-mono text-neutral-600">/menu/{slug}</span>
+        <p className="rounded-2xl bg-neutral-50 px-4 py-3 text-base font-semibold text-neutral-900">
+          {restaurantName}
         </p>
         <AuthField label="Email">
           <input
@@ -118,16 +117,12 @@ export default function RestaurantPortalLogin({
           <PasswordInput value={password} onChange={setPassword} />
         </AuthField>
         <AuthSubmit busy={busy} label="Sign in" busyLabel="Signing in…" />
-        <p className="text-center text-xs text-neutral-400">
+        <p className="text-center text-sm text-neutral-500">
           {isAdmin ? "Floor staff?" : "Restaurant owner?"}{" "}
-          <Link href={otherHref} className="font-semibold text-neutral-600 underline-offset-4 hover:text-neutral-900 hover:underline">
-            {otherLabel}
-          </Link>
+          <Link href={otherHref} className="font-bold text-neutral-900">{otherLabel}</Link>
         </p>
-        <p className="text-center text-xs text-neutral-400">
-          <Link href={menuHref} className="font-semibold text-neutral-600 underline-offset-4 hover:text-neutral-900 hover:underline">
-            Back to guest menu
-          </Link>
+        <p className="text-center text-sm">
+          <Link href={menuHref} className="font-bold text-neutral-900">Back to guest menu</Link>
         </p>
       </form>
     </AuthLayout>

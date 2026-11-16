@@ -15,7 +15,7 @@ type AuthLayoutProps = {
 
 export default function AuthLayout({ eyebrow, title, description, highlights, children }: AuthLayoutProps) {
   return (
-    <main className="relative grid min-h-screen bg-background text-neutral-900 lg:grid-cols-[1.05fr_1fr]">
+    <main className="grid min-h-dvh bg-neutral-50 text-neutral-900 lg:grid-cols-[1.05fr_1fr] lg:bg-background">
       <aside className="relative hidden overflow-hidden border-r border-neutral-200 lg:flex lg:flex-col lg:justify-between lg:p-12">
         <div className="pointer-events-none absolute inset-0 bg-grid" />
         <Link href="/" className="relative w-fit"><BrandMark subtitle="Digital video menus" /></Link>
@@ -36,20 +36,18 @@ export default function AuthLayout({ eyebrow, title, description, highlights, ch
         <p className="relative text-xs text-neutral-400">© {new Date().getFullYear()} TRONX</p>
       </aside>
 
-      <section className="relative flex flex-col px-5 py-6 sm:px-10">
-        <div className="relative flex items-center justify-between">
-          <Link href="/" className="lg:hidden"><BrandMark /></Link>
-          <Link href="/" className="ml-auto inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-medium text-neutral-500 transition hover:bg-neutral-50 hover:text-neutral-900">
-            <ArrowLeft className="h-3.5 w-3.5" /> Back to home
+      <section className="flex flex-col px-5 pb-10 pt-6 sm:px-10 lg:justify-center">
+        <div className="mx-auto flex w-full max-w-md items-center justify-between">
+          <Link href="/" aria-label="TRONX home"><BrandMark /></Link>
+          <Link href="/" className="inline-flex items-center gap-1.5 text-sm font-semibold text-neutral-500">
+            <ArrowLeft className="h-4 w-4" /> Home
           </Link>
         </div>
-        <div className="relative flex flex-1 items-center justify-center py-10">
-          <div className="w-full max-w-sm animate-fade-up">
-            <p className="text-xs font-bold uppercase tracking-[0.24em] text-neutral-400">{eyebrow}</p>
-            <h1 className="mt-3 text-3xl font-bold tracking-tight">{title}</h1>
-            <p className="mt-2 text-sm text-neutral-500">{description}</p>
-            <div className="mt-8">{children}</div>
-          </div>
+        <div className="mx-auto mt-8 w-full max-w-md">
+          <p className="text-sm font-semibold text-neutral-500">{eyebrow}</p>
+          <h1 className="mt-1 text-3xl font-black leading-tight">{title}</h1>
+          <p className="mt-2 text-base text-neutral-600">{description}</p>
+          <div className="mt-6 rounded-3xl border border-neutral-200 bg-white p-5 shadow-sm">{children}</div>
         </div>
       </section>
     </main>
@@ -57,7 +55,7 @@ export default function AuthLayout({ eyebrow, title, description, highlights, ch
 }
 
 export const authInputClass =
-  "mt-2 h-12 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 text-sm text-neutral-900 outline-none transition placeholder:text-neutral-400 focus:border-neutral-400 focus:bg-neutral-100 focus:ring-4 focus:ring-neutral-900/10";
+  "mt-2 h-14 w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-4 text-base text-neutral-900 outline-none transition placeholder:text-neutral-400 focus:border-neutral-900 focus:bg-white";
 
 export function AuthField({ label, children }: { label: string; children: ReactNode }) {
   return <label className="block text-sm font-medium text-neutral-700">{label}{children}</label>;
@@ -78,7 +76,7 @@ type PasswordInputProps = {
 };
 
 const authPasswordInputClass =
-  "h-12 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 pr-12 text-sm text-neutral-900 outline-none transition placeholder:text-neutral-400 focus:border-neutral-400 focus:bg-neutral-100 focus:ring-4 focus:ring-neutral-900/10";
+  "h-14 w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-4 pr-12 text-base text-neutral-900 outline-none transition placeholder:text-neutral-400 focus:border-neutral-900 focus:bg-white";
 
 export function PasswordInput({
   value,
@@ -137,7 +135,7 @@ export function AuthSubmit({ busy, label, busyLabel }: { busy: boolean; label: s
     <button
       type="submit"
       disabled={busy}
-      className="bg-brand-gradient inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl text-sm font-bold text-white shadow-[0_12px_32px_-12px_rgb(0_0_0/0.22)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+      className="inline-flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-neutral-900 text-base font-bold text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-60"
     >
       {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
       {busy ? busyLabel : label}

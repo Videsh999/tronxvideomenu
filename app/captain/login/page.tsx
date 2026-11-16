@@ -37,10 +37,8 @@ function CaptainLoginForm() {
       <AuthField label="Email"><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" placeholder="captain@restaurant.com" required className={authInputClass} /></AuthField>
       <AuthField label="Password"><PasswordInput value={password} onChange={setPassword} /></AuthField>
       <AuthSubmit busy={busy} label="Sign in" busyLabel="Signing in…" />
-      <p className="text-center text-xs text-neutral-400">
-        Prefer your restaurant link? Use <span className="font-mono text-neutral-600">/menu/your-restaurant/captain</span>
-        {" · "}
-        Restaurant owner? <Link href="/admin/login" className="font-semibold text-neutral-600 underline-offset-4 hover:text-neutral-900 hover:underline">Admin sign in</Link>
+      <p className="text-center text-sm text-neutral-500">
+        Restaurant owner? <Link href="/admin/login" className="font-bold text-neutral-900">Admin sign in</Link>
       </p>
     </form>
   </AuthLayout>;

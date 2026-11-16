@@ -92,10 +92,8 @@ function AdminLoginForm() {
           <PasswordInput value={password} onChange={setPassword} />
         </AuthField>
         <AuthSubmit busy={isSubmitting} label="Sign in" busyLabel="Signing in…" />
-        <p className="text-center text-xs text-neutral-400">
-          Prefer your restaurant link? Use <span className="font-mono text-neutral-600">/menu/your-restaurant/admin</span>
-          {" · "}
-          Floor staff? <Link href="/captain/login" className="font-semibold text-neutral-600 underline-offset-4 hover:text-neutral-900 hover:underline">Captain sign in</Link>
+        <p className="text-center text-sm text-neutral-500">
+          Floor staff? <Link href="/captain/login" className="font-bold text-neutral-900">Captain sign in</Link>
         </p>
       </form>
     </AuthLayout>

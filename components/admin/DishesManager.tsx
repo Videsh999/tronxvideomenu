@@ -416,7 +416,67 @@ export default function DishesManager({
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white">
+      <div className="grid grid-cols-2 gap-3 md:hidden">
+        {visibleDishes.length === 0 ? (
+          <p className="col-span-2 rounded-2xl border border-dashed border-neutral-300 bg-white px-4 py-10 text-center text-sm text-neutral-500">
+            {searchText ? `No dish matches “${query.trim()}”.` : "No dishes in this category yet."}
+          </p>
+        ) : null}
+        {visibleDishes.map((dish) => {
+          const imageSrc = dish.imageUrl || dish.image;
+          return (
+            <article key={dish.id} className={`rounded-2xl border border-neutral-200 bg-white p-2 ${savingId === dish.id ? "opacity-60" : ""}`}>
+              <button
+                type="button"
+                onClick={() => { photoDishRef.current = dish; photoInputRef.current?.click(); }}
+                className="relative block aspect-square w-full overflow-hidden rounded-xl bg-neutral-100"
+                aria-label={`Photo for ${dish.name}`}
+              >
+                {imageSrc ? (
+                  canUseNextImage(imageSrc) ? (
+                    <Image src={imageSrc} alt="" fill sizes="50vw" className="object-cover" />
+                  ) : (
+                    <img src={imageSrc} alt="" className="h-full w-full object-cover" />
+                  )
+                ) : (
+                  <span className="grid h-full w-full place-items-center text-neutral-300"><Utensils className="h-8 w-8" /></span>
+                )}
+              </button>
+              <h2 className="mt-2 line-clamp-2 px-1 text-sm font-black uppercase leading-tight">{dish.name}</h2>
+              <label className="mt-2 flex items-center gap-1 px-1">
+                <span className="text-sm font-bold text-neutral-400">₹</span>
+                <input
+                  key={`${dish.id}-${dish.price}-card`}
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="1"
+                  defaultValue={dish.price}
+                  aria-label={`Price for ${dish.name}`}
+                  disabled={savingId === dish.id}
+                  onBlur={(event) => savePrice(dish, event.target.value)}
+                  onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
+                  className="h-11 w-full rounded-xl border border-neutral-200 px-2 text-base font-bold"
+                />
+              </label>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={dish.isAvailable}
+                onClick={() => toggleAvailability(dish)}
+                className="mt-2 flex h-11 w-full items-center justify-between rounded-xl px-3 text-sm font-bold"
+              >
+                <span className={dish.isAvailable ? "text-emerald-700" : "text-neutral-500"}>{dish.isAvailable ? "On" : "Off"}</span>
+                <span className={`relative h-7 w-12 rounded-full ${dish.isAvailable ? "bg-emerald-600" : "bg-neutral-300"}`}>
+                  <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow ${dish.isAvailable ? "left-5" : "left-0.5"}`} />
+                </span>
+              </button>
+            </article>
+          );
+        })}
+      </div>
+
+      <div className="hidden overflow-hidden rounded-2xl border border-neutral-200 bg-white md:block">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="border-b border-neutral-200 bg-white text-xs font-semibold uppercase tracking-wider text-neutral-400">
@@ -585,11 +645,11 @@ export default function DishesManager({
         footer={
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p role="alert" className="min-h-4 text-xs font-medium text-rose-600">{submitError}</p>
-            <div className="flex justify-end gap-2">
+            <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => setModalOpen(false)}
-                className="h-11 rounded-xl border border-neutral-200 px-5 text-sm font-semibold text-neutral-700 transition hover:bg-neutral-50"
+                className="h-12 rounded-xl border border-neutral-200 text-sm font-semibold text-neutral-700"
               >
                 Cancel
               </button>
@@ -597,9 +657,9 @@ export default function DishesManager({
                 type="submit"
                 form="dish-form"
                 disabled={isSubmitting}
-                className="h-11 rounded-xl bg-neutral-900 px-6 text-sm font-bold text-white transition hover:bg-neutral-800 disabled:opacity-50"
+                className="h-12 rounded-xl bg-neutral-900 text-sm font-bold text-white disabled:opacity-50"
               >
-                {isSubmitting ? "Saving…" : editing ? "Save changes" : "Add dish"}
+                {isSubmitting ? "Saving…" : "Save"}
               </button>
             </div>
           </div>
