@@ -52,18 +52,21 @@ const RANGES = [
   { id: "today", label: "Today" },
   { id: "yesterday", label: "Yesterday" },
   { id: "week", label: "7 days" },
+  { id: "month", label: "1 month" },
+  { id: "all", label: "All time" },
 ] as const;
 
 function rangeBounds(id: (typeof RANGES)[number]["id"]) {
   const zone = "Asia/Kolkata";
   const today = localDateKey(new Date().toISOString(), zone);
+  const now = new Date().toISOString();
+  if (id === "all") return { from: "", to: "" };
   if (id === "yesterday") {
     const day = addLocalDays(today, -1);
     return { from: startOfLocalDayIso(day, zone), to: new Date(new Date(startOfLocalDayIso(today, zone)).getTime() - 1).toISOString() };
   }
-  if (id === "week") {
-    return { from: startOfLocalDayIso(addLocalDays(today, -6), zone), to: new Date().toISOString() };
-  }
+  if (id === "week") return { from: startOfLocalDayIso(addLocalDays(today, -6), zone), to: now };
+  if (id === "month") return { from: startOfLocalDayIso(addLocalDays(today, -29), zone), to: now };
   const tomorrow = startOfLocalDayIso(addLocalDays(today, 1), zone);
   return { from: startOfLocalDayIso(today, zone), to: new Date(new Date(tomorrow).getTime() - 1).toISOString() };
 }
@@ -82,7 +85,10 @@ export default function ReportsDashboard({ restaurantName }: { restaurantName: s
     const controller = new AbortController();
     void (async () => {
       setError(null);
-      const response = await fetch(`/api/reports/dashboard?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, { signal: controller.signal });
+      const params = new URLSearchParams();
+      if (from) params.set("from", from);
+      if (to) params.set("to", to);
+      const response = await fetch(`/api/reports/dashboard?${params.toString()}`, { signal: controller.signal });
       const json = await response.json();
       if (!json.success) {
         setError(json.error || "Unable to load reports");
@@ -113,13 +119,13 @@ export default function ReportsDashboard({ restaurantName }: { restaurantName: s
           <p className="text-sm font-semibold text-neutral-500">Owner reports</p>
           <h1 className="text-3xl font-black tracking-tight">{restaurantName}</h1>
         </div>
-        <div className="grid grid-cols-3 gap-2 sm:flex">
+        <div className="flex gap-2 overflow-x-auto pb-1">
           {RANGES.map((item) => (
             <button
               key={item.id}
               type="button"
               onClick={() => setRange(item.id)}
-              className={`h-11 rounded-full px-4 text-sm font-bold ${range === item.id ? "bg-neutral-900 text-white" : "border border-neutral-200 bg-white text-neutral-800"}`}
+              className={`h-11 shrink-0 rounded-full px-4 text-sm font-bold ${range === item.id ? "bg-neutral-900 text-white" : "border border-neutral-200 bg-white text-neutral-800"}`}
             >
               {item.label}
             </button>
@@ -145,7 +151,7 @@ export default function ReportsDashboard({ restaurantName }: { restaurantName: s
 
       <section className="rounded-3xl border border-neutral-200 bg-white p-4 sm:p-6">
         <h2 className="text-lg font-black">Order queue</h2>
-        <p className="text-sm text-neutral-500">Where today’s orders are, from the kitchen to the table.</p>
+        <p className="text-sm text-neutral-500">Where orders are in the range you picked, from the kitchen to the table.</p>
         <ul className="mt-4 space-y-3">
           {steps.map((step) => (
             <li key={step.label}>
@@ -178,7 +184,7 @@ export default function ReportsDashboard({ restaurantName }: { restaurantName: s
               ))}
             </ol>
           ) : (
-            <p className="mt-3 text-sm text-neutral-500">Top dishes show up after the first paid order in this range.</p>
+            <p className="mt-3 text-sm text-neutral-500">Top dishes show up after the first order in this range.</p>
           )}
         </section>
 
