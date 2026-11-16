@@ -6,6 +6,7 @@ import { organizationRepository } from "@/lib/repositories/organization.reposito
 import { inventoryService } from "@/lib/services/inventory.service";
 import { roundMoney } from "@/lib/order-pricing";
 import { computeTablePerformance } from "@/lib/analytics/tables";
+import { computeDishSales } from "@/lib/analytics/sales";
 
 function inRange(iso: string, from?: string, to?: string) {
   const t = new Date(iso).getTime();
@@ -114,14 +115,47 @@ export class ReportingService {
   }
 
   async dashboard(restaurantId: string, from?: string, to?: string) {
-    const [sales, inventory, purchases, customers, tables] = await Promise.all([
-      this.salesSummary(restaurantId, from, to),
+    const orders = await orderRepository.findByRestaurantId(restaurantId);
+    const scoped = orders.filter((order) => inRange(order.createdAt, from, to));
+    const completed = scoped.filter((order) => !["CANCELLED", "REJECTED"].includes(order.status));
+    const gross = completed.reduce((sum, order) => sum + order.total, 0);
+    const count = (status: string) => scoped.filter((order) => order.status === status).length;
+    const sales = {
+      orderCount: scoped.length,
+      activeOrderCount: completed.length,
+      grossSales: roundMoney(gross),
+      paidOrders: completed.filter((order) => order.payment?.status === "PAID").length,
+      averageTicket: completed.length ? roundMoney(gross / completed.length) : 0,
+      from: from ?? null,
+      to: to ?? null,
+    };
+    const queue = {
+      pending: count("PENDING") + count("ACCEPTED"),
+      cooking: count("PREPARING"),
+      ready: count("READY"),
+      served: count("SERVED") + count("COMPLETED"),
+      cancelled: count("CANCELLED") + count("REJECTED"),
+    };
+    const topDishes = computeDishSales(scoped).slice(0, 5);
+    const openOrders = scoped
+      .filter((order) => ["PENDING", "ACCEPTED", "PREPARING", "READY"].includes(order.status))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, 6)
+      .map((order) => ({
+        id: order.id,
+        orderNumber: order.orderNumber,
+        tableNumber: order.tableNumber,
+        status: order.status,
+        total: order.total,
+        items: order.items.slice(0, 3).map((item) => `${item.quantity}× ${item.dishNameSnapshot}`).join(", "),
+      }));
+    const [inventory, purchases, customers, tables] = await Promise.all([
       this.inventorySummary(restaurantId),
       this.purchaseSummary(restaurantId),
       this.customerRetention(restaurantId),
       this.tablePerformance(restaurantId, from, to),
     ]);
-    return { sales, inventory, purchases, customers, tables };
+    return { sales, inventory, purchases, customers, tables, queue, topDishes, openOrders };
   }
 }
 
