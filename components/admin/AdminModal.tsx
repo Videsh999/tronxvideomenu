@@ -45,14 +45,13 @@ export default function AdminModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
-      className="fixed inset-0 z-50 flex animate-fade-in items-end justify-center bg-neutral-900/40 backdrop-blur-sm sm:items-center sm:p-4"
+      className="fixed inset-0 z-50 flex bg-neutral-900/40 md:items-center md:justify-center md:p-6"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="flex max-h-[92dvh] w-full max-w-lg animate-sheet-up flex-col overflow-hidden rounded-t-3xl border border-neutral-200 bg-white shadow-[0_30px_80px_-20px_rgb(0_0_0/0.8)] sm:max-h-[88vh] sm:animate-scale-in sm:rounded-3xl">
-        <div className="flex justify-center pt-2.5 sm:hidden"><span className="h-1 w-10 rounded-full bg-neutral-200" /></div>
-        <div className="flex items-center justify-between gap-3 border-b border-neutral-200 px-5 py-4 sm:px-6">
+      <div className="flex h-dvh w-full flex-col overflow-hidden bg-white md:h-auto md:max-h-[90dvh] md:max-w-3xl md:rounded-3xl md:border md:border-neutral-200 md:shadow-2xl">
+        <div className="flex items-center justify-between gap-3 border-b border-neutral-200 px-4 py-4 sm:px-6">
           <h2 id={titleId} className="text-base font-bold text-neutral-900">{title}</h2>
           <button
             type="button"
@@ -63,9 +62,9 @@ export default function AdminModal({
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-5 sm:px-6">{children}</div>
+        <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-5 sm:px-6">{children}</div>
         {footer ? (
-          <div className="safe-bottom border-t border-neutral-200 bg-white px-5 pt-4 sm:px-6 sm:pb-4">{footer}</div>
+          <div className="border-t border-neutral-200 bg-white px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6">{footer}</div>
         ) : null}
       </div>
     </div>,

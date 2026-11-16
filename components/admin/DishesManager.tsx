@@ -12,8 +12,6 @@ import {
   ArrowLeft,
   Video,
   Utensils,
-  CheckCircle2,
-  XCircle,
   Check,
   ArrowUp,
   ArrowDown,
@@ -183,6 +181,9 @@ export default function DishesManager({
       videoUrl: dish.videoUrl ?? dish.video ?? "",
       videoPosterUrl: dish.videoPosterUrl ?? "",
       gallery: dish.gallery ?? [],
+      variants: dish.variants ?? [],
+      sku: dish.sku ?? "",
+      kitchenStation: dish.kitchenStation,
     });
     setGalleryUrl("");
     setModalOpen(true);
@@ -201,6 +202,11 @@ export default function DishesManager({
     setSubmitError(null);
     const payload = {
       ...values,
+      kitchenStation: values.kitchenStation || undefined,
+      sku: values.sku?.trim() || undefined,
+      variants: values.variants?.length
+        ? values.variants.map((variant, index) => ({ ...(editing?.variants?.[index] ?? {}), ...variant }))
+        : undefined,
       image: values.imageUrl || undefined,
       videoUrl: videoMenuEnabled ? values.videoUrl : undefined,
       video: videoMenuEnabled ? values.videoUrl || undefined : undefined,
@@ -416,7 +422,7 @@ export default function DishesManager({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 md:hidden">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         {visibleDishes.length === 0 ? (
           <p className="col-span-2 rounded-2xl border border-dashed border-neutral-300 bg-white px-4 py-10 text-center text-sm text-neutral-500">
             {searchText ? `No dish matches “${query.trim()}”.` : "No dishes in this category yet."}
@@ -464,179 +470,25 @@ export default function DishesManager({
                 role="switch"
                 aria-checked={dish.isAvailable}
                 onClick={() => toggleAvailability(dish)}
-                className="mt-2 flex h-11 w-full items-center justify-between rounded-xl px-3 text-sm font-bold"
+                className="mt-2 flex h-11 w-full items-center justify-between rounded-xl bg-neutral-50 px-3 text-sm font-bold"
               >
                 <span className={dish.isAvailable ? "text-emerald-700" : "text-neutral-500"}>{dish.isAvailable ? "On" : "Off"}</span>
                 <span className={`relative h-7 w-12 rounded-full ${dish.isAvailable ? "bg-emerald-600" : "bg-neutral-300"}`}>
                   <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow ${dish.isAvailable ? "left-5" : "left-0.5"}`} />
                 </span>
               </button>
+              <button
+                type="button"
+                onClick={() => openEdit(dish)}
+                className="mt-2 h-11 w-full rounded-xl bg-neutral-900 text-sm font-bold text-white"
+              >
+                Edit
+              </button>
             </article>
           );
         })}
       </div>
 
-      <div className="hidden overflow-hidden rounded-2xl border border-neutral-200 bg-white md:block">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-neutral-200 bg-white text-xs font-semibold uppercase tracking-wider text-neutral-400">
-              <tr>
-                <th className="py-3.5 pl-4 pr-3">Dish</th>
-                <th className="py-3.5 px-4 hidden md:table-cell">Category</th>
-                <th className="py-3.5 px-4">Price</th>
-                <th className="py-3.5 px-4 text-center">Type</th>
-                <th className="py-3.5 px-4 text-center">Status</th>
-                <th className="py-3.5 pr-4 pl-2 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-neutral-100">
-              {visibleDishes.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-sm text-neutral-500">
-                    {searchText ? `No dish matches “${query.trim()}”.` : "No dishes in this category yet."}
-                  </td>
-                </tr>
-              ) : null}
-              {visibleDishes.map((dish) => {
-                const categoryName =
-                  categoryMap.get(dish.categoryId) || "Uncategorized";
-                const hasVideo = videoMenuEnabled && Boolean(dish.videoUrl || dish.video);
-                const imageSrc = dish.imageUrl || dish.image;
-
-                return (
-                  <tr key={dish.id} className={`hover:bg-white transition ${savingId === dish.id ? "opacity-60" : ""}`}>
-                    <td className="py-4 pl-4 pr-3">
-                      <div className="flex items-center gap-3">
-                        <button
-                          type="button"
-                          onClick={() => { photoDishRef.current = dish; photoInputRef.current?.click(); }}
-                          className="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-neutral-200 bg-neutral-100"
-                          aria-label={`Add a photo for ${dish.name}`}
-                        >
-                          {imageSrc ? (
-                            canUseNextImage(imageSrc) ? (
-                              <Image
-                                src={imageSrc}
-                                alt={dish.name}
-                                fill
-                                sizes="48px"
-                                className="object-cover"
-                              />
-                            ) : (
-                              <img
-                                src={imageSrc}
-                                alt={dish.name}
-                                className="h-full w-full object-cover"
-                              />
-                            )
-                          ) : (
-                            <div className="flex h-full w-full items-center justify-center text-neutral-300">
-                              <Utensils className="h-5 w-5" />
-                            </div>
-                          )}
-                          {hasVideo ? (
-                            <span className="absolute bottom-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-black/70 text-[9px] text-white">
-                              ▶
-                            </span>
-                          ) : null}
-                          <span className="absolute inset-0 grid place-items-center bg-black/45 text-[9px] font-bold uppercase text-white opacity-0 transition hover:opacity-100">Photo</span>
-                        </button>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold text-neutral-900">
-                              {dish.name}
-                            </span>
-                            {hasVideo ? (
-                              <span className="inline-flex items-center gap-1 rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-900">
-                                <Video className="h-2.5 w-2.5" />
-                                Video
-                              </span>
-                            ) : null}
-                          </div>
-                          <p className="text-xs font-medium text-neutral-400 md:hidden">{categoryName}</p>
-                          {dish.description ? (
-                            <p className="line-clamp-1 text-xs text-neutral-500 max-w-sm">
-                              {dish.description}
-                            </p>
-                          ) : null}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="py-4 px-4 text-xs font-medium text-neutral-600 hidden md:table-cell">
-                      {categoryName}
-                    </td>
-                    <td className="py-4 px-4 font-bold text-neutral-900">
-                      <label className="flex items-center gap-1">
-                        <span className="text-neutral-400">₹</span>
-                        <input
-                          key={`${dish.id}-${dish.price}`}
-                          type="number"
-                          inputMode="decimal"
-                          min="0"
-                          step="0.01"
-                          defaultValue={dish.price}
-                          aria-label={`Price for ${dish.name}`}
-                          disabled={savingId === dish.id}
-                          onBlur={(event) => savePrice(dish, event.target.value)}
-                          onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
-                          className="h-10 w-24 rounded-lg border border-neutral-200 px-2 text-sm font-bold text-neutral-900"
-                        />
-                      </label>
-                    </td>
-                    <td className="py-4 px-4 text-center">
-                      <span
-                        className={`inline-flex h-5 w-5 items-center justify-center rounded border ${
-                          dish.isVeg ? "border-emerald-500" : "border-rose-500"
-                        }`}
-                      >
-                        <span
-                          className={`h-2.5 w-2.5 rounded-full ${
-                            dish.isVeg ? "bg-emerald-500" : "bg-rose-500"
-                          }`}
-                        />
-                      </span>
-                    </td>
-                    <td className="py-4 px-4 text-center">
-                      <button
-                        type="button"
-                        onClick={() => toggleAvailability(dish)}
-                      >
-                        {dish.isAvailable ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
-                            <CheckCircle2 className="h-3 w-3" />
-                            In Stock
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2.5 py-0.5 text-xs font-medium text-rose-600">
-                            <XCircle className="h-3 w-3" />
-                            Sold Out
-                          </span>
-                        )}
-                      </button>
-                    </td>
-                    <td className="py-4 pr-4 pl-2 text-right space-x-1">
-                      <button
-                        type="button"
-                        onClick={() => openEdit(dish)}
-                        className="rounded-lg px-2.5 py-1 text-xs font-medium text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 transition"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(dish)}
-                        className="rounded-lg px-2.5 py-1 text-xs font-medium text-rose-600 hover:bg-rose-50 transition"
-                      >
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
 
       <AdminModal
         title={editing ? `Edit ${editing.name}` : "Add a dish"}
@@ -645,11 +497,20 @@ export default function DishesManager({
         footer={
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p role="alert" className="min-h-4 text-xs font-medium text-rose-600">{submitError}</p>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:justify-end">
+              {editing ? (
+                <button
+                  type="button"
+                  onClick={() => { const dish = editing; setModalOpen(false); void handleDelete(dish); }}
+                  className="col-span-2 h-12 rounded-xl border border-rose-200 text-sm font-bold text-rose-700 sm:mr-auto sm:px-5"
+                >
+                  Delete
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={() => setModalOpen(false)}
-                className="h-12 rounded-xl border border-neutral-200 text-sm font-semibold text-neutral-700"
+                className="h-12 rounded-xl border border-neutral-200 text-sm font-semibold text-neutral-700 sm:px-5"
               >
                 Cancel
               </button>
@@ -657,7 +518,7 @@ export default function DishesManager({
                 type="submit"
                 form="dish-form"
                 disabled={isSubmitting}
-                className="h-12 rounded-xl bg-neutral-900 text-sm font-bold text-white disabled:opacity-50"
+                className="h-12 rounded-xl bg-neutral-900 text-sm font-bold text-white disabled:opacity-50 sm:px-6"
               >
                 {isSubmitting ? "Saving…" : "Save"}
               </button>
@@ -817,6 +678,29 @@ export default function DishesManager({
             <FieldError message={errors.gallery ? errors.gallery.message ?? "Check the gallery items." : undefined} />
           </section>
 
+          {(watch("variants") ?? []).length ? (
+            <section className="space-y-3 border-t border-neutral-100 pt-5">
+              <h3 className={sectionTitleClass}>Sizes and prices</h3>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {(watch("variants") ?? []).map((variant, index) => (
+                  <label key={variant.id || index} className="block">
+                    <span className={labelClass}>{variant.name}</span>
+                    <input type="hidden" {...register(`variants.${index}.id`)} />
+                    <input type="hidden" {...register(`variants.${index}.name`)} />
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min="0"
+                      step="1"
+                      {...register(`variants.${index}.price`, { setValueAs: (value) => (value === "" || value == null ? 0 : Number(value)) })}
+                      className={fieldClass(false)}
+                    />
+                  </label>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
           {addonGroups.length ? (
             <section className="space-y-3 border-t border-neutral-100 pt-5">
               <div>
@@ -839,6 +723,27 @@ export default function DishesManager({
 
           <section className="space-y-4 border-t border-neutral-100 pt-5">
             <h3 className={sectionTitleClass}>More options</h3>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="block">
+                <span className={labelClass}>Kitchen</span>
+                <select
+                  value={watch("kitchenStation") ?? ""}
+                  onChange={(event) => setValue("kitchenStation", event.target.value ? event.target.value as Dish["kitchenStation"] : undefined, { shouldDirty: true })}
+                  className={fieldClass(false)}
+                >
+                  <option value="">Main kitchen</option>
+                  <option value="MAIN">Main</option>
+                  <option value="BAR">Bar</option>
+                  <option value="BAKERY">Bakery</option>
+                  <option value="DESSERT">Dessert</option>
+                  <option value="OTHER">Other</option>
+                </select>
+              </label>
+              <label className="block">
+                <span className={labelClass}>Item code <span className="font-normal text-neutral-400">(optional)</span></span>
+                <input {...register("sku")} placeholder="Optional code" className={fieldClass(Boolean(errors.sku))} />
+              </label>
+            </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="block">
                 <span className={labelClass}>Preparation time (minutes) <span className="font-normal text-neutral-400">(optional)</span></span>
