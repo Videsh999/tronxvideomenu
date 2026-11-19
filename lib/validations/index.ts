@@ -700,7 +700,16 @@ export const createCouponSchema = z
     startsAt: z.string().optional(),
     endsAt: z.string().optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.discountType === "PERCENT" && value.discountValue > 100) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["discountValue"],
+        message: "Percent discount cannot exceed 100.",
+      });
+    }
+  });
 
 export const customerFeedbackSchema = z
   .object({

@@ -24,6 +24,20 @@ const sectionTitles: Record<string, string> = {
   profile: "Restaurant profile",
   availability: "Availability",
   media: "Media library",
+  crm: "CRM & loyalty",
+  reports: "Reports",
+  organization: "Organization",
+  inventory: "Inventory",
+  recipes: "Recipes",
+  procurement: "Procurement",
+  pos: "POS",
+  kitchen: "Kitchen",
+  devices: "Devices",
+  settings: "Settings",
+  billing: "Billing & tax",
+  staff: "Staff",
+  ai: "AI Intelligence",
+  import: "Import Excel",
 };
 
 export default function AdminHeader({

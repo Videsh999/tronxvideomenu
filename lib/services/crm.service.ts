@@ -5,6 +5,7 @@ import {
   earnPointsForOrder,
   loyaltyEarnKey,
 } from "@/lib/crm/loyalty";
+import { normalizePhone } from "@/lib/phone";
 import type { Restaurant } from "@/types";
 
 export class CrmServiceError extends Error {
@@ -31,16 +32,19 @@ export class CrmService {
       organizationId?: string;
     },
   ) {
-    const phone = input.phone.replace(/\s+/g, "").trim();
+    const phone = normalizePhone(input.phone);
     if (phone.length < 7) throw new CrmServiceError("Enter a valid phone number.");
     const existing = await crmRepository.findByPhone(restaurantId, phone);
+    const name = input.name?.trim();
+    const email = input.email?.trim().toLowerCase();
+    const notes = input.notes?.trim();
     return crmRepository.upsertCustomer({
       id: existing?.id ?? `cust-${randomUUID()}`,
       restaurantId,
       organizationId: input.organizationId ?? existing?.organizationId,
       phone,
-      name: input.name ?? existing?.name,
-      email: input.email ?? existing?.email,
+      name: name || existing?.name,
+      email: email || existing?.email,
       segment: existing?.segment ?? "NEW",
       loyaltyPoints: existing?.loyaltyPoints ?? 0,
       totalOrders: existing?.totalOrders ?? 0,
@@ -49,7 +53,7 @@ export class CrmService {
       smsOptIn: input.smsOptIn ?? existing?.smsOptIn ?? false,
       emailOptIn: input.emailOptIn ?? existing?.emailOptIn ?? false,
       lastOrderAt: existing?.lastOrderAt,
-      notes: input.notes ?? existing?.notes,
+      notes: notes || existing?.notes,
     });
   }
 

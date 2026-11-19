@@ -61,7 +61,7 @@ export default function OrganizationDashboard({ restaurantName }: Props) {
   }
 
   return (
-    <div className="space-y-6 p-4 md:p-6">
+    <div className="space-y-6">
       <header>
         <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">Organization</p>
         <h1 className="font-serif text-3xl text-neutral-900">{restaurantName}</h1>
@@ -124,7 +124,7 @@ export default function OrganizationDashboard({ restaurantName }: Props) {
             </li>
           ))}
           {syncJobs.length === 0 ? (
-            <li className="text-neutral-500">No sync jobs. Create via `/api/organization/menu-sync`.</li>
+            <li className="text-neutral-500">No menu sync jobs yet.</li>
           ) : null}
         </ul>
       </section>

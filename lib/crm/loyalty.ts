@@ -40,9 +40,11 @@ export function applyCouponDiscount(params: {
   if (params.minOrderTotal != null && params.orderTotal < params.minOrderTotal) {
     throw new Error("Order total is below the coupon minimum.");
   }
+  const percent = Math.min(Math.max(params.discountValue, 0), 100);
   const discount =
     params.discountType === "PERCENT"
-      ? roundMoney((params.orderTotal * params.discountValue) / 100)
-      : roundMoney(Math.min(params.discountValue, params.orderTotal));
-  return { discount, payable: roundMoney(params.orderTotal - discount) };
+      ? roundMoney((params.orderTotal * percent) / 100)
+      : roundMoney(Math.min(Math.max(params.discountValue, 0), params.orderTotal));
+  const payable = Math.max(0, roundMoney(params.orderTotal - discount));
+  return { discount, payable };
 }

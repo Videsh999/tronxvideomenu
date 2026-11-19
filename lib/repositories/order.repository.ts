@@ -31,9 +31,20 @@ export class OrderRepository implements IOrderRepository {
     return this.mapOrder(created.toObject());
   }
 
-  async findByRestaurantId(restaurantId: string) {
+  async findByRestaurantId(
+    restaurantId: string,
+    options?: { from?: string; to?: string; limit?: number },
+  ) {
     await connectToDatabase();
-    const orders = await OrderModel.find({ restaurantId }).sort({ createdAt: -1 }).lean();
+    const filter: Record<string, unknown> = { restaurantId };
+    if (options?.from || options?.to) {
+      const createdAt: Record<string, string> = {};
+      if (options.from) createdAt.$gte = options.from;
+      if (options.to) createdAt.$lte = options.to;
+      filter.createdAt = createdAt;
+    }
+    const limit = Math.min(Math.max(options?.limit ?? 5000, 1), 10000);
+    const orders = await OrderModel.find(filter).sort({ createdAt: -1 }).limit(limit).lean();
     return orders.map((order) => this.mapOrder(order));
   }
 

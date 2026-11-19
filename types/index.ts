@@ -1093,6 +1093,8 @@ export type CustomerProfile = {
   passwordHash?: string;
   passwordResetTokenHash?: string;
   passwordResetExpiresAt?: string;
+  /** Present on list/read responses when the guest completed loyalty signup. */
+  hasPassword?: boolean;
   segment?: "NEW" | "REGULAR" | "VIP" | "LAPSED";
   loyaltyPoints: number;
   totalOrders: number;

@@ -9,6 +9,7 @@ import {
   verifyCustomerPassword,
 } from "@/lib/customer-auth";
 import { buildPasswordResetEmail, getAppBaseUrl, isMailConfigured, sendEmail } from "@/lib/mailer";
+import { normalizePhone } from "@/lib/phone";
 import type { CustomerLoyaltyView, CustomerProfile } from "@/types";
 
 export class CustomerLoyaltyServiceError extends Error {
@@ -18,10 +19,6 @@ export class CustomerLoyaltyServiceError extends Error {
   ) {
     super(message);
   }
-}
-
-function normalizePhone(phone: string) {
-  return phone.replace(/[^\d+]/g, "").trim();
 }
 
 function toView(customer: CustomerProfile): CustomerLoyaltyView {
@@ -59,12 +56,16 @@ export class CustomerLoyaltyService {
       throw new CustomerLoyaltyServiceError("Password must be at least 8 characters.");
     }
 
-    const existingPhone = await crmRepository.findByPhone(restaurant.id, phone);
+    // passwordHash is select:false — must use auth finders or the check never fires.
+    const existingPhone = await crmRepository.findAuthByPhone(restaurant.id, phone);
     if (existingPhone?.passwordHash) {
       throw new CustomerLoyaltyServiceError("An account already exists for this phone. Sign in instead.");
     }
-    const existingEmail = await crmRepository.findByEmail(restaurant.id, email);
-    if (existingEmail && existingEmail.id !== existingPhone?.id) {
+    const existingEmail = await crmRepository.findAuthByEmail(restaurant.id, email);
+    if (existingEmail?.passwordHash && existingEmail.id !== existingPhone?.id) {
+      throw new CustomerLoyaltyServiceError("An account already exists for this email.");
+    }
+    if (existingEmail && !existingEmail.passwordHash && existingEmail.id !== existingPhone?.id) {
       throw new CustomerLoyaltyServiceError("An account already exists for this email.");
     }
 
@@ -73,6 +74,7 @@ export class CustomerLoyaltyService {
     const customer = await crmRepository.upsertCustomer({
       id: existingPhone?.id ?? `cust-${randomUUID()}`,
       restaurantId: restaurant.id,
+      organizationId: restaurant.organizationId,
       phone,
       email,
       name: input.name.trim(),

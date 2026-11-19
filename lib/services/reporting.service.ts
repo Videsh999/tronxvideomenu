@@ -7,6 +7,7 @@ import { inventoryService } from "@/lib/services/inventory.service";
 import { roundMoney } from "@/lib/order-pricing";
 import { computeTablePerformance } from "@/lib/analytics/tables";
 import { computeDishSales } from "@/lib/analytics/sales";
+import type { RestaurantOrder } from "@/types";
 
 function inRange(iso: string, from?: string, to?: string) {
   const t = new Date(iso).getTime();
@@ -15,9 +16,22 @@ function inRange(iso: string, from?: string, to?: string) {
   return true;
 }
 
+function guestsFromOrders(orders: RestaurantOrder[]) {
+  const counts = new Map<string, number>();
+  for (const order of orders) {
+    if (!order.customerId) continue;
+    counts.set(order.customerId, (counts.get(order.customerId) ?? 0) + 1);
+  }
+  const guestIds = [...counts.keys()];
+  return {
+    customerCount: guestIds.length,
+    repeatCustomerCount: guestIds.filter((id) => (counts.get(id) ?? 0) >= 2).length,
+  };
+}
+
 export class ReportingService {
   async salesSummary(restaurantId: string, from?: string, to?: string) {
-    const orders = await orderRepository.findByRestaurantId(restaurantId);
+    const orders = await orderRepository.findByRestaurantId(restaurantId, { from, to });
     const scoped = orders.filter((order) => inRange(order.createdAt, from, to));
     const completed = scoped.filter(
       (order) => !["CANCELLED", "REJECTED"].includes(order.status),
@@ -75,16 +89,33 @@ export class ReportingService {
     };
   }
 
-  async customerRetention(restaurantId: string) {
+  /**
+   * Guests in a period come from orders with customerId (date-ranged).
+   * VIP / marketing opt-in remain directory metrics from CRM profiles.
+   */
+  async customerRetention(
+    restaurantId: string,
+    from?: string,
+    to?: string,
+    orders?: RestaurantOrder[],
+  ) {
+    const source =
+      orders ?? (await orderRepository.findByRestaurantId(restaurantId, { from, to }));
+    const scoped = source.filter((order) => inRange(order.createdAt, from, to));
+    const fromOrders = guestsFromOrders(scoped);
     const customers = await crmRepository.listCustomers(restaurantId);
     const vip = customers.filter((customer) => customer.segment === "VIP").length;
     const optedIn = customers.filter((customer) => customer.marketingOptIn).length;
-    const repeat = customers.filter((customer) => customer.totalOrders >= 2).length;
+    const enrolled = customers.length;
+    const directoryRepeat = customers.filter((customer) => customer.totalOrders >= 2).length;
     return {
-      customerCount: customers.length,
+      customerCount: fromOrders.customerCount > 0 ? fromOrders.customerCount : enrolled,
+      repeatCustomerCount:
+        fromOrders.customerCount > 0 ? fromOrders.repeatCustomerCount : directoryRepeat,
+      enrolledCount: enrolled,
       vipCount: vip,
       marketingOptInCount: optedIn,
-      repeatCustomerCount: repeat,
+      guestsWithOrdersInRange: fromOrders.customerCount,
     };
   }
 
@@ -103,9 +134,15 @@ export class ReportingService {
     return { organizationId, outlets: rows, from: from ?? null, to: to ?? null };
   }
 
-  async tablePerformance(restaurantId: string, from?: string, to?: string) {
-    const orders = await orderRepository.findByRestaurantId(restaurantId);
-    const tables = computeTablePerformance(orders, from, to);
+  async tablePerformance(
+    restaurantId: string,
+    from?: string,
+    to?: string,
+    orders?: RestaurantOrder[],
+  ) {
+    const source =
+      orders ?? (await orderRepository.findByRestaurantId(restaurantId, { from, to }));
+    const tables = computeTablePerformance(source, from, to);
     return {
       tables,
       busiestTableNumber: tables[0]?.tableNumber ?? null,
@@ -115,7 +152,7 @@ export class ReportingService {
   }
 
   async dashboard(restaurantId: string, from?: string, to?: string) {
-    const orders = await orderRepository.findByRestaurantId(restaurantId);
+    const orders = await orderRepository.findByRestaurantId(restaurantId, { from, to });
     const scoped = orders.filter((order) => inRange(order.createdAt, from, to));
     const completed = scoped.filter((order) => !["CANCELLED", "REJECTED"].includes(order.status));
     const gross = completed.reduce((sum, order) => sum + order.total, 0);
@@ -149,11 +186,12 @@ export class ReportingService {
         total: order.total,
         items: order.items.slice(0, 3).map((item) => `${item.quantity}× ${item.dishNameSnapshot}`).join(", "),
       }));
+    // Reuse the same order load — no second full-table scan for tables/guests.
     const [inventory, purchases, customers, tables] = await Promise.all([
       this.inventorySummary(restaurantId),
       this.purchaseSummary(restaurantId),
-      this.customerRetention(restaurantId),
-      this.tablePerformance(restaurantId, from, to),
+      this.customerRetention(restaurantId, from, to, scoped),
+      this.tablePerformance(restaurantId, from, to, scoped),
     ]);
     return { sales, inventory, purchases, customers, tables, queue, topDishes, openOrders };
   }

@@ -17,19 +17,35 @@ import type {
 } from "@/types";
 
 export class CrmRepository {
-  async listCustomers(restaurantId: string, query?: string): Promise<CustomerProfile[]> {
+  async listCustomers(
+    restaurantId: string,
+    query?: string,
+    options?: { limit?: number },
+  ): Promise<CustomerProfile[]> {
     await connectToDatabase();
     const filter: Record<string, unknown> = { restaurantId };
     if (query?.trim()) {
-      const q = query.trim();
+      const q = query.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       filter.$or = [
         { phone: { $regex: q, $options: "i" } },
         { name: { $regex: q, $options: "i" } },
         { email: { $regex: q, $options: "i" } },
       ];
     }
-    const rows = await CustomerProfileModel.find(filter).sort({ updatedAt: -1 }).limit(100).lean();
-    return rows.map((row) => toDomain<CustomerProfile>(row));
+    const limit = Math.min(Math.max(options?.limit ?? 250, 1), 500);
+    const rows = await CustomerProfileModel.find(filter)
+      .select("+passwordHash")
+      .sort({ updatedAt: -1 })
+      .limit(limit)
+      .lean();
+    return rows.map((row) => {
+      const profile = toDomain<CustomerProfile>(row);
+      const { passwordHash, passwordResetTokenHash, ...safe } = profile;
+      return {
+        ...safe,
+        hasPassword: Boolean(passwordHash),
+      };
+    });
   }
 
   async getCustomer(restaurantId: string, id: string): Promise<CustomerProfile | null> {

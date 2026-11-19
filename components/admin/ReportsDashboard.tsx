@@ -44,7 +44,13 @@ type Dashboard = {
   topDishes?: DishRow[];
   openOrders?: OpenOrder[];
   inventory: { lowStockCount: number; totalValue: number };
-  customers: { customerCount: number; repeatCustomerCount: number };
+  customers: {
+    customerCount: number;
+    repeatCustomerCount: number;
+    enrolledCount?: number;
+    vipCount?: number;
+    marketingOptInCount?: number;
+  };
   tables?: { tables: TableRow[]; busiestTableNumber: number | null };
 };
 
@@ -117,9 +123,9 @@ export default function ReportsDashboard({ restaurantName }: { restaurantName: s
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-sm font-semibold text-neutral-500">Owner reports</p>
-          <h1 className="text-3xl font-black tracking-tight">{restaurantName}</h1>
+          <h1 className="text-2xl font-black tracking-tight sm:text-3xl">{restaurantName}</h1>
         </div>
-        <div className="flex gap-2 overflow-x-auto pb-1">
+        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0">
           {RANGES.map((item) => (
             <button
               key={item.id}
@@ -208,11 +214,33 @@ export default function ReportsDashboard({ restaurantName }: { restaurantName: s
         </section>
       </div>
 
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <article className="rounded-2xl border border-neutral-200 bg-white p-4"><p className="text-xs font-semibold text-neutral-500">Guests</p><p className="mt-1 text-2xl font-black">{data?.customers.customerCount ?? "…"}</p></article>
-        <article className="rounded-2xl border border-neutral-200 bg-white p-4"><p className="text-xs font-semibold text-neutral-500">Repeat guests</p><p className="mt-1 text-2xl font-black">{data?.customers.repeatCustomerCount ?? "…"}</p></article>
-        <article className="rounded-2xl border border-neutral-200 bg-white p-4"><p className="text-xs font-semibold text-neutral-500">Low stock</p><p className="mt-1 text-2xl font-black">{data?.inventory.lowStockCount ?? "…"}</p></article>
-        <article className="rounded-2xl border border-neutral-200 bg-white p-4"><p className="text-xs font-semibold text-neutral-500">Busiest table</p><p className="mt-1 text-2xl font-black">{data?.tables?.busiestTableNumber != null ? data.tables.busiestTableNumber : "—"}</p></article>
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <article className="rounded-2xl border border-neutral-200 bg-white p-4">
+          <p className="text-xs font-semibold text-neutral-500">Guests (range)</p>
+          <p className="mt-1 text-2xl font-black">{data?.customers.customerCount ?? "…"}</p>
+        </article>
+        <article className="rounded-2xl border border-neutral-200 bg-white p-4">
+          <p className="text-xs font-semibold text-neutral-500">Repeat guests</p>
+          <p className="mt-1 text-2xl font-black">{data?.customers.repeatCustomerCount ?? "…"}</p>
+        </article>
+        <article className="rounded-2xl border border-neutral-200 bg-white p-4">
+          <p className="text-xs font-semibold text-neutral-500">Enrolled</p>
+          <p className="mt-1 text-2xl font-black">{data?.customers.enrolledCount ?? "…"}</p>
+        </article>
+        <article className="rounded-2xl border border-neutral-200 bg-white p-4">
+          <p className="text-xs font-semibold text-neutral-500">VIP</p>
+          <p className="mt-1 text-2xl font-black">{data?.customers.vipCount ?? "…"}</p>
+        </article>
+        <article className="rounded-2xl border border-neutral-200 bg-white p-4">
+          <p className="text-xs font-semibold text-neutral-500">Low stock</p>
+          <p className="mt-1 text-2xl font-black">{data?.inventory.lowStockCount ?? "…"}</p>
+        </article>
+        <article className="rounded-2xl border border-neutral-200 bg-white p-4">
+          <p className="text-xs font-semibold text-neutral-500">Busiest table</p>
+          <p className="mt-1 text-2xl font-black">
+            {data?.tables?.busiestTableNumber != null ? data.tables.busiestTableNumber : "—"}
+          </p>
+        </article>
       </section>
 
       <section className="space-y-3">
