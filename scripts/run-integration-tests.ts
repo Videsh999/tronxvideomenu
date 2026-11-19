@@ -4,7 +4,9 @@
  * into the test process: the child always receives the memory-server URI.
  */
 import { spawn } from "node:child_process";
+import path from "node:path";
 import { MongoMemoryReplSet } from "mongodb-memory-server";
+import { assertNoSkippedTests } from "./integration-tap";
 
 async function main() {
   const replSet = await MongoMemoryReplSet.create({
@@ -14,18 +16,33 @@ async function main() {
   let exitCode = 1;
   try {
     const uri = replSet.getUri("tronx_integration");
+    const preload = path.join(process.cwd(), "scripts/register-node-async-local-storage.cjs");
     const child = spawn("tsx", ["--test", "tests/integration/*.test.ts"], {
-      stdio: "inherit",
       env: {
         ...process.env,
         RUN_INTEGRATION: "1",
         MONGODB_URI: uri,
+        NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --require ${preload}`.trim(),
       },
+    });
+    let tap = "";
+    child.stdout?.on("data", (chunk: Buffer) => {
+      process.stdout.write(chunk);
+      tap += chunk.toString();
+    });
+    child.stderr?.on("data", (chunk: Buffer) => {
+      process.stderr.write(chunk);
+      tap += chunk.toString();
     });
     exitCode = await new Promise<number>((resolve, reject) => {
       child.on("error", reject);
       child.on("exit", (code) => resolve(code ?? 1));
     });
+    const skipped = assertNoSkippedTests(tap);
+    if (skipped) {
+      console.error(skipped);
+      exitCode = 1;
+    }
   } finally {
     await replSet.stop();
   }

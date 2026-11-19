@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, Minus, Plus, Search, Trash2 } from "lucide-react";
 import type { CaptainPermissions, Category, Dish, PaymentMethod, RestaurantBillingSettings, RestaurantTable } from "@/types";
 import { previewStaffCartBill } from "@/lib/billing/preview-cart";
+import { browserPaymentStore, clearPaymentAttempt, paymentAttemptKey } from "@/lib/payments/payment-attempt";
 import { resolveLineTaxRate } from "@/lib/billing/resolve-tax-rate";
 import { lineItemTotal, roundMoney } from "@/lib/order-pricing";
 import { resolveCaptainPermissions } from "@/lib/captain-permissions";
@@ -294,16 +295,19 @@ export default function CaptainOrderPad({
             );
             return;
           }
+          const store = browserPaymentStore();
           const payRes = await fetch(`/api/orders/${encodeURIComponent(orderId)}/payment`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               method: payMethod,
               amount: Number(payAmount) || json.data.total,
+              idempotencyKey: paymentAttemptKey(orderId, store),
             }),
           });
           const payJson = await payRes.json();
           if (!payJson.success) throw new Error(payJson.error || "Order placed but payment failed");
+          clearPaymentAttempt(orderId, store);
         }
 
         patchSession(emptyCartState());
@@ -334,16 +338,19 @@ export default function CaptainOrderPad({
     }
     startTransition(async () => {
       try {
+        const store = browserPaymentStore();
         const response = await fetch(`/api/orders/${encodeURIComponent(lastOrderId)}/payment`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             method: payMethod,
             amount: Number(payAmount) || totals.total,
+            idempotencyKey: paymentAttemptKey(lastOrderId, store),
           }),
         });
         const json = await response.json();
         if (!json.success) throw new Error(json.error || "Unable to record payment");
+        clearPaymentAttempt(lastOrderId, store);
         setMessage(`Payment recorded (${payMethod}).`);
       } catch (error) {
         setMessage(error instanceof Error ? error.message : "Unable to record payment");

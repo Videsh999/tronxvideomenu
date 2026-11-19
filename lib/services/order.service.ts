@@ -1,4 +1,5 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import mongoose from "mongoose";
 import { orderRepository } from "@/lib/repositories/order.repository";
 import { restaurantService } from "@/lib/services/restaurant.service";
 import { tableRepository } from "@/lib/repositories/table.repository";
@@ -15,7 +16,8 @@ import { lineItemTotal, amountRemaining, roundMoney } from "@/lib/order-pricing"
 import {
   billFromStoredLines,
   billMoneyFields,
-  linesReflectCancellation,
+  billingForRecompute,
+  freezeBillingSettings,
   planLineCancellation,
   snapshotGstRate,
 } from "@/lib/billing/order-bill";
@@ -154,6 +156,15 @@ export class OrderServiceError extends Error {
   }
 }
 
+class VersionConflict extends Error {
+  constructor() {
+    super("Order version changed.");
+  }
+}
+
+/** Test hook. Set during a test to crash cancelOrderLines after the totals write. */
+export const cancelCrash: { afterTotals: null | (() => void) } = { afterTotals: null };
+
 export class OrderService {
   /** Live floor orders (open + last 36h). Use repository.findByRestaurantId for full history reports. */
   async listForRestaurant(restaurantId: string) {
@@ -285,9 +296,10 @@ export class OrderService {
     });
 
     const pricedItems = items.map((item) => withGstSnapshot(item, menu));
+    const frozenBilling = freezeBillingSettings(menu.restaurant.billing);
     const bill = billFromStoredLines({
       items: pricedItems,
-      billing: menu.restaurant.billing,
+      billing: frozenBilling,
     });
 
     const currentTable = await tableRepository.findByRestaurantAndId(menu.restaurant.id, table.id);
@@ -315,6 +327,7 @@ export class OrderService {
         customerId: loyaltyCustomerId,
         items: pricedItems,
         ...billMoneyFields(bill),
+        billingSettingsSnapshot: frozenBilling,
         payment: {
           status: "UNPAID",
           amountPaid: 0,
@@ -483,10 +496,11 @@ export class OrderService {
     }
 
     const pricedItems = items.map((item) => withGstSnapshot(item, menu));
+    const frozenBilling = freezeBillingSettings(menu.restaurant.billing);
     const bill = billFromStoredLines({
       items: pricedItems,
       billDiscountAmount,
-      billing: menu.restaurant.billing,
+      billing: frozenBilling,
     });
     const taxRatePercent = bill.gstRatePercent;
     const totals = {
@@ -591,6 +605,7 @@ export class OrderService {
         sgstAmount: bill.sgstAmount,
         igstAmount: bill.igstAmount,
         billSnapshot: bill,
+        billingSettingsSnapshot: frozenBilling,
         total: totals.total,
         payment: {
           status: "UNPAID",
@@ -749,7 +764,7 @@ export class OrderService {
       const bill = billFromStoredLines({
         items: merged,
         billDiscountAmount: current.billDiscountAmount ?? 0,
-        billing: menu.restaurant.billing,
+        billing: billingForRecompute(current.billingSettingsSnapshot, current.billSnapshot),
         orderTaxRatePercent: current.taxRatePercent,
         historicalBill: current.billSnapshot,
       });
@@ -1071,6 +1086,7 @@ export class OrderService {
       ledgerEntry,
       orderEvent,
       orderStatus,
+      current.version ?? 0,
     );
 
     if (!updated) {
@@ -1176,6 +1192,7 @@ export class OrderService {
       current.status,
       status,
       event,
+      current.version ?? 0,
     );
     if (!updated) throw new OrderServiceError("Order status changed. Refresh and try again.");
     if (status === "ACCEPTED" && table) {
@@ -1235,6 +1252,7 @@ export class OrderService {
       lineId,
       preparationStatus,
       event,
+      current.version ?? 0,
     );
     if (!updated) throw new OrderServiceError("Could not update item preparation.", 409);
 
@@ -1348,6 +1366,7 @@ export class OrderService {
         "PENDING",
         "ACCEPTED",
         acceptEvent,
+        current.version ?? 0,
       );
       if (!accepted) throw new OrderServiceError("Order status changed. Refresh and try again.");
 
@@ -1369,6 +1388,7 @@ export class OrderService {
         "ACCEPTED",
         "PREPARING",
         prepEvent,
+        accepted.version ?? (current.version ?? 0) + 1,
       );
       const finalOrder = preparing ?? accepted;
       await this.runInventorySideEffects(restaurantId, finalOrder, current.status);
@@ -1388,6 +1408,7 @@ export class OrderService {
       "PENDING",
       "PREPARING",
       prepEvent,
+      current.version ?? 0,
     );
     if (!preparing) throw new OrderServiceError("Order status changed. Refresh and try again.");
     await this.runInventorySideEffects(restaurantId, preparing, current.status);
@@ -1429,206 +1450,230 @@ export class OrderService {
 
     await connectToDatabase();
 
-    const duplicateResult = async () => {
-      const order = await orderRepository.findByRestaurantAndId(restaurantId, orderId);
-      if (!order) throw new OrderServiceError("Order not found.", 404);
-      const savedMarker = await OrderLineCancellationModel.findOne({
-        restaurantId,
-        idempotencyKey: input.idempotencyKey,
-      }).lean();
-      return {
-        order: staffOrderView(order),
-        cancellations: savedMarker ? [toDomain<OrderLineCancellation>(savedMarker)] : [],
-        duplicate: true as const,
-      };
-    };
-
     for (let attempt = 0; attempt < 8; attempt += 1) {
-      const marker = await OrderLineCancellationModel.findOne({
-        restaurantId,
-        idempotencyKey: input.idempotencyKey,
-      }).lean();
-      const markerStatus = marker?.applyStatus as "PENDING" | "APPLIED" | undefined;
-      const applied = Boolean(marker) && (markerStatus == null || markerStatus === "APPLIED");
-      if (applied) return duplicateResult();
-
-      const current = await orderRepository.findByRestaurantAndId(restaurantId, orderId);
-      if (!current) throw new OrderServiceError("Order not found.", 404);
-      if (["CANCELLED", "REJECTED", "REFUNDED"].includes(current.status)) {
-        throw new OrderServiceError("Order is already closed for cancellation.", 409);
-      }
-
-      const plannedOnMarker =
-        marker?.plannedCancelled && typeof marker.plannedCancelled === "object"
-          ? (marker.plannedCancelled as Record<string, number>)
-          : undefined;
-      if (marker && markerStatus === "PENDING" && linesReflectCancellation(current.items, plannedOnMarker)) {
-        await OrderLineCancellationModel.updateOne(
-          { restaurantId, idempotencyKey: input.idempotencyKey },
-          { $set: { applyStatus: "APPLIED" } },
-        );
-        return duplicateResult();
-      }
-
-      let plan: ReturnType<typeof planLineCancellation>;
+      const session = await mongoose.startSession();
+      let outcome:
+        | {
+            order: ReturnType<typeof staffOrderView>;
+            cancellations: OrderLineCancellation[];
+            duplicate: boolean;
+            refundSuggested?: number;
+            restorePending?: boolean;
+          }
+        | undefined;
       try {
-        plan = planLineCancellation(current.items, input.lines);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Unable to cancel lines.";
-        throw new OrderServiceError(message, /not found/i.test(message) ? 404 : 409);
-      }
-
-      const restaurant = await restaurantService.getById(restaurantId);
-      const bill = billFromStoredLines({
-        items: plan.items,
-        billDiscountAmount: current.billDiscountAmount ?? 0,
-        billing: restaurant?.billing,
-        orderTaxRatePercent: current.taxRatePercent,
-        historicalBill: current.billSnapshot,
-      });
-
-      const now = new Date().toISOString();
-      if (!marker) {
-        try {
-          await OrderLineCancellationModel.create({
-            id: `olc-parent-${randomUUID()}`,
+        await session.withTransaction(async () => {
+          outcome = undefined;
+          const marker = await OrderLineCancellationModel.findOne({
             restaurantId,
-            orderId,
-            orderLineId: "*",
-            quantityCancelled: input.lines.reduce((sum, line) => sum + line.quantity, 0),
-            reason,
-            inventoryRestoreStatus: "NONE",
             idempotencyKey: input.idempotencyKey,
-            actor: input.actor,
-            createdAt: now,
-            applyStatus: "PENDING",
+          }).session(session);
+          const markerStatus = marker?.applyStatus as "PENDING" | "APPLIED" | undefined;
+          if (marker && (markerStatus == null || markerStatus === "APPLIED")) {
+            const order = await orderRepository.findByRestaurantAndId(restaurantId, orderId, session);
+            if (!order) throw new OrderServiceError("Order not found.", 404);
+            const restore = marker.inventoryRestoreStatus as string | undefined;
+            outcome = {
+              order: staffOrderView(order),
+              cancellations: [toDomain<OrderLineCancellation>(marker.toObject())],
+              duplicate: true,
+              restorePending: restore === "PENDING" || restore === "FAILED",
+            };
+            return;
+          }
+
+          const current = await orderRepository.findByRestaurantAndId(restaurantId, orderId, session);
+          if (!current) throw new OrderServiceError("Order not found.", 404);
+          if (["CANCELLED", "REJECTED", "REFUNDED"].includes(current.status)) {
+            throw new OrderServiceError("Order is already closed for cancellation.", 409);
+          }
+
+          let plan: ReturnType<typeof planLineCancellation>;
+          try {
+            plan = planLineCancellation(current.items, input.lines);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Unable to cancel lines.";
+            throw new OrderServiceError(message, /not found/i.test(message) ? 404 : 409);
+          }
+
+          const bill = billFromStoredLines({
+            items: plan.items,
+            billDiscountAmount: current.billDiscountAmount ?? 0,
+            billing: billingForRecompute(current.billingSettingsSnapshot, current.billSnapshot),
+            orderTaxRatePercent: current.taxRatePercent,
+            historicalBill: current.billSnapshot,
+          });
+          const allGone = plan.items.every((item) => (item.cancelledQuantity ?? 0) >= item.quantity);
+          const event = makeEvent(
+            "LINE_CANCELLED",
+            `Cancelled lines: ${input.lines.map((line) => `${line.lineId}×${line.quantity}`).join(", ")} — ${reason}`,
+            input.actor,
+            { lines: input.lines, reason, idempotencyKey: input.idempotencyKey },
+          );
+          const updated = await orderRepository.replaceItemsAndTotals(restaurantId, orderId, {
+            items: plan.items,
+            ...billMoneyFields(bill),
+            event,
+            expectedVersion: current.version ?? 0,
+            nextStatus: allGone && canTransition(current.status, "CANCELLED") ? "CANCELLED" : undefined,
+            session,
+          });
+          if (!updated) throw new VersionConflict();
+          if (cancelCrash.afterTotals) {
+            const crash = cancelCrash.afterTotals;
+            cancelCrash.afterTotals = null;
+            crash();
+          }
+
+          const now = new Date().toISOString();
+          const parentFields = {
+            applyStatus: "APPLIED" as const,
             baseVersion: current.version ?? 0,
             plannedCancelled: plan.plannedCancelled,
-          });
-        } catch (error) {
-          if (isDuplicateKey(error)) continue;
-          throw error;
-        }
-      } else {
-        await OrderLineCancellationModel.updateOne(
-          { restaurantId, idempotencyKey: input.idempotencyKey, applyStatus: { $ne: "APPLIED" } },
-          {
-            $set: {
-              applyStatus: "PENDING",
-              baseVersion: current.version ?? 0,
-              plannedCancelled: plan.plannedCancelled,
-            },
-          },
-        );
-      }
-
-      const event = makeEvent(
-        "LINE_CANCELLED",
-        `Cancelled lines: ${input.lines.map((line) => `${line.lineId}×${line.quantity}`).join(", ")} — ${reason}`,
-        input.actor,
-        { lines: input.lines, reason, idempotencyKey: input.idempotencyKey },
-      );
-
-      const updated = await orderRepository.replaceItemsAndTotals(restaurantId, orderId, {
-        items: plan.items,
-        ...billMoneyFields(bill),
-        event,
-        expectedVersion: current.version ?? 0,
-      });
-      if (!updated) continue;
-
-      let finalOrder = updated;
-      const allGone = plan.items.every((item) => (item.cancelledQuantity ?? 0) >= item.quantity);
-      if (allGone && canTransition(updated.status, "CANCELLED")) {
-        const cancelEvent = makeEvent(
-          "STATUS_CHANGED",
-          "Order cancelled after all lines cancelled",
-          input.actor,
-          { from: updated.status, to: "CANCELLED" },
-        );
-        const cancelled = await orderRepository.updateStatus(
-          restaurantId,
-          orderId,
-          updated.status,
-          "CANCELLED",
-          cancelEvent,
-        );
-        if (cancelled) finalOrder = cancelled;
-      }
-
-      let restoreStatus: OrderLineCancellation["inventoryRestoreStatus"] = "NONE";
-      if (restaurant && hasRestaurantFeature(restaurant, "INVENTORY")) {
-        const restore = await inventoryService.restoreForCancelledLines(
-          restaurant,
-          finalOrder,
-          input.lines.map((line) => line.lineId),
-          current.status,
-        );
-        if (restore.skipped) restoreStatus = "NONE";
-        else if ("blocked" in restore && restore.blocked) restoreStatus = "BLOCKED";
-        else restoreStatus = "RESTORED";
-      }
-
-      const saved: OrderLineCancellation[] = [];
-      for (const request of input.lines) {
-        const row = {
-          id: `olc-${randomUUID()}`,
-          restaurantId,
-          orderId,
-          orderLineId: request.lineId,
-          quantityCancelled: request.quantity,
-          reason,
-          inventoryRestoreStatus: restoreStatus,
-          idempotencyKey: `${input.idempotencyKey}:${request.lineId}`,
-          actor: input.actor,
-          createdAt: now,
-          applyStatus: "APPLIED" as const,
-        };
-        try {
-          const created = await OrderLineCancellationModel.create(row);
-          saved.push(toDomain<OrderLineCancellation>(created.toObject()));
-        } catch (error) {
-          if (!isDuplicateKey(error)) throw error;
-          const again = await OrderLineCancellationModel.findOne({
+            inventoryRestoreStatus: "PENDING" as const,
+            priorOrderStatus: current.status,
+            quantityCancelled: input.lines.reduce((sum, line) => sum + line.quantity, 0),
+            reason,
+          };
+          if (marker) {
+            await OrderLineCancellationModel.updateOne(
+              { _id: marker._id },
+              { $set: parentFields },
+              { session },
+            );
+          } else {
+            await OrderLineCancellationModel.create([{
+              id: `olc-parent-${randomUUID()}`,
+              restaurantId,
+              orderId,
+              orderLineId: "*",
+              idempotencyKey: input.idempotencyKey,
+              actor: input.actor,
+              createdAt: now,
+              ...parentFields,
+            }], { session });
+          }
+          const lineRows = input.lines.map((request) => ({
+            id: `olc-${randomUUID()}`,
             restaurantId,
-            idempotencyKey: row.idempotencyKey,
-          }).lean();
-          if (again) saved.push(toDomain<OrderLineCancellation>(again));
-        }
+            orderId,
+            orderLineId: request.lineId,
+            quantityCancelled: request.quantity,
+            reason,
+            inventoryRestoreStatus: "PENDING" as const,
+            idempotencyKey: `${input.idempotencyKey}:${request.lineId}`,
+            actor: input.actor,
+            createdAt: now,
+            applyStatus: "APPLIED" as const,
+          }));
+          if (lineRows.length) await OrderLineCancellationModel.create(lineRows, { session });
+          const amountPaid = updated.payment?.amountPaid ?? 0;
+          outcome = {
+            order: staffOrderView(updated),
+            cancellations: lineRows.map((row) => toDomain<OrderLineCancellation>(row)),
+            duplicate: false,
+            refundSuggested: amountPaid > updated.total ? roundMoney(amountPaid - updated.total) : 0,
+          };
+        });
+      } catch (error) {
+        if (error instanceof VersionConflict) continue;
+        if (error instanceof OrderServiceError) throw error;
+        if (isDuplicateKey(error)) continue;
+        throw error;
+      } finally {
+        await session.endSession();
       }
 
-      await OrderLineCancellationModel.updateOne(
-        { restaurantId, idempotencyKey: input.idempotencyKey },
-        { $set: { applyStatus: "APPLIED", inventoryRestoreStatus: restoreStatus } },
-      );
-
-      if (finalOrder.status === "CANCELLED") {
-        await this.runInventorySideEffects(restaurantId, finalOrder, current.status);
+      if (!outcome) continue;
+      if (!outcome.duplicate || outcome.restorePending) {
+        await this.settleCancellationInventory(restaurantId, orderId, input.idempotencyKey);
       }
-
-      const amountPaid = finalOrder.payment?.amountPaid ?? 0;
-      return {
-        order: staffOrderView(finalOrder),
-        cancellations: saved,
-        duplicate: false as const,
-        refundSuggested: amountPaid > finalOrder.total ? roundMoney(amountPaid - finalOrder.total) : 0,
-      };
+      return outcome;
     }
 
     throw new OrderServiceError("Order changed during cancellation. Please retry.", 409);
   }
 
-  listLineCancellations(restaurantId: string, orderId: string) {
-    return connectToDatabase().then(async () => {
-      const rows = await OrderLineCancellationModel.find({
-        restaurantId,
-        orderId,
-        orderLineId: { $ne: "*" },
-      })
-        .sort({ createdAt: -1 })
-        .lean();
-      return rows.map((row) => toDomain<OrderLineCancellation>(row));
-    });
+  /**
+   * Finish inventory restore for one applied cancellation. Idempotent.
+   * A full cancel uses the whole-order restore. A partial cancel restores only those lines.
+   */
+  async settleCancellationInventory(restaurantId: string, orderId: string, idempotencyKey: string) {
+    await connectToDatabase();
+    const parent = await OrderLineCancellationModel.findOne({ restaurantId, idempotencyKey }).lean();
+    if (!parent) return { status: "APPLIED" as const };
+    const current = parent.inventoryRestoreStatus as string | undefined;
+    if (current === "APPLIED" || current === "RESTORED" || current === "BLOCKED" || current === "NONE") {
+      return { status: "APPLIED" as const };
+    }
+    const order = await orderRepository.findByRestaurantAndId(restaurantId, orderId);
+    if (!order) throw new OrderServiceError("Order not found.", 404);
+    const lineIds = Object.keys((parent.plannedCancelled as Record<string, number> | undefined) ?? {});
+    const priorStatus = (parent.priorOrderStatus as RestaurantOrder["status"] | undefined) ?? order.status;
+    const allGone = order.items.every((item) => (item.cancelledQuantity ?? 0) >= item.quantity);
+    let status: "APPLIED" | "FAILED" = "APPLIED";
+    try {
+      const restaurant = await restaurantService.getById(restaurantId);
+      if (restaurant && hasRestaurantFeature(restaurant, "INVENTORY")) {
+        const result = allGone
+          ? await inventoryService.maybeRestoreForCancelledOrder(restaurant, order, priorStatus)
+          : await inventoryService.restoreForCancelledLines(restaurant, order, lineIds, priorStatus);
+        if (result && "blocked" in result && result.blocked) status = "FAILED";
+      }
+    } catch (error) {
+      status = "FAILED";
+      await this.markInventoryRestore(restaurantId, orderId, idempotencyKey, lineIds, status);
+      throw error;
+    }
+    await this.markInventoryRestore(restaurantId, orderId, idempotencyKey, lineIds, status);
+    return { status };
+  }
+
+  /** Retry every pending or failed restore for an order. Safe to call more than once. */
+  async retryInventoryRestores(restaurantId: string, orderId: string) {
+    await connectToDatabase();
+    const pending = await OrderLineCancellationModel.find({
+      restaurantId,
+      orderId,
+      orderLineId: "*",
+      inventoryRestoreStatus: { $in: ["PENDING", "FAILED"] },
+    }).lean();
+    const results = [];
+    for (const row of pending) {
+      try {
+        results.push(await this.settleCancellationInventory(restaurantId, orderId, String(row.idempotencyKey)));
+      } catch {
+        results.push({ status: "FAILED" as const });
+      }
+    }
+    return results;
+  }
+
+  private async markInventoryRestore(
+    restaurantId: string,
+    orderId: string,
+    idempotencyKey: string,
+    lineIds: string[],
+    status: "APPLIED" | "FAILED",
+  ) {
+    const keys = [idempotencyKey, ...lineIds.map((lineId) => `${idempotencyKey}:${lineId}`)];
+    await OrderLineCancellationModel.updateMany(
+      { restaurantId, orderId, idempotencyKey: { $in: keys } },
+      { $set: { inventoryRestoreStatus: status } },
+    );
+  }
+
+  async listLineCancellations(restaurantId: string, orderId: string) {
+    await this.retryInventoryRestores(restaurantId, orderId);
+    await connectToDatabase();
+    const rows = await OrderLineCancellationModel.find({
+      restaurantId,
+      orderId,
+      orderLineId: { $ne: "*" },
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+    return rows.map((row) => toDomain<OrderLineCancellation>(row));
   }
 }
 

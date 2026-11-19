@@ -365,4 +365,183 @@ test("concurrent payments do not lose updates and a retry key is applied once", 
     () => orderService.recordPayment(id, retryOrder.id, "CASH", actor, 1, `pay-${randomUUID()}`),
     /already/,
   );
+
+  const shared = `pay-${randomUUID()}`;
+  const raced = await orderService.createPosOrder(id, id, {
+    channel: "POS_TAKEAWAY",
+    idempotencyKey: randomUUID(),
+    items: [{ dishId: `${id}-plain`, quantity: 1, selections: [] }],
+  }, actor);
+  const [firstPay, secondPay] = await Promise.all([
+    orderService.recordPayment(id, raced.id, "CASH", actor, undefined, shared),
+    orderService.recordPayment(id, raced.id, "UPI", actor, undefined, shared),
+  ]);
+  assert.equal(firstPay.payment.ledger?.length, 1);
+  assert.equal(secondPay.payment.ledger?.length, 1);
+  assert.equal(firstPay.payment.amountPaid, secondPay.payment.amountPaid);
+});
+
+test("a crash after the totals write rolls back, and a full cancel retries cleanly", async (t) => {
+  if (!enabled) {
+    t.skip("npm run test:integration starts the replica set");
+    return;
+  }
+  const { orderService, cancelCrash } = await import("../../lib/services/order.service");
+  const { orderRepository } = await import("../../lib/repositories/order.repository");
+  const { OrderLineCancellationModel } = await import("../../lib/db/models");
+  const { id } = await seedOutlet();
+  const created = await orderService.createPosOrder(id, id, {
+    channel: "POS_TAKEAWAY",
+    idempotencyKey: randomUUID(),
+    items: [{ dishId: `${id}-plain`, quantity: 2, selections: [] }],
+  }, actor);
+  const before = await orderRepository.findByRestaurantAndId(id, created.id);
+  assert.ok(before);
+  const lineIdForCrash = created.items[0]!.lineId!;
+  cancelCrash.afterTotals = () => {
+    throw new Error("crash after totals");
+  };
+  await assert.rejects(
+    () => orderService.cancelOrderLines(id, created.id, {
+      lines: [{ lineId: lineIdForCrash, quantity: 2 }],
+      reason: "crash between totals and marker",
+      idempotencyKey: randomUUID(),
+      actor,
+    }),
+    /crash after totals/,
+  );
+  const afterAbort = await orderRepository.findByRestaurantAndId(id, created.id);
+  assert.equal(afterAbort?.total, before!.total);
+  assert.equal(afterAbort?.items[0]?.cancelledQuantity ?? 0, 0);
+
+  const key = randomUUID();
+  const lineId = created.items[0]!.lineId!;
+  const full = await orderService.cancelOrderLines(id, created.id, {
+    lines: [{ lineId, quantity: 2 }],
+    reason: "guest left",
+    idempotencyKey: key,
+    actor,
+  });
+  assert.equal(full.order.status, "CANCELLED");
+  const marker = await OrderLineCancellationModel.findOne({ restaurantId: id, idempotencyKey: key }).lean();
+  assert.equal(marker?.applyStatus, "APPLIED");
+  assert.equal(marker?.inventoryRestoreStatus, "APPLIED");
+  const again = await orderService.cancelOrderLines(id, created.id, {
+    lines: [{ lineId, quantity: 2 }],
+    reason: "guest left",
+    idempotencyKey: key,
+    actor,
+  });
+  assert.equal(again.duplicate, true);
+  assert.equal(again.order.status, "CANCELLED");
+  assert.equal(again.order.total, full.order.total);
+
+  const split = await orderService.createPosOrder(id, id, {
+    channel: "POS_TAKEAWAY",
+    idempotencyKey: randomUUID(),
+    items: [{ dishId: `${id}-plain`, quantity: 2, selections: [] }],
+  }, actor);
+  const splitLine = split.items[0]!.lineId!;
+  await Promise.all([
+    orderService.cancelOrderLines(id, split.id, {
+      lines: [{ lineId: splitLine, quantity: 1 }],
+      reason: "one guest",
+      idempotencyKey: randomUUID(),
+      actor,
+    }),
+    orderService.cancelOrderLines(id, split.id, {
+      lines: [{ lineId: splitLine, quantity: 1 }],
+      reason: "other guest",
+      idempotencyKey: randomUUID(),
+      actor,
+    }),
+  ]);
+  const both = await orderRepository.findByRestaurantAndId(id, split.id);
+  assert.equal(both?.items[0]?.cancelledQuantity, 2);
+  assert.equal(both?.status, "CANCELLED");
+});
+
+test("kitchen prep and an append do not wipe each other", async (t) => {
+  if (!enabled) {
+    t.skip("npm run test:integration starts the replica set");
+    return;
+  }
+  const { orderService } = await import("../../lib/services/order.service");
+  const { orderRepository } = await import("../../lib/repositories/order.repository");
+  const { id } = await seedOutlet();
+  const created = await orderService.createPosOrder(id, id, {
+    channel: "POS_TAKEAWAY",
+    idempotencyKey: randomUUID(),
+    items: [{ dishId: `${id}-plain`, quantity: 1, selections: [] }],
+  }, actor);
+  const lineId = created.items[0]!.lineId!;
+  await Promise.all([
+    (async () => {
+      for (let attempt = 0; attempt < 6; attempt += 1) {
+        const current = await orderRepository.findByRestaurantAndId(id, created.id);
+        const updated = await orderRepository.updateItemPreparation(
+          id,
+          created.id,
+          lineId,
+          "PREPARING",
+          {
+            id: `evt-${randomUUID()}`,
+            type: "ITEM_PREP",
+            at: new Date().toISOString(),
+            message: "prep",
+          },
+          current?.version ?? 0,
+        );
+        if (updated) return;
+      }
+      throw new Error("preparation update lost the version race");
+    })(),
+    orderService.appendItemsToOrder(id, id, created.id, {
+      idempotencyKey: randomUUID(),
+      items: [{ dishId: `${id}-side`, quantity: 1, selections: [] }],
+    }, actor),
+  ]);
+  const stored = await orderRepository.findByRestaurantAndId(id, created.id);
+  assert.equal(stored?.items.length, 2);
+  assert.equal(stored?.items.find((item) => item.lineId === lineId)?.preparationStatus, "PREPARING");
+});
+
+test("a refund racing an append keeps the version of whichever write lands", async (t) => {
+  if (!enabled) {
+    t.skip("npm run test:integration starts the replica set");
+    return;
+  }
+  const { orderService } = await import("../../lib/services/order.service");
+  const { orderRepository } = await import("../../lib/repositories/order.repository");
+  const { id } = await seedOutlet();
+  const created = await orderService.createPosOrder(id, id, {
+    channel: "POS_TAKEAWAY",
+    idempotencyKey: randomUUID(),
+    items: [{ dishId: `${id}-plain`, quantity: 1, selections: [] }],
+  }, actor);
+  await orderService.recordPayment(id, created.id, "CASH", actor, undefined, `pay-${randomUUID()}`);
+  const before = await orderRepository.findByRestaurantAndId(id, created.id);
+  const results = await Promise.allSettled([
+    orderService.refundPayment(id, created.id, {
+      amount: before!.total,
+      method: "CASH",
+      reason: "guest returned the dish",
+    }, actor),
+    orderService.appendItemsToOrder(id, id, created.id, {
+      idempotencyKey: randomUUID(),
+      items: [{ dishId: `${id}-side`, quantity: 1, selections: [] }],
+    }, actor),
+  ]);
+  const fulfilled = results.filter((result) => result.status === "fulfilled");
+  assert.equal(fulfilled.length, 1);
+  const stored = await orderRepository.findByRestaurantAndId(id, created.id);
+  assert.equal(stored?.version, (before!.version ?? 0) + 1);
+  const refundWon = results[0].status === "fulfilled";
+  if (refundWon) {
+    assert.equal(stored?.payment?.status, "REFUNDED");
+    assert.equal(stored?.items.length, 1);
+  } else {
+    assert.equal(stored?.payment?.status, "PAID");
+    assert.equal(stored?.items.length, 2);
+  }
 });

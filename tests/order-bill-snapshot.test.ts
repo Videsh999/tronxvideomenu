@@ -3,6 +3,7 @@ import test from "node:test";
 import { calculateRestaurantBill } from "../lib/billing/calculate-bill";
 import {
   billFromStoredLines,
+  freezeBillingSettings,
   linesReflectCancellation,
   planLineCancellation,
   snapshotGstRate,
@@ -85,14 +86,24 @@ test("inclusive tax is extracted once and cancel recomputes every GST component"
   assert.equal(planned.items[0]?.cancelledQuantity, 1);
   assert.equal(planned.items[0]?.gstRateSnapshot, 5);
   assert.equal(planned.items[0]?.unitPriceSnapshot, 105);
+  const frozen = freezeBillingSettings(inclusive);
   const after = billFromStoredLines({
     items: planned.items,
-    billing: { ...inclusive, priceMode: "EXCLUSIVE", supplyType: "INTER_STATE", gstRatePercent: 18 },
-    orderTaxRatePercent: 18,
+    billing: frozen,
     historicalBill: before,
   });
   assert.equal(after.priceMode, "INCLUSIVE");
   assert.equal(after.supplyType, "INTRA_STATE");
+  assert.equal(after.packagingCharge, 10);
+  assert.equal(after.serviceCharge, 20);
+  const legacy = billFromStoredLines({
+    items: planned.items,
+    billing: null,
+    historicalBill: before,
+  });
+  assert.equal(legacy.priceMode, "INCLUSIVE");
+  assert.equal(legacy.packagingCharge, before.packagingCharge);
+  assert.equal(legacy.serviceCharge, before.serviceCharge);
   assert.equal(after.igstAmount, 0);
   assert.equal(linesReflectCancellation(planned.items, planned.plannedCancelled), true);
   assert.equal(linesReflectCancellation(items, planned.plannedCancelled), false);

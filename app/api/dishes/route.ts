@@ -6,6 +6,7 @@ import { addonService } from "@/lib/services/addon.service";
 import { restaurantService } from "@/lib/services/restaurant.service";
 import { requireRestaurantAdmin } from "@/lib/auth-server";
 import { requireRestaurantFeature } from "@/lib/feature-access";
+import { sessionOwnsOutlet } from "@/lib/security/outlet-scope";
 
 export async function GET(request: Request) {
   try {
@@ -15,7 +16,7 @@ export async function GET(request: Request) {
     const categoryId = searchParams.get("categoryId");
     const restaurantId = searchParams.get("restaurantId");
 
-    if (restaurantId !== admin.restaurantId || (!restaurantId && !categoryId)) {
+    if (!sessionOwnsOutlet(admin.restaurantId, restaurantId) || (!restaurantId && !categoryId)) {
       return NextResponse.json(
         { success: false, error: "Restaurant not found" },
         { status: 404 },

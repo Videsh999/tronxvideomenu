@@ -12,23 +12,66 @@ import { lineItemTotal, roundMoney } from "@/lib/order-pricing";
 /**
  * Snapshot policy for order money.
  *
- * Frozen on the line when it is added (never re-read from the live catalog on append or cancel):
- * dish name, variant id and name, unit price, add-on names and unit prices, item discount,
- * and `gstRateSnapshot` (dish, then category, then outlet rate at that moment).
+ * Frozen on the line when it is added:
+ * dish name, variant, unit price, add-on prices, item discount, and `gstRateSnapshot`.
  *
- * Frozen on the order from the first `billSnapshot` when present:
- * `priceMode` and `supplyType`. Later toggles of those outlet settings must not tax a line twice
- * or flip CGST/SGST to IGST for lines already on the check.
+ * Frozen on the order as `billingSettingsSnapshot` at create:
+ * price mode, supply type, GST rate, packaging method/amount/percent, and service-charge type/amount/percent.
+ * Append and cancel pass that object into `calculateRestaurantBill`. They do not read the outlet's
+ * current packaging or service settings.
  *
- * Recomputed when lines are added or cancelled, always through `calculateRestaurantBill`:
- * packaging, service charge, discount cap, tax split, and total. Packaging and service charge
- * follow the outlet settings at recompute time because they depend on the open check, not on a
- * historical catalog price.
- *
- * Lines written before `gstRateSnapshot` existed keep `order.taxRatePercent`. They do not pick up
- * a later dish or category rate.
+ * Orders written before `billingSettingsSnapshot` existed are reconciled from `billSnapshot`:
+ * price mode and supply type come from that breakdown, and packaging and service charge are frozen
+ * as a fixed per-order amount equal to the amounts already stored. Mixed-rate lines keep
+ * `gstRateSnapshot`, or the order's stored `taxRatePercent` when the line snapshot is missing.
  */
-export const ORDER_BILL_SNAPSHOT_POLICY = "line price and gstRateSnapshot are historical; priceMode and supplyType stick to the first billSnapshot; packaging and service charge recompute from current outlet settings via calculateRestaurantBill";
+export const ORDER_BILL_SNAPSHOT_POLICY = "line price and gstRateSnapshot are historical; billingSettingsSnapshot freezes price mode, supply type, packaging, and service charge; legacy orders freeze those charges from billSnapshot";
+
+const BILLING_KEYS = [
+  "taxRatePercent",
+  "taxLabel",
+  "priceMode",
+  "gstEnabled",
+  "gstRatePercent",
+  "supplyType",
+  "packagingEnabled",
+  "packagingMethod",
+  "packagingAmount",
+  "packagingPercent",
+  "serviceChargeEnabled",
+  "serviceChargeType",
+  "serviceChargeAmount",
+  "serviceChargePercent",
+] as const;
+
+export function freezeBillingSettings(
+  billing?: RestaurantBillingSettings | null,
+): RestaurantBillingSettings {
+  const source = billing ?? {};
+  const frozen: RestaurantBillingSettings = {};
+  for (const key of BILLING_KEYS) {
+    const value = source[key];
+    if (value !== undefined) (frozen as Record<string, unknown>)[key] = value;
+  }
+  return frozen;
+}
+
+/** Legacy orders have no settings snapshot. Freeze the charges already stored on the bill. */
+export function legacyFrozenBilling(bill?: BillBreakdown | null): RestaurantBillingSettings {
+  return {
+    priceMode: bill?.priceMode,
+    supplyType: bill?.supplyType,
+    taxLabel: bill?.taxLabel,
+    gstRatePercent: bill?.gstRatePercent,
+    gstEnabled: (bill?.gstRatePercent ?? 0) > 0 || (bill?.taxAmount ?? 0) > 0,
+    packagingEnabled: (bill?.packagingCharge ?? 0) > 0,
+    packagingMethod: "PER_ORDER",
+    packagingAmount: bill?.packagingCharge ?? 0,
+    serviceChargeEnabled: (bill?.serviceCharge ?? 0) > 0,
+    serviceChargeType: "FIXED",
+    serviceChargeAmount: bill?.serviceCharge ?? 0,
+  };
+}
 
 export function snapshotGstRate(input: {
   dish?: Pick<Dish, "taxRatePercent"> | null;
@@ -49,14 +92,13 @@ export function lineGstRateForRecompute(
 }
 
 export function billingForRecompute(
-  restaurantBilling: RestaurantBillingSettings | null | undefined,
-  historical: BillBreakdown | null | undefined,
+  frozen?: RestaurantBillingSettings | null,
+  historical?: BillBreakdown | null,
 ): RestaurantBillingSettings {
-  return {
-    ...(restaurantBilling ?? {}),
-    priceMode: historical?.priceMode ?? restaurantBilling?.priceMode,
-    supplyType: historical?.supplyType ?? restaurantBilling?.supplyType,
-  };
+  if (frozen && (frozen.priceMode || frozen.packagingMethod || frozen.serviceChargeType || frozen.gstEnabled != null)) {
+    return freezeBillingSettings(frozen);
+  }
+  return legacyFrozenBilling(historical);
 }
 
 export function billFromStoredLines(input: {

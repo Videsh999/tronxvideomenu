@@ -12,6 +12,7 @@ import type {
   RestaurantTable,
 } from "@/types";
 import { previewStaffCartBill } from "@/lib/billing/preview-cart";
+import { browserPaymentStore, clearPaymentAttempt, paymentAttemptKey } from "@/lib/payments/payment-attempt";
 import { resolveLineTaxRate } from "@/lib/billing/resolve-tax-rate";
 import { lineItemTotal, roundMoney } from "@/lib/order-pricing";
 import { useBarcodeWedge } from "@/components/admin/useBarcodeWedge";
@@ -366,10 +367,15 @@ export default function PosTerminal({
         setRedeemLoyaltyPoints(0);
         setPayAmount(order.total);
 
+        const store = browserPaymentStore();
         const response = await fetch(`/api/orders/${order.id}/payment`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ method: payMethod, amount: order.total }),
+          body: JSON.stringify({
+            method: payMethod,
+            amount: order.total,
+            idempotencyKey: paymentAttemptKey(order.id, store),
+          }),
         });
         const json = await response.json();
         if (!json.success) {
@@ -378,6 +384,7 @@ export default function PosTerminal({
           );
           return;
         }
+        clearPaymentAttempt(order.id, store);
         setPayAmount("");
         setMessage(
           `Order #${order.orderNumber} placed & ${json.data.payment.status} via ${payMethod} · ${money(order.total, currency)}`,
@@ -398,7 +405,11 @@ export default function PosTerminal({
     }
     startTransition(async () => {
       try {
-        const body: { method: PaymentMethod; amount?: number } = { method: payMethod };
+        const store = browserPaymentStore();
+        const body: { method: PaymentMethod; amount?: number; idempotencyKey: string } = {
+          method: payMethod,
+          idempotencyKey: paymentAttemptKey(lastOrderId, store),
+        };
         if (payAmount !== "" && Number(payAmount) > 0) body.amount = Number(payAmount);
         const response = await fetch(`/api/orders/${lastOrderId}/payment`, {
           method: "POST",
@@ -407,6 +418,7 @@ export default function PosTerminal({
         });
         const json = await response.json();
         if (!json.success) throw new Error(json.error || "Payment failed");
+        clearPaymentAttempt(lastOrderId, store);
         setMessage(`Payment ${json.data.payment.status} for order #${json.data.orderNumber}`);
         if (json.data.payment.status === "PAID") {
           setPayAmount("");

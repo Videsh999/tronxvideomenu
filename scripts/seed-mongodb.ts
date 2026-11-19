@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import { demoMenu } from "../lib/constants";
 import { connectToDatabase } from "../lib/db/mongodb";
+import { isLoopbackMongoUri } from "../lib/security/mongo-target";
 import {
   AddonGroupModel,
   AddonModel,
@@ -145,8 +146,7 @@ async function purgeLegacyRestaurantData(): Promise<void> {
 
 async function seed(): Promise<void> {
   const uri = process.env.MONGODB_URI ?? "";
-  const loopback = uri.includes("localhost") || uri.includes("127.0.0.1");
-  if (process.env.NODE_ENV === "production" || process.env.TRONX_DEMO_SEED_CONFIRM !== "localhost" || !loopback) {
+  if (process.env.NODE_ENV === "production" || process.env.TRONX_DEMO_SEED_CONFIRM !== "localhost" || !isLoopbackMongoUri(uri)) {
     console.error(
       "Refusing to seed. Set TRONX_DEMO_SEED_CONFIRM=localhost, keep NODE_ENV off production, and point MONGODB_URI at localhost.",
     );

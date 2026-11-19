@@ -2,11 +2,17 @@ import { NextResponse } from "next/server";
 import { requireAdminRestaurantFeature } from "@/lib/admin-api";
 import { crmService, CrmServiceError } from "@/lib/services/crm.service";
 import { upsertCustomerSchema } from "@/lib/validations";
+import { sessionOwnsOutlet } from "@/lib/security/outlet-scope";
 
 export async function GET(request: Request) {
   const auth = await requireAdminRestaurantFeature("CRM_LOYALTY");
   if (!auth.ok) return auth.response;
-  const query = new URL(request.url).searchParams.get("q") ?? undefined;
+  const url = new URL(request.url);
+  const requestedOutlet = url.searchParams.get("restaurantId");
+  if (requestedOutlet && !sessionOwnsOutlet(auth.restaurantId, requestedOutlet)) {
+    return NextResponse.json({ success: false, error: "Restaurant not found" }, { status: 404 });
+  }
+  const query = url.searchParams.get("q") ?? undefined;
   const data = await crmService.listCustomers(auth.restaurantId, query);
   return NextResponse.json({ success: true, data }, { headers: { "Cache-Control": "no-store" } });
 }

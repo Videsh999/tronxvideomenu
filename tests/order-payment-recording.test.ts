@@ -5,7 +5,7 @@ import type { RestaurantOrder, PaymentAuditActor, PaymentAuditEvent } from "../t
 
 test("recordPaymentSchema validates supported payment methods and rejects unrecognized input", () => {
   for (const method of ["CASH", "UPI", "CARD"] as const) {
-    const parsed = recordPaymentSchema.parse({ method });
+    const parsed = recordPaymentSchema.parse({ method, idempotencyKey: "pay-attempt-1" });
     assert.equal(parsed.method, method);
   }
 
@@ -19,9 +19,10 @@ test("recordPaymentSchema validates supported payment methods and rejects unreco
   );
 
   // Partial payments may include a positive amount; reject non-positive.
-  const withAmount = recordPaymentSchema.parse({ method: "CASH", amount: 500 });
+  const withAmount = recordPaymentSchema.parse({ method: "CASH", amount: 500, idempotencyKey: "pay-attempt-1" });
   assert.equal(withAmount.amount, 500);
-  assert.throws(() => recordPaymentSchema.parse({ method: "CASH", amount: 0 }));
+  assert.throws(() => recordPaymentSchema.parse({ method: "CASH", amount: 0, idempotencyKey: "pay-attempt-1" }));
+  assert.throws(() => recordPaymentSchema.parse({ method: "CASH" }));
 });
 
 test("correctPaymentSchema requires reason >= 5 characters and method for CORRECTION", () => {

@@ -72,7 +72,8 @@ export function classifyApiRequest(method: string, pathname: string): ApiAuthCla
   if (
     (method === "POST" && pathname === "/api/pos/orders") ||
     (method === "POST" && /^\/api\/orders\/[^/]+\/payment$/.test(pathname)) ||
-    (method === "POST" && /^\/api\/orders\/[^/]+\/cancel-lines$/.test(pathname))
+    (method === "POST" && /^\/api\/orders\/[^/]+\/cancel-lines$/.test(pathname)) ||
+    (method === "POST" && /^\/api\/orders\/[^/]+\/restore-inventory$/.test(pathname))
   ) {
     return "floor";
   }
