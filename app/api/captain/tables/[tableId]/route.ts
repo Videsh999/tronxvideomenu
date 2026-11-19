@@ -98,6 +98,12 @@ export async function PATCH(
           { status: 409 },
         );
       }
+      if (!parsed.data.guestCount) {
+        return NextResponse.json(
+          { success: false, error: "Number of guests is required." },
+          { status: 400 },
+        );
+      }
       nextStatus = "OCCUPIED";
       break;
     case "REQUEST_BILL":
@@ -153,16 +159,30 @@ export async function PATCH(
 
   let updated = table;
   if (nextStatus) {
-    const floor = await tableRepository.setFloorStatus(captain.restaurantId, tableId, nextStatus);
+    const session =
+      parsed.data.action === "START_SERVICE"
+        ? { guestCount: parsed.data.guestCount, occupiedSince: new Date().toISOString() }
+        : undefined;
+    const floor = await tableRepository.setFloorStatus(
+      captain.restaurantId,
+      tableId,
+      nextStatus,
+      session,
+    );
     if (!floor) {
       return NextResponse.json({ success: false, error: "Unable to update table" }, { status: 500 });
     }
     updated = floor;
   }
 
-  if (parsed.data.action === "SET_GUEST_COUNT" && parsed.data.guestCount && active) {
-    // Guest count is stored on the order when present.
-    await tableRepository.update(captain.restaurantId, tableId, {});
+  if (parsed.data.action === "SET_GUEST_COUNT") {
+    if (!parsed.data.guestCount) {
+      return NextResponse.json({ success: false, error: "Number of guests is required." }, { status: 400 });
+    }
+    const saved = await tableRepository.update(captain.restaurantId, tableId, {
+      guestCount: parsed.data.guestCount,
+    });
+    if (saved) updated = saved;
   }
 
   if (parsed.data.note && parsed.data.action === "ADD_NOTE") {

@@ -43,6 +43,7 @@ export function statusLabel(status: OrderStatus): string {
     CANCELLED: "Cancelled",
     REJECTED: "Rejected",
     REFUNDED: "Refunded",
+    MERGED: "Merged",
   };
   return labels[status];
 }

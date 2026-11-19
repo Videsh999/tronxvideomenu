@@ -29,6 +29,7 @@ export const restaurantSchema = z.object({
   coverImage: z.string().trim().optional(),
   logoUrl: z.string().trim().optional(),
   coverUrl: z.string().trim().optional(),
+  coverVideo: z.string().trim().optional(),
   description: z
     .string()
     .trim()

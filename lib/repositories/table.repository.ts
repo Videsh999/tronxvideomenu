@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { ClientSession } from "mongoose";
 import type { RestaurantTable } from "@/types";
 import type { ITableRepository } from "./types";
 import { connectToDatabase } from "@/lib/db/mongodb";
@@ -55,6 +56,7 @@ export class TableRepository implements ITableRepository {
 
   async markOccupiedForAcceptedOrder(restaurantId: string, id: string) {
     await connectToDatabase();
+    const now = new Date().toISOString();
     const result = await TableModel.updateOne(
       {
         restaurantId,
@@ -62,7 +64,15 @@ export class TableRepository implements ITableRepository {
         isActive: true,
         status: { $in: ["OPEN", "OCCUPIED", "BILL_REQUESTED", "PAYMENT_PENDING"] },
       },
-      { $set: { status: "OCCUPIED", updatedAt: new Date().toISOString() } },
+      [
+        {
+          $set: {
+            status: "OCCUPIED",
+            updatedAt: now,
+            occupiedSince: { $ifNull: ["$occupiedSince", now] },
+          },
+        },
+      ],
     );
     return result.matchedCount === 1;
   }
@@ -71,12 +81,22 @@ export class TableRepository implements ITableRepository {
     restaurantId: string,
     id: string,
     status: RestaurantTable["status"],
+    floor?: { guestCount?: number; occupiedSince?: string },
+    db?: ClientSession,
   ) {
     await connectToDatabase();
+    const now = new Date().toISOString();
+    const set: Record<string, unknown> = { status, updatedAt: now };
+    if (floor?.guestCount !== undefined) set.guestCount = floor.guestCount;
+    if (floor?.occupiedSince) set.occupiedSince = floor.occupiedSince;
+    const update =
+      status === "OPEN"
+        ? { $set: set, $unset: { guestCount: "", occupiedSince: "" } }
+        : { $set: set };
     const table = await TableModel.findOneAndUpdate(
       { restaurantId, id, isActive: true },
-      { $set: { status, updatedAt: new Date().toISOString() } },
-      { new: true, runValidators: true },
+      update,
+      { new: true, runValidators: true, session: db },
     ).lean();
     return table ? tableToDomain(table) : null;
   }

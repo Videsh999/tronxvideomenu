@@ -118,6 +118,7 @@ export default function RestaurantProfileForm({
       name: restaurant.name,
       logoUrl: restaurant.logoUrl ?? restaurant.logo ?? "",
       coverUrl: restaurant.coverUrl ?? restaurant.coverImage ?? "",
+      coverVideo: restaurant.coverVideo ?? "",
       description: restaurant.description ?? "",
       tagline: restaurant.tagline ?? "",
       phone: restaurant.phone ?? "",
@@ -214,6 +215,17 @@ export default function RestaurantProfileForm({
                 {...register("coverUrl")}
                 className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-sm text-neutral-900"
               />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="block text-xs font-medium text-neutral-500 mb-1.5">
+                Banner video URL
+              </label>
+              <input
+                {...register("coverVideo")}
+                placeholder="https://…/banner.mp4"
+                className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-sm text-neutral-900"
+              />
+              <p className="mt-1 text-xs text-neutral-400">Plays behind the cover image. Leave empty to keep the photo.</p>
             </div>
           </div>
 

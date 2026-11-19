@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation";
+import CaptainFloor from "@/components/captain/CaptainFloor";
 import { requireCaptain } from "@/lib/auth-server";
-import { orderService } from "@/lib/services/order.service";
-import { tableService } from "@/lib/services/table.service";
-import CaptainTables from "@/components/captain/CaptainTables";
+import { loadCaptainFloor } from "@/lib/captain-floor-load";
 
 export const dynamic = "force-dynamic";
 
@@ -12,19 +11,16 @@ export default async function CaptainTablesPage({ params }: { params: Promise<{ 
   if (error || !captain || !restaurant) redirect(`/captain/${slug}`);
   if (restaurant.slug !== slug) redirect(`/captain/${restaurant.slug}`);
 
-  const [tables, orders] = await Promise.all([
-    tableService.list(captain.restaurantId),
-    orderService.listForRestaurant(captain.restaurantId),
-  ]);
-
+  const floor = await loadCaptainFloor(captain.restaurantId, restaurant.slug);
   return (
-    <CaptainTables
-      slug={slug}
+    <CaptainFloor
+      slug={restaurant.slug}
       captainName={captain.name}
-      initialTables={tables}
-      initialOrders={orders}
-      assignedTableIds={captain.assignedTableIds ?? []}
-      currency={restaurant.currency ?? restaurant.billing?.currency ?? "INR"}
+      permissions={captain.permissions}
+      initialTables={floor.tables}
+      initialOrders={floor.orders}
+      categories={floor.categories}
+      dishes={floor.dishes}
     />
   );
 }
