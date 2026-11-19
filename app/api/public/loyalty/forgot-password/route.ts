@@ -15,12 +15,22 @@ const schema = z
 export async function POST(request: Request) {
   try {
     const input = schema.parse(await request.json());
-    const result = await customerLoyaltyService.requestPasswordReset(input);
+    const result = await customerLoyaltyService.requestPasswordReset({
+      ...input,
+      requestUrl: request.url,
+    });
+
+    const message = result.emailSent
+      ? "If an account exists for that email, a reset link is on its way. Check your inbox and spam folder."
+      : result.mailConfigured
+        ? "If an account exists for that email, a reset link was prepared. Delivery may be delayed — try again shortly or contact the restaurant."
+        : "If an account exists for that email, a reset link is ready below. Email delivery is not configured on this server yet.";
+
     return NextResponse.json({
       success: true,
       data: {
-        message:
-          "If an account exists for that email, a reset link is ready. Check your email when mail delivery is configured, or use the link below if shown.",
+        message,
+        emailSent: result.emailSent,
         resetPath: result.resetPath,
       },
     });

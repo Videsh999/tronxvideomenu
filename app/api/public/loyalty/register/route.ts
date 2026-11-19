@@ -54,8 +54,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: error.message }, { status: error.statusCode });
     }
     const validation = error && typeof error === "object" && "issues" in error;
+    if (!validation) {
+      console.error("[loyalty/register]", error);
+    }
     return NextResponse.json(
-      { success: false, error: validation ? "Invalid details" : "Unable to register" },
+      {
+        success: false,
+        error: validation
+          ? "Invalid details"
+          : process.env.NODE_ENV !== "production" && error instanceof Error
+            ? error.message
+            : "Unable to register",
+      },
       { status: validation ? 400 : 500 },
     );
   }

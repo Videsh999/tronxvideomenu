@@ -3,6 +3,13 @@
 import { useParams, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import Link from "next/link";
+import AuthLayout, {
+  AuthError,
+  AuthFallback,
+  AuthField,
+  AuthSubmit,
+  PasswordInput,
+} from "@/components/shared/AuthLayout";
 
 function ResetForm() {
   const params = useParams<{ slug: string }>();
@@ -13,10 +20,10 @@ function ResetForm() {
   const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   const submit = async () => {
-    setError("");
+    setError(null);
     if (password.length < 8) {
       setError("Password must be at least 8 characters.");
       return;
@@ -26,7 +33,7 @@ function ResetForm() {
       return;
     }
     if (!token) {
-      setError("Reset token is missing.");
+      setError("Reset token is missing. Request a new link from Rewards → Forgot password.");
       return;
     }
     setBusy(true);
@@ -47,72 +54,82 @@ function ResetForm() {
   };
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-4 py-10">
-      <p className="text-xs font-bold uppercase tracking-[0.16em] text-neutral-400">Loyalty</p>
-      <h1 className="mt-2 text-3xl font-bold text-neutral-900">Reset password</h1>
-      <p className="mt-2 text-sm text-neutral-600">
-        Choose a new password for your optional rewards account. Ordering never requires login.
-      </p>
-
+    <AuthLayout
+      eyebrow="Loyalty rewards"
+      title={done ? "Password updated" : "Reset password"}
+      description={
+        done
+          ? "Your rewards password is ready. You can sign in from the menu Rewards button."
+          : "Choose a new password for your optional rewards account. Ordering never requires login."
+      }
+      highlights={[
+        "One-hour secure reset link",
+        "Points stay on your account after reset",
+        "Sign in only when you want rewards",
+      ]}
+    >
       {done ? (
-        <div className="mt-8 space-y-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
-          <p className="text-sm font-semibold text-emerald-900">Password updated.</p>
+        <div className="space-y-4">
+          <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-3 text-sm text-emerald-900">
+            Password saved. Use Rewards on the guest menu to sign in.
+          </p>
           <Link
             href={`/menu/${slug}`}
-            className="inline-flex h-11 items-center justify-center rounded-full bg-neutral-900 px-5 text-sm font-bold text-white"
+            className="bg-brand-gradient inline-flex h-12 w-full items-center justify-center rounded-xl text-sm font-bold text-white"
           >
             Back to menu
           </Link>
         </div>
       ) : (
         <form
-          className="mt-8 space-y-3"
+          className="space-y-5"
           onSubmit={(event) => {
             event.preventDefault();
             void submit();
           }}
         >
-          <label className="block text-xs font-semibold text-neutral-600">
-            New password
-            <input
-              required
-              type="password"
-              minLength={8}
+          <AuthError message={error} />
+          {!token ? (
+            <p className="rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3 text-sm text-amber-900">
+              This page needs a valid reset token. Open Rewards on the menu and use Forgot password.
+            </p>
+          ) : null}
+          <AuthField label="New password">
+            <PasswordInput
               value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              className="mt-1 h-11 w-full rounded-xl border border-neutral-200 px-3 text-sm outline-none focus:border-neutral-900"
+              onChange={setPassword}
               autoComplete="new-password"
-            />
-          </label>
-          <label className="block text-xs font-semibold text-neutral-600">
-            Confirm password
-            <input
-              required
-              type="password"
               minLength={8}
-              value={confirm}
-              onChange={(event) => setConfirm(event.target.value)}
-              className="mt-1 h-11 w-full rounded-xl border border-neutral-200 px-3 text-sm outline-none focus:border-neutral-900"
-              autoComplete="new-password"
+              placeholder="At least 8 characters"
             />
-          </label>
-          {error ? <p className="text-sm text-rose-700">{error}</p> : null}
-          <button
-            type="submit"
-            disabled={busy || !token}
-            className="h-11 w-full rounded-full bg-neutral-900 text-sm font-bold text-white disabled:opacity-50"
-          >
-            {busy ? "Saving…" : "Save new password"}
-          </button>
+          </AuthField>
+          <AuthField label="Confirm password">
+            <PasswordInput
+              value={confirm}
+              onChange={setConfirm}
+              autoComplete="new-password"
+              minLength={8}
+              placeholder="Repeat password"
+            />
+          </AuthField>
+          <AuthSubmit busy={busy} label="Save new password" busyLabel="Saving…" />
+          <p className="text-center text-xs text-neutral-400">
+            <Link
+              href={`/menu/${slug}`}
+              className="font-semibold text-neutral-600 underline-offset-4 hover:text-neutral-900 hover:underline"
+            >
+              Back to guest menu
+            </Link>
+          </p>
         </form>
       )}
-    </main>
+    </AuthLayout>
   );
 }
 
 export default function LoyaltyResetPage() {
   return (
-    <Suspense fallback={<main className="grid min-h-screen place-items-center text-sm text-neutral-500">Loading…</main>}>
+    <Suspense fallback={<AuthFallback />}>
       <ResetForm />
     </Suspense>
   );

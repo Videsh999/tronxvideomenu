@@ -125,11 +125,14 @@ export class CrmRepository {
   ): Promise<CustomerProfile> {
     await connectToDatabase();
     const now = new Date().toISOString();
+    // createdAt must only appear in $setOnInsert — putting it in both $set and
+    // $setOnInsert makes MongoDB reject the update with a path conflict.
+    const { createdAt, updatedAt: _ignoredUpdatedAt, ...fields } = data;
     const updated = await CustomerProfileModel.findOneAndUpdate(
       { restaurantId: data.restaurantId, phone: data.phone },
       {
-        $set: { ...data, updatedAt: now },
-        $setOnInsert: { createdAt: data.createdAt ?? now },
+        $set: { ...fields, updatedAt: now },
+        $setOnInsert: { createdAt: createdAt ?? now },
       },
       { upsert: true, new: true },
     ).lean();

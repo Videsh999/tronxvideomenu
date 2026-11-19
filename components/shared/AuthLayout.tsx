@@ -18,7 +18,10 @@ export default function AuthLayout({ eyebrow, title, description, highlights, ch
     <main className="grid min-h-dvh bg-neutral-50 text-neutral-900 lg:grid-cols-[1.05fr_1fr] lg:bg-background">
       <aside className="relative hidden overflow-hidden border-r border-neutral-200 lg:flex lg:flex-col lg:justify-between lg:p-12">
         <div className="pointer-events-none absolute inset-0 bg-grid" />
-        <Link href="/" className="relative w-fit"><BrandMark subtitle="Digital video menus" /></Link>
+        <div className="pointer-events-none absolute -left-24 top-1/3 h-72 w-72 rounded-full bg-neutral-900/[0.04] blur-3xl" />
+        <Link href="/" className="relative w-fit">
+          <BrandMark subtitle="Digital video menus" />
+        </Link>
         <div className="relative max-w-md">
           <p className="text-xs font-bold uppercase tracking-[0.24em] text-neutral-500">{eyebrow}</p>
           <h2 className="font-display mt-4 text-5xl font-semibold leading-[1.05] tracking-tight">
@@ -36,9 +39,11 @@ export default function AuthLayout({ eyebrow, title, description, highlights, ch
         <p className="relative text-xs text-neutral-400">© {new Date().getFullYear()} TRONX</p>
       </aside>
 
-      <section className="flex flex-col px-5 pb-10 pt-6 sm:px-10 lg:justify-center">
+      <section className="flex min-h-dvh flex-col px-5 pb-[max(2.5rem,env(safe-area-inset-bottom))] pt-[max(1.5rem,env(safe-area-inset-top))] sm:px-10 lg:justify-center">
         <div className="mx-auto flex w-full max-w-md items-center justify-between">
-          <Link href="/" aria-label="TRONX home"><BrandMark /></Link>
+          <Link href="/" aria-label="TRONX home">
+            <BrandMark />
+          </Link>
           <Link href="/" className="inline-flex items-center gap-1.5 text-sm font-semibold text-neutral-500">
             <ArrowLeft className="h-4 w-4" /> Home
           </Link>
@@ -47,6 +52,7 @@ export default function AuthLayout({ eyebrow, title, description, highlights, ch
           <p className="text-sm font-semibold text-neutral-500">{eyebrow}</p>
           <h1 className="mt-1 text-3xl font-black leading-tight">{title}</h1>
           <p className="mt-2 text-base text-neutral-600">{description}</p>
+          <p className="mt-3 text-sm leading-snug text-neutral-500 lg:hidden">{highlights[0]}</p>
           <div className="mt-6 rounded-3xl border border-neutral-200 bg-white p-5 shadow-sm">{children}</div>
         </div>
       </section>
@@ -145,7 +151,7 @@ export function AuthSubmit({ busy, label, busyLabel }: { busy: boolean; label: s
 
 export function AuthFallback() {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-background text-neutral-500">
+    <main className="flex min-h-dvh items-center justify-center bg-background text-neutral-500">
       <Loader2 className="h-5 w-5 animate-spin" />
       <span className="sr-only">Loading…</span>
     </main>

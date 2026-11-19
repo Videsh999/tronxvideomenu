@@ -35,6 +35,19 @@ export function classifyApiRequest(method: string, pathname: string): ApiAuthCla
     return "public";
   }
 
+  // Guest loyalty: anonymous at the edge. Handlers set/clear the customer cookie.
+  // Do not require a customer session here — register/login/forgot/reset must work without one.
+  if (
+    pathname === "/api/public/loyalty/me" ||
+    pathname === "/api/public/loyalty/login" ||
+    pathname === "/api/public/loyalty/register" ||
+    pathname === "/api/public/loyalty/forgot-password" ||
+    pathname === "/api/public/loyalty/reset-password" ||
+    pathname === "/api/public/loyalty/logout"
+  ) {
+    return "public";
+  }
+
   if (method === "GET" && /^\/api\/public\/restaurants\/[^/]+\/(?:wifi|translations)$/.test(pathname)) {
     return "public";
   }

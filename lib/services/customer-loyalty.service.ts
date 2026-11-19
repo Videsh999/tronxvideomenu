@@ -8,6 +8,7 @@ import {
   hashPasswordResetToken,
   verifyCustomerPassword,
 } from "@/lib/customer-auth";
+import { buildPasswordResetEmail, getAppBaseUrl, isMailConfigured, sendEmail } from "@/lib/mailer";
 import type { CustomerLoyaltyView, CustomerProfile } from "@/types";
 
 export class CustomerLoyaltyServiceError extends Error {
@@ -123,15 +124,25 @@ export class CustomerLoyaltyService {
     };
   }
 
-  async requestPasswordReset(input: { restaurantSlug: string; email: string }) {
+  async requestPasswordReset(input: {
+    restaurantSlug: string;
+    email: string;
+    requestUrl?: string;
+  }) {
     const restaurant = await restaurantService.getBySlug(input.restaurantSlug);
     if (!restaurant || restaurant.isActive === false) {
       throw new CustomerLoyaltyServiceError("Restaurant not found.", 404);
     }
-    const customer = await crmRepository.findAuthByEmail(restaurant.id, input.email);
+    const email = input.email.trim().toLowerCase();
+    const customer = await crmRepository.findAuthByEmail(restaurant.id, email);
     // Always return generic success to avoid account enumeration.
     if (!customer?.passwordHash) {
-      return { accepted: true as const, resetPath: null as string | null };
+      return {
+        accepted: true as const,
+        emailSent: false,
+        mailConfigured: isMailConfigured(),
+        resetPath: null as string | null,
+      };
     }
     const { token, tokenHash, expiresAt } = createPasswordResetToken();
     await crmRepository.setCustomerCredentials(restaurant.id, customer.id, {
@@ -139,8 +150,40 @@ export class CustomerLoyaltyService {
       passwordResetExpiresAt: expiresAt,
     });
     const resetPath = `/menu/${restaurant.slug}/loyalty/reset?token=${token}`;
-    // No mailer configured yet — return path for client display once; production should email it.
-    return { accepted: true as const, resetPath };
+    const resetUrl = `${getAppBaseUrl(input.requestUrl)}${resetPath}`;
+    const mailConfigured = isMailConfigured();
+
+    if (mailConfigured) {
+      const template = buildPasswordResetEmail({
+        restaurantName: restaurant.name,
+        resetUrl,
+      });
+      const mail = await sendEmail({
+        to: email,
+        subject: template.subject,
+        text: template.text,
+        html: template.html,
+      });
+      if (mail.sent) {
+        return {
+          accepted: true as const,
+          emailSent: true,
+          mailConfigured: true,
+          // Never expose the token once mail delivered successfully.
+          resetPath: null as string | null,
+        };
+      }
+    }
+
+    // Local / unconfigured mail: show the one-time link in the UI so reset still works.
+    // In production with mail configured but send failed, still withhold the path.
+    const exposePath = !mailConfigured || process.env.NODE_ENV !== "production";
+    return {
+      accepted: true as const,
+      emailSent: false,
+      mailConfigured,
+      resetPath: exposePath ? resetPath : null,
+    };
   }
 
   async resetPassword(input: { restaurantSlug: string; token: string; password: string }) {

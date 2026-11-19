@@ -37,3 +37,13 @@ test("path classification separates public, captain, admin, and staff surfaces",
   assert.equal(classifyApiRequest("PATCH", "/api/orders/abc"), "staff");
   assert.equal(classifyApiRequest("GET", "/api/restaurants/moai-kitchen?fullMenu=true".split("?")[0]), "public");
 });
+
+test("guest loyalty routes stay public so register/login/reset work without staff cookies", () => {
+  assert.equal(classifyApiRequest("GET", "/api/public/loyalty/me"), "public");
+  assert.equal(classifyApiRequest("POST", "/api/public/loyalty/login"), "public");
+  assert.equal(classifyApiRequest("POST", "/api/public/loyalty/register"), "public");
+  assert.equal(classifyApiRequest("POST", "/api/public/loyalty/forgot-password"), "public");
+  assert.equal(classifyApiRequest("POST", "/api/public/loyalty/reset-password"), "public");
+  assert.equal(classifyApiRequest("POST", "/api/public/loyalty/logout"), "public");
+  assert.equal(apiSessionAllowed("public", { restaurantAdmin: false, superAdmin: false, captain: false }), true);
+});
