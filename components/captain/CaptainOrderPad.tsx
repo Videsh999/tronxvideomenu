@@ -1,9 +1,26 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Minus, Plus, Search, ShoppingBag, Trash2, X } from "lucide-react";
-import type { CaptainPermissions, Category, Dish, DynamicPaymentRequest, OrderSummary, PaymentMethod, RestaurantBillingSettings, RestaurantTable } from "@/types";
+import { useRouter } from "next/navigation";
+import {
+  ArrowLeft,
+  Minus,
+  Plus,
+  Search,
+  ShoppingBag,
+  Trash2,
+  UtensilsCrossed,
+  X,
+} from "lucide-react";
+import type {
+  CaptainPermissions,
+  Category,
+  Dish,
+  PaymentMethod,
+  RestaurantBillingSettings,
+  RestaurantTable,
+} from "@/types";
 import { lineItemTotal, roundMoney } from "@/lib/order-pricing";
 import { calculateRestaurantBill } from "@/lib/billing/calculate-bill";
 import { resolveLineTaxRate } from "@/lib/billing/resolve-tax-rate";
@@ -14,6 +31,7 @@ type CartLine = {
   key: string;
   dishId: string;
   name: string;
+  image?: string;
   variantId?: string;
   variantName?: string;
   unitPrice: number;
@@ -26,10 +44,15 @@ type CartLine = {
 type TableCartState = {
   cart: CartLine[];
   guestName: string;
+  guestCount: string;
   orderNote: string;
   customerPhone: string;
   couponCode: string;
   billDiscount: number;
+  discountMode: "AMOUNT" | "PERCENTAGE";
+  discountInput: string;
+  serviceChargePercent: number;
+  serviceChargeInput: string;
   redeemLoyaltyPoints: number;
   idempotencyKey: string;
 };
@@ -45,24 +68,42 @@ type Props = {
   tables: RestaurantTable[];
   initialTableId?: string | null;
   permissions?: CaptainPermissions | null;
+  internalTracking?: boolean;
 };
 
+type Screen = "menu" | "cart";
+type SubmitMode = "hold" | "kot" | "bill";
+
+const ACCENT = "#1d4ed8";
+
 function money(value: number, currency: string) {
-  return new Intl.NumberFormat(undefined, {
+  return new Intl.NumberFormat("en-IN", {
     style: "currency",
     currency: currency || "INR",
     maximumFractionDigits: 2,
   }).format(value);
 }
 
+function dishImage(dish: Dish) {
+  if (dish.image) return dish.image;
+  if (dish.imageUrl) return dish.imageUrl;
+  const galleryImage = dish.gallery?.find((item) => item.type === "IMAGE");
+  return galleryImage?.url ?? galleryImage?.posterUrl;
+}
+
 function emptyCartState(): TableCartState {
   return {
     cart: [],
     guestName: "",
+    guestCount: "",
     orderNote: "",
     customerPhone: "",
     couponCode: "",
     billDiscount: 0,
+    discountMode: "PERCENTAGE",
+    discountInput: "",
+    serviceChargePercent: 0,
+    serviceChargeInput: "",
     redeemLoyaltyPoints: 0,
     idempotencyKey: crypto.randomUUID(),
   };
@@ -79,8 +120,11 @@ export default function CaptainOrderPad({
   tables,
   initialTableId = null,
   permissions: rawPermissions,
+  internalTracking = false,
 }: Props) {
+  const router = useRouter();
   const permissions = resolveCaptainPermissions({ permissions: rawPermissions ?? undefined });
+  const [screen, setScreen] = useState<Screen>("menu");
   const [tableId, setTableId] = useState<string>(
     initialTableId && tables.some((table) => table.id === initialTableId) ? initialTableId : "",
   );
@@ -88,30 +132,25 @@ export default function CaptainOrderPad({
   const [categoryId, setCategoryId] = useState("ALL");
   const [query, setQuery] = useState("");
   const [message, setMessage] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  const [submitting, setSubmitting] = useState(false);
   const [customizing, setCustomizing] = useState<Dish | null>(null);
   const [selectedVariantId, setSelectedVariantId] = useState("");
   const [selectedAddons, setSelectedAddons] = useState<Record<string, string[]>>({});
-  const [lastOrderId, setLastOrderId] = useState<string | null>(null);
-  const [lastOrderNumber, setLastOrderNumber] = useState<string | number | null>(null);
-  const [lastSavedOrder, setLastSavedOrder] = useState<OrderSummary | null>(null);
-  const [previousKotLineIds, setPreviousKotLineIds] = useState<string[]>([]);
-  const [kotSent, setKotSent] = useState(false);
-  const [kotPending, setKotPending] = useState(false);
-  const [payMethod, setPayMethod] = useState<PaymentMethod>(permissions.recordCashPayment ? "CASH" : permissions.recordCardPayment ? "CARD" : "UPI");
-  const [payAmount, setPayAmount] = useState<number | "">("");
-  const [upiRequest, setUpiRequest] = useState<DynamicPaymentRequest | null>(null);
-  const [paymentPending, setPaymentPending] = useState(false);
-  const [extrasOpen, setExtrasOpen] = useState(false);
-  const [cartOpen, setCartOpen] = useState(false);
+  const [payMethod, setPayMethod] = useState<PaymentMethod>(
+    permissions.recordCashPayment ? "CASH" : permissions.recordCardPayment ? "CARD" : "UPI",
+  );
+  const [customerOpen, setCustomerOpen] = useState(false);
+  const [discountOpen, setDiscountOpen] = useState(false);
+  const [serviceOpen, setServiceOpen] = useState(false);
+  const [draftDiscountMode, setDraftDiscountMode] = useState<"AMOUNT" | "PERCENTAGE">("PERCENTAGE");
+  const [draftDiscountValue, setDraftDiscountValue] = useState("");
+  const [draftServiceValue, setDraftServiceValue] = useState("");
 
-  const tableKey = tableId;
+  const tableKey = tableId || "__draft__";
   const session = cartsByTable[tableKey] ?? emptyCartState();
   const selectedLocation = tables.find((item) => item.id === tableId) ?? null;
-  const selectedLocationName = selectedLocation ? locationName(selectedLocation) : "location not selected";
 
   function patchSession(patch: Partial<TableCartState>) {
-    if (!tableKey) return;
     setCartsByTable((prev) => ({
       ...prev,
       [tableKey]: { ...(prev[tableKey] ?? emptyCartState()), ...patch },
@@ -119,36 +158,11 @@ export default function CaptainOrderPad({
   }
 
   useEffect(() => {
-    if (!tableKey) return;
     setCartsByTable((prev) => {
       if (prev[tableKey]) return prev;
       return { ...prev, [tableKey]: emptyCartState() };
     });
   }, [tableKey]);
-
-  useEffect(() => {
-    if (!tableId) return;
-    const controller = new AbortController();
-    void (async () => {
-      try {
-        const response = await fetch(`/api/captain/tables/${encodeURIComponent(tableId)}`, { signal: controller.signal, cache: "no-store" });
-        if (!response.ok) return;
-        const json = await response.json();
-        if (controller.signal.aborted || !json.success || !json.data?.activeOrder) return;
-        const order: OrderSummary = json.data.activeOrder;
-        setLastOrderId(order.id);
-        setLastOrderNumber(order.orderNumber);
-        setLastSavedOrder(order);
-        setPreviousKotLineIds(order.kotLineIds ?? []);
-        setKotSent(false);
-        const due = roundMoney(Math.max(0, order.total - (order.payment?.amountPaid ?? 0)));
-        setPayAmount(due > 0 ? due : "");
-      } catch (error) {
-        if (!controller.signal.aborted) setMessage(error instanceof Error ? error.message : "Unable to load the table order.");
-      }
-    })();
-    return () => controller.abort();
-  }, [tableId]);
 
   const availableDishes = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -159,6 +173,26 @@ export default function CaptainOrderPad({
       return dish.name.toLowerCase().includes(q) || (dish.sku ?? "").toLowerCase().includes(q);
     });
   }, [dishes, categoryId, query]);
+
+  const effectiveBilling = useMemo<RestaurantBillingSettings>(() => {
+    const base =
+      billing ??
+      ({
+        taxRatePercent,
+        gstEnabled: taxRatePercent > 0,
+        gstRatePercent: taxRatePercent,
+        taxLabel,
+      } satisfies RestaurantBillingSettings);
+    if (session.serviceChargePercent > 0) {
+      return {
+        ...base,
+        serviceChargeEnabled: true,
+        serviceChargeType: "PERCENT",
+        serviceChargePercent: session.serviceChargePercent,
+      };
+    }
+    return base;
+  }, [billing, session.serviceChargePercent, taxLabel, taxRatePercent]);
 
   const totals = useMemo(() => {
     const lineTotals = session.cart.map((line) =>
@@ -173,15 +207,18 @@ export default function CaptainOrderPad({
       lines: session.cart.map((line, index) => {
         const dish = dishes.find((entry) => entry.id === line.dishId);
         const category = dish ? categories.find((entry) => entry.id === dish.categoryId) : undefined;
-        return { lineTotal: lineTotals[index], quantity: line.quantity, gstRatePercent: resolveLineTaxRate({ dish, category, billing }).rate };
+        return {
+          lineTotal: lineTotals[index],
+          quantity: line.quantity,
+          gstRatePercent: resolveLineTaxRate({ dish, category, billing: effectiveBilling }).rate,
+        };
       }),
       billDiscountAmount: session.billDiscount,
-      billing: billing ?? { taxRatePercent, gstEnabled: taxRatePercent > 0, gstRatePercent: taxRatePercent, taxLabel },
+      billing: effectiveBilling,
     });
-  }, [billing, categories, dishes, session.cart, session.billDiscount, taxLabel, taxRatePercent]);
+  }, [categories, dishes, effectiveBilling, session.billDiscount, session.cart]);
+
   const cartItemCount = session.cart.reduce((sum, line) => sum + line.quantity, 0);
-  const savedUnsentCount = lastSavedOrder?.items.filter((item) => item.lineId && !(lastSavedOrder.kotLineIds ?? []).includes(item.lineId)).length ?? 0;
-  const upiRequestNeedsReplacement = upiRequest ? ["CANCELLED", "EXPIRED", "FAILED", "WRONG_AMOUNT"].includes(upiRequest.status) : false;
 
   function dishNeedsCustomize(dish: Dish) {
     const variants = (dish.variants ?? []).filter((variant) => variant.isAvailable !== false);
@@ -190,10 +227,6 @@ export default function CaptainOrderPad({
   }
 
   function beginCustomize(dish: Dish) {
-    if (!tableKey) {
-      setMessage("Select a table or room first.");
-      return;
-    }
     if (!dishNeedsCustomize(dish)) {
       addSimple(dish);
       return;
@@ -204,41 +237,66 @@ export default function CaptainOrderPad({
       addSimple(dish, availableVariants[0]);
       return;
     }
-    const firstVariant = (dish.variants ?? []).find((variant) => variant.isAvailable !== false);
+    const firstVariant = availableVariants[0];
     setSelectedVariantId(firstVariant?.id ?? "");
     setSelectedAddons({});
     setCustomizing(dish);
   }
 
   function addSimple(dish: Dish, variant?: NonNullable<Dish["variants"]>[number]) {
-    if (!tableKey) return;
-    const existing = session.cart.find((line) => line.dishId === dish.id && line.variantId === variant?.id && line.addons.length === 0 && !line.note && !line.itemDiscountAmount);
+    const existing = session.cart.find(
+      (line) =>
+        line.dishId === dish.id &&
+        line.variantId === variant?.id &&
+        line.addons.length === 0 &&
+        !line.note &&
+        !line.itemDiscountAmount,
+    );
     if (existing) {
-      if (existing.quantity >= 99) { setMessage("Maximum 99 of one item per line."); return; }
-      patchSession({ cart: session.cart.map((line) => line.key === existing.key ? { ...line, quantity: line.quantity + 1 } : line) });
-      setMessage(`${dish.name} ×${existing.quantity + 1} · ${selectedLocationName}`);
+      if (existing.quantity >= 99) {
+        setMessage("Maximum 99 of one item per line.");
+        return;
+      }
+      patchSession({
+        cart: session.cart.map((line) =>
+          line.key === existing.key ? { ...line, quantity: line.quantity + 1 } : line,
+        ),
+      });
       return;
     }
-    const next: CartLine = {
-      key: crypto.randomUUID(),
-      dishId: dish.id,
-      name: dish.name,
-      variantId: variant?.id,
-      variantName: variant?.name,
-      unitPrice: variant?.price ?? dish.price,
-      quantity: 1,
-      itemDiscountAmount: 0,
-      note: "",
-      addons: [],
-    };
-    patchSession({ cart: [...session.cart, next] });
-    setMessage(`Added ${dish.name} · ${selectedLocationName}`);
+    patchSession({
+      cart: [
+        ...session.cart,
+        {
+          key: crypto.randomUUID(),
+          dishId: dish.id,
+          name: dish.name,
+          image: dishImage(dish),
+          variantId: variant?.id,
+          variantName: variant?.name,
+          unitPrice: variant?.price ?? dish.price,
+          quantity: 1,
+          itemDiscountAmount: 0,
+          note: "",
+          addons: [],
+        },
+      ],
+    });
+  }
+
+  function setLineQty(key: string, quantity: number) {
+    patchSession({
+      cart: session.cart
+        .map((line) => (line.key === key ? { ...line, quantity } : line))
+        .filter((line) => line.quantity > 0),
+    });
   }
 
   function confirmCustomize() {
-    if (!customizing || !tableKey) return;
-    const variants = customizing.variants ?? [];
-    const availableVariants = variants.filter((variant) => variant.isAvailable !== false);
+    if (!customizing) return;
+    const availableVariants = (customizing.variants ?? []).filter(
+      (variant) => variant.isAvailable !== false,
+    );
     if (availableVariants.length > 0 && !selectedVariantId) {
       setMessage(`Select a variant for ${customizing.name}.`);
       return;
@@ -261,34 +319,69 @@ export default function CaptainOrderPad({
         return [{ addonId: addon.id, name: addon.name, price: addon.price, groupId: group.id }];
       });
     });
-    const next: CartLine = {
-      key: `${customizing.id}-${selectedVariantId}-${Date.now()}`,
-      dishId: customizing.id,
-      name: customizing.name,
-      variantId: variant?.id,
-      variantName: variant?.name,
-      unitPrice: variant?.price ?? customizing.price,
-      quantity: 1,
-      itemDiscountAmount: 0,
-      note: "",
-      addons,
-    };
-    patchSession({ cart: [...session.cart, next] });
-    setMessage(`Added ${customizing.name}${variant ? ` · ${variant.name}` : ""} · ${selectedLocationName}`);
+    patchSession({
+      cart: [
+        ...session.cart,
+        {
+          key: `${customizing.id}-${selectedVariantId}-${Date.now()}`,
+          dishId: customizing.id,
+          name: customizing.name,
+          image: dishImage(customizing),
+          variantId: variant?.id,
+          variantName: variant?.name,
+          unitPrice: variant?.price ?? customizing.price,
+          quantity: 1,
+          itemDiscountAmount: 0,
+          note: "",
+          addons,
+        },
+      ],
+    });
     setCustomizing(null);
   }
 
-  function placeOrder() {
+  function applyDiscountDraft() {
+    const raw = Number(draftDiscountValue);
+    if (!Number.isFinite(raw) || raw < 0) {
+      setMessage("Enter a valid discount.");
+      return;
+    }
+    if (draftDiscountMode === "PERCENTAGE") {
+      const pct = Math.min(100, raw);
+      const amount = roundMoney((totals.itemsSubtotal * pct) / 100);
+      patchSession({
+        billDiscount: amount,
+        discountMode: "PERCENTAGE",
+        discountInput: String(pct),
+      });
+    } else {
+      patchSession({
+        billDiscount: roundMoney(raw),
+        discountMode: "AMOUNT",
+        discountInput: String(raw),
+      });
+    }
+    setDiscountOpen(false);
+  }
+
+  function applyServiceDraft() {
+    const raw = Number(draftServiceValue);
+    if (!Number.isFinite(raw) || raw < 0 || raw > 100) {
+      setMessage("Enter a service charge between 0 and 100%.");
+      return;
+    }
+    patchSession({ serviceChargePercent: raw, serviceChargeInput: String(raw) });
+    setServiceOpen(false);
+  }
+
+  async function submitOrder(mode: SubmitMode) {
     if (!selectedLocation) {
-      setMessage("Select a table or room first.");
+      setMessage("Select a table first.");
+      setScreen("cart");
       return;
     }
     if (session.cart.length === 0) {
       setMessage("Add at least one item.");
-      return;
-    }
-    if (session.couponCode.trim() && !permissions.applyCoupon) {
-      setMessage("You are not permitted to apply coupons.");
       return;
     }
     if (session.billDiscount > 0 && !permissions.applyDiscount) {
@@ -297,188 +390,89 @@ export default function CaptainOrderPad({
     }
 
     const snapshot = session;
-    setMessage(`Sending ${selectedLocationName} to the kitchen…`);
-    setCartOpen(false);
+    setSubmitting(true);
+    setMessage(mode === "hold" ? "Saving order…" : "Sending to kitchen…");
     patchSession(emptyCartState());
-    void (async () => {
-      try {
-        const phone = snapshot.customerPhone.trim();
-        const response = await fetch("/api/captain/orders", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            tableId: selectedLocation.id,
-            tableNumber: selectedLocation.tableNumber,
-            guestName: snapshot.guestName.trim() || undefined,
-            orderNote: snapshot.orderNote.trim() || undefined,
-            customerPhone: phone || undefined,
-            billDiscountAmount: snapshot.billDiscount || undefined,
-            couponCode: snapshot.couponCode.trim() || undefined,
-            redeemLoyaltyPoints: snapshot.redeemLoyaltyPoints || undefined,
-            idempotencyKey: snapshot.idempotencyKey,
-            items: snapshot.cart.map((line) => ({
-              dishId: line.dishId,
-              variantId: line.variantId,
-              quantity: line.quantity,
-              note: line.note || undefined,
-              itemDiscountAmount: line.itemDiscountAmount || undefined,
-              selections: Object.entries(
-                line.addons.reduce<Record<string, string[]>>((acc, addon) => {
-                  acc[addon.groupId] = [...(acc[addon.groupId] ?? []), addon.addonId];
-                  return acc;
-                }, {}),
-              ).map(([groupId, addonIds]) => ({
-                groupId,
-                addons: addonIds.map((addonId) => ({ addonId })),
-              })),
+
+    try {
+      const phone = snapshot.customerPhone.trim();
+      const guestCount = Number(snapshot.guestCount);
+      const response = await fetch("/api/captain/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tableId: selectedLocation.id,
+          tableNumber: selectedLocation.tableNumber,
+          guestName: snapshot.guestName.trim() || undefined,
+          guestCount: Number.isFinite(guestCount) && guestCount >= 1 ? guestCount : undefined,
+          orderNote: snapshot.orderNote.trim() || undefined,
+          customerPhone: phone || undefined,
+          billDiscountAmount: snapshot.billDiscount || undefined,
+          couponCode: snapshot.couponCode.trim() || undefined,
+          redeemLoyaltyPoints: snapshot.redeemLoyaltyPoints || undefined,
+          idempotencyKey: snapshot.idempotencyKey,
+          items: snapshot.cart.map((line) => ({
+            dishId: line.dishId,
+            variantId: line.variantId,
+            quantity: line.quantity,
+            note: line.note || undefined,
+            itemDiscountAmount: line.itemDiscountAmount || undefined,
+            selections: Object.entries(
+              line.addons.reduce<Record<string, string[]>>((acc, addon) => {
+                acc[addon.groupId] = [...(acc[addon.groupId] ?? []), addon.addonId];
+                return acc;
+              }, {}),
+            ).map(([groupId, addonIds]) => ({
+              groupId,
+              addons: addonIds.map((addonId) => ({ addonId })),
             })),
-          }),
-        });
-        const json = await response.json();
-        if (!json.success) throw new Error(json.error || "Unable to place order");
+          })),
+        }),
+      });
+      const json = await response.json();
+      if (!json.success) throw new Error(json.error || "Unable to place order");
 
-        const orderId = json.data?.id as string | undefined;
-        setLastOrderId(orderId ?? null);
-        setLastOrderNumber(json.data?.orderNumber ?? null);
-        setLastSavedOrder(json.data);
-        setPreviousKotLineIds(json.data?.kotLineIds ?? []);
-        setPayAmount(roundMoney(Math.max(0, (json.data?.total ?? totals.total) - (json.data?.payment?.amountPaid ?? 0))));
-        setUpiRequest(null);
-        if (orderId) {
-          const kotResponse = await fetch(`/api/captain/orders/${encodeURIComponent(orderId)}/send-kot`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-          const kotJson = await kotResponse.json().catch(() => ({}));
-          if (kotResponse.ok && kotJson.success) {
-            setLastSavedOrder(kotJson.data);
-            setKotSent(true);
-            setMessage(`Sent to the kitchen for ${selectedLocationName}.`);
-          } else {
-            setKotSent(false);
-            setMessage(typeof kotJson.error === "string" ? kotJson.error : `Order saved for ${selectedLocationName}. Tap Send KOT if the kitchen did not get it.`);
-          }
-        } else {
-          setKotSent(false);
-          setMessage(`Order saved for ${selectedLocationName}.`);
-        }
-      } catch (error) {
-        patchSession(snapshot);
-        setMessage(error instanceof Error ? error.message : "Unable to place order");
-      }
-    })();
-  }
-
-  function recordPay() {
-    if (!lastOrderId) {
-      setMessage("Place an order first, then record payment.");
-      return;
-    }
-    if (payMethod === "UPI") {
-      setMessage("Use Generate UPI QR and wait for verified payment confirmation.");
-      return;
-    }
-    const canPay =
-      (payMethod === "CASH" && permissions.recordCashPayment) ||
-      (payMethod === "CARD" && permissions.recordCardPayment);
-    if (!canPay) {
-      setMessage(`You are not permitted to record ${payMethod} payments.`);
-      return;
-    }
-    if (payAmount === "" || !Number.isFinite(payAmount) || payAmount <= 0) {
-      setMessage("Enter a valid payment amount.");
-      return;
-    }
-    startTransition(async () => {
-      try {
-        const response = await fetch(`/api/orders/${encodeURIComponent(lastOrderId)}/payment`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            method: payMethod,
-            amount: payAmount,
-          }),
-        });
-        const json = await response.json();
-        if (!json.success) throw new Error(json.error || "Unable to record payment");
-        const outstanding = roundMoney(Math.max(0, (json.data?.total ?? 0) - (json.data?.payment?.amountPaid ?? 0)));
-        setMessage(`${payMethod} payment recorded.${outstanding > 0 ? ` ${money(outstanding, currency)} remains due.` : " Order paid."}`);
-        if (json.data) setLastSavedOrder(json.data);
-        setPayAmount(outstanding > 0 ? outstanding : "");
-      } catch (error) {
-        setMessage(error instanceof Error ? error.message : "Unable to record payment");
-      }
-    });
-  }
-
-  function sendKot() {
-    if (!lastOrderId) return;
-    setKotPending(true);
-    startTransition(async () => {
-      try {
-        const response = await fetch(`/api/captain/orders/${encodeURIComponent(lastOrderId)}/send-kot`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-        const json = await response.json();
-        if (!response.ok || !json.success) throw new Error(json.error || "Unable to send KOT.");
-        setLastSavedOrder(json.data);
-        setKotSent(true);
-        setMessage(`Order #${lastOrderNumber} · new items sent to kitchen.`);
-      } catch (error) {
-        setMessage(error instanceof Error ? error.message : "Unable to send KOT.");
-      } finally {
-        setKotPending(false);
-      }
-    });
-  }
-
-  const refreshUpiStatus = useCallback(async (orderId: string) => {
-    const response = await fetch(`/api/captain/orders/${encodeURIComponent(orderId)}/upi/status`, { cache: "no-store" });
-    const json = await response.json();
-    if (!response.ok || !json.success) throw new Error(json.error || "Unable to refresh UPI status.");
-    setUpiRequest(json.data);
-    if (json.data.status === "PAID") {
-      setMessage(`Order #${lastOrderNumber} · UPI payment verified and recorded.`);
-      const orderResponse = await fetch(`/api/captain/orders/${encodeURIComponent(orderId)}`, { cache: "no-store" });
-      if (orderResponse.ok) {
-        const orderJson = await orderResponse.json();
-        if (orderJson.success) {
-          setLastSavedOrder(orderJson.data);
-          const due = roundMoney(Math.max(0, orderJson.data.total - (orderJson.data.payment?.amountPaid ?? 0)));
-          setPayAmount(due > 0 ? due : "");
+      const orderId = json.data?.id as string | undefined;
+      if ((mode === "kot" || mode === "bill") && orderId) {
+        const kotResponse = await fetch(
+          `/api/captain/orders/${encodeURIComponent(orderId)}/send-kot`,
+          { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" },
+        );
+        const kotJson = await kotResponse.json().catch(() => ({}));
+        if (!kotResponse.ok || !kotJson.success) {
+          setMessage(
+            typeof kotJson.error === "string"
+              ? kotJson.error
+              : "Order saved. Tap Send KOT on the table if kitchen did not get it.",
+          );
         }
       }
-    }
-  }, [lastOrderNumber]);
 
-  useEffect(() => {
-    if (!lastOrderId || !upiRequest || !["CREATING", "PENDING", "PROCESSING", "PARTIAL"].includes(upiRequest.status)) return;
-    const timer = window.setInterval(() => {
-      void refreshUpiStatus(lastOrderId).catch((error) => setMessage(error instanceof Error ? error.message : "Unable to refresh UPI status."));
-    }, 5000);
-    return () => window.clearInterval(timer);
-  }, [lastOrderId, refreshUpiStatus, upiRequest?.status]);
-
-  function createUpiQr() {
-    if (!lastOrderId) return;
-    setPaymentPending(true);
-    startTransition(async () => {
-      try {
-        const response = await fetch(`/api/captain/orders/${encodeURIComponent(lastOrderId)}/upi`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-        const json = await response.json();
-        if (!response.ok || !json.success) throw new Error(json.error || "Unable to create UPI QR.");
-        setUpiRequest(json.data);
-        setMessage(`Order #${lastOrderNumber} · waiting for UPI payment.`);
-      } catch (error) {
-        setMessage(error instanceof Error ? error.message : "Unable to create UPI QR.");
-      } finally {
-        setPaymentPending(false);
+      if (mode === "bill") {
+        setMessage("Opening bill…");
+        router.push(`/captain/${slug}/tables/${encodeURIComponent(selectedLocation.id)}`);
+        return;
       }
-    });
+
+      setScreen("menu");
+      setMessage(
+        mode === "hold"
+          ? `Saved on ${locationName(selectedLocation)} — held, not sent to kitchen.`
+          : `KOT sent for ${locationName(selectedLocation)}.`,
+      );
+    } catch (error) {
+      patchSession(snapshot);
+      setMessage(error instanceof Error ? error.message : "Unable to place order");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   if (tables.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-amber-300 bg-amber-50 p-8 text-center">
         <h1 className="text-xl font-bold text-amber-950">No tables available</h1>
-        <p className="mt-2 text-sm text-amber-900/80">
-          Ask a manager to add tables or rooms in the restaurant settings.
-        </p>
+        <p className="mt-2 text-sm text-amber-900/80">Ask a manager to assign tables to your captain login.</p>
         <Link href={`/captain/${slug}/tables`} className="mt-4 inline-flex text-sm font-semibold text-amber-950 underline">
           View tables
         </Link>
@@ -486,57 +480,21 @@ export default function CaptainOrderPad({
     );
   }
 
-  const canRecordAny =
-    permissions.recordCashPayment || permissions.recordUpiPayment || permissions.recordCardPayment;
+  const paymentOptions: PaymentMethod[] = (
+    [
+      permissions.recordCashPayment ? "CASH" : null,
+      permissions.recordUpiPayment ? "UPI" : null,
+      permissions.recordCardPayment ? "CARD" : null,
+    ] as const
+  ).filter(Boolean) as PaymentMethod[];
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 pb-24 lg:h-[calc(100dvh-4rem)] lg:overflow-hidden lg:pb-2">
-      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0">
-          <Link
-            href={`/captain/${slug}/tables`}
-            className="inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-900"
-          >
-            <ArrowLeft className="h-4 w-4" /> Tables
-          </Link>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Captain POS</h1>
-          <p className="hidden text-sm text-neutral-500 sm:block">
-            Select a table, add menu items, and send the KOT to the kitchen.
-          </p>
-        </div>
-        <label className="text-sm font-medium text-neutral-700">
-          Table
-          <select
-            value={tableId}
-            onChange={(event) => {
-              setTableId(event.target.value);
-              setMessage(null);
-              setLastOrderId(null);
-              setLastOrderNumber(null);
-              setLastSavedOrder(null);
-              setKotSent(false);
-              setUpiRequest(null);
-            }}
-            className={`mt-1 block min-h-12 w-full min-w-[11rem] rounded-xl border bg-white px-3 ${
-              !selectedLocation ? "border-rose-400 ring-2 ring-rose-200" : "border-neutral-200"
-            }`}
-          >
-            <option value="">Select table</option>
-            {tables.map((table) => (
-              <option key={table.id} value={table.id}>
-                {table.locationType === "ROOM" ? "Room" : "T"}{table.tableNumber}
-                {table.label ? ` · ${table.label}` : ""}
-              </option>
-            ))}
-          </select>
-        </label>
-      </header>
-
+    <div className="mx-auto flex w-full max-w-3xl flex-col bg-[#f3f4f6] text-neutral-900">
       {message ? (
         <p
           role="status"
-          className={`shrink-0 rounded-xl px-3 py-2 text-sm font-medium ${
-            /unable|select|add at least|not assigned|failed|invalid|not permitted|exceeds|not configured|cannot|error/i.test(message)
+          className={`mx-3 mt-3 rounded-xl px-3 py-2 text-sm font-medium ${
+            /unable|select|add at least|not permitted|failed|invalid|error/i.test(message)
               ? "border border-rose-200 bg-rose-50 text-rose-700"
               : "border border-emerald-200 bg-emerald-50 text-emerald-800"
           }`}
@@ -545,38 +503,38 @@ export default function CaptainOrderPad({
         </p>
       ) : null}
 
-      <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(19rem,26rem)]">
-        <section className="flex min-w-0 flex-col gap-3 rounded-2xl border border-neutral-200 bg-white p-3 sm:p-4 lg:min-h-0 lg:overflow-hidden">
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <div className="inline-flex rounded-xl border border-neutral-200 bg-neutral-50 p-1">
-              <span className="rounded-lg bg-neutral-900 px-3 py-2 text-xs font-bold text-white">Dine-in</span>
-              {selectedLocation ? (
-                <span className="px-3 py-2 text-xs font-semibold text-neutral-700">{locationName(selectedLocation)}</span>
-              ) : (
-                <span className="px-3 py-2 text-xs font-semibold text-rose-600">Pick a table</span>
-              )}
+      {screen === "menu" ? (
+        <div className="flex min-h-[100dvh] flex-col pb-36">
+          <header className="sticky top-0 z-20 border-b border-neutral-200 bg-white px-3 py-3">
+            <div className="flex items-center gap-3">
+              <Link
+                href={`/captain/${slug}/tables`}
+                className="grid h-10 w-10 place-items-center rounded-full text-neutral-700"
+                aria-label="Back to tables"
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </Link>
+              <h1 className="flex-1 text-lg font-bold">Add Order</h1>
             </div>
-            <div className="relative min-w-0 flex-1 basis-[12rem]">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search menu"
-                className="min-h-11 w-full rounded-xl border border-neutral-200 bg-neutral-50 pl-9 pr-3 text-sm"
-              />
+            <div className="mt-3 flex items-center gap-2">
+              <div className="relative min-w-0 flex-1">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Search"
+                  className="min-h-11 w-full rounded-full border border-neutral-200 bg-neutral-50 pl-9 pr-3 text-sm"
+                />
+              </div>
             </div>
-          </div>
-
-          <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[7.5rem_minmax(0,1fr)]">
-            <nav
-              aria-label="Menu categories"
-              className="scrollbar-none flex shrink-0 gap-1.5 overflow-x-auto pb-1 lg:flex-col lg:overflow-y-auto lg:overflow-x-hidden lg:pb-0"
-            >
+            <div className="scrollbar-none mt-3 flex gap-2 overflow-x-auto pb-1">
               <button
                 type="button"
                 onClick={() => setCategoryId("ALL")}
-                className={`min-h-10 shrink-0 rounded-xl px-3 text-left text-xs font-semibold lg:w-full ${
-                  categoryId === "ALL" ? "bg-neutral-900 text-white" : "bg-neutral-100 text-neutral-700"
+                className={`min-h-9 shrink-0 rounded-full border px-3 text-xs font-semibold ${
+                  categoryId === "ALL"
+                    ? "border-blue-600 text-blue-700"
+                    : "border-neutral-200 bg-white text-neutral-600"
                 }`}
               >
                 All
@@ -586,353 +544,483 @@ export default function CaptainOrderPad({
                   key={category.id}
                   type="button"
                   onClick={() => setCategoryId(category.id)}
-                  className={`min-h-10 shrink-0 rounded-xl px-3 text-left text-xs font-semibold lg:w-full ${
+                  className={`min-h-9 shrink-0 rounded-full border px-3 text-xs font-semibold ${
                     categoryId === category.id
-                      ? "bg-neutral-900 text-white"
-                      : "bg-neutral-100 text-neutral-700"
+                      ? "border-blue-600 text-blue-700"
+                      : "border-neutral-200 bg-white text-neutral-600"
                   }`}
                 >
                   {category.name}
                 </button>
               ))}
-            </nav>
+            </div>
+          </header>
 
-            <div className="grid min-h-0 flex-1 auto-rows-min content-start grid-cols-2 gap-2 sm:grid-cols-3 lg:overflow-y-auto lg:overscroll-contain xl:grid-cols-4">
-              {availableDishes.map((dish) => (
-                <button
-                  key={dish.id}
-                  type="button"
-                  onClick={() => beginCustomize(dish)}
-                  className="relative min-h-[7rem] rounded-2xl border border-neutral-200 bg-[#fafafa] p-3 text-left transition active:scale-[0.98] hover:border-neutral-900 hover:shadow-sm"
-                >
-                  <span
-                    className={`mb-2 inline-block h-2.5 w-2.5 rounded-full ${
-                      dish.isVeg ? "bg-emerald-500" : "bg-rose-500"
-                    }`}
-                    aria-hidden
-                  />
-                  <p className="line-clamp-2 text-sm font-semibold leading-snug text-neutral-900">
-                    {dish.name}
-                  </p>
-                  <p className="mt-1 text-xs font-medium text-neutral-500">
-                    {money((dish.variants?.[0]?.price ?? dish.price) as number, currency)}
-                  </p>
-                  <span className="absolute bottom-2.5 right-2.5 grid h-7 w-7 place-items-center rounded-full bg-neutral-900 text-white">
-                    <Plus className="h-4 w-4" />
-                  </span>
-                </button>
-              ))}
-              {availableDishes.length === 0 ? (
-                <p className="col-span-full py-10 text-center text-sm text-neutral-400">No dishes in this filter.</p>
-              ) : null}
+          <div className="grid grid-cols-3 gap-2 p-3 sm:grid-cols-4">
+            {availableDishes.map((dish) => {
+              const inCart = session.cart.find(
+                (line) =>
+                  line.dishId === dish.id &&
+                  line.addons.length === 0 &&
+                  !line.note &&
+                  !line.itemDiscountAmount,
+              );
+              const qty = inCart?.quantity ?? 0;
+              const img = dishImage(dish);
+              const price = (dish.variants?.[0]?.price ?? dish.price) as number;
+              return (
+                <div key={dish.id} className="overflow-hidden rounded-2xl bg-white shadow-sm">
+                  <div className="relative aspect-square bg-neutral-100">
+                    {img ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={img} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="grid h-full place-items-center text-neutral-300">
+                        <UtensilsCrossed className="h-8 w-8" />
+                      </div>
+                    )}
+                    <span className="absolute right-1.5 top-1.5 rounded-md bg-black/55 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                      {money(price, currency)}
+                    </span>
+                    {qty > 0 ? (
+                      <div className="absolute bottom-1.5 right-1.5 flex items-center gap-1 rounded-lg bg-blue-600 px-1 py-0.5 text-white shadow">
+                        <button
+                          type="button"
+                          aria-label={`Decrease ${dish.name}`}
+                          className="grid h-7 w-7 place-items-center"
+                          onClick={() => inCart && setLineQty(inCart.key, qty - 1)}
+                        >
+                          <Minus className="h-3.5 w-3.5" />
+                        </button>
+                        <span className="min-w-4 text-center text-xs font-bold">{qty}</span>
+                        <button
+                          type="button"
+                          aria-label={`Increase ${dish.name}`}
+                          className="grid h-7 w-7 place-items-center"
+                          onClick={() => beginCustomize(dish)}
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        aria-label={`Add ${dish.name}`}
+                        onClick={() => beginCustomize(dish)}
+                        className="absolute bottom-1.5 right-1.5 grid h-8 w-8 place-items-center rounded-lg text-white shadow"
+                        style={{ backgroundColor: ACCENT }}
+                      >
+                        <Plus className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                  <p className="line-clamp-2 px-2 py-2 text-xs font-semibold leading-snug">{dish.name}</p>
+                </div>
+              );
+            })}
+            {availableDishes.length === 0 ? (
+              <p className="col-span-full py-12 text-center text-sm text-neutral-400">No dishes in this filter.</p>
+            ) : null}
+          </div>
+
+          <div className="safe-bottom fixed inset-x-0 bottom-0 z-30 space-y-2 border-t border-neutral-200 bg-white/95 p-3 backdrop-blur">
+            {cartItemCount > 0 ? (
+              <button
+                type="button"
+                onClick={() => setScreen("cart")}
+                className="flex min-h-12 w-full items-center justify-between rounded-2xl border border-neutral-200 bg-white px-4 text-sm font-semibold shadow-sm"
+              >
+                <span className="inline-flex items-center gap-2">
+                  <ShoppingBag className="h-4 w-4 text-blue-700" />
+                  View Cart | {cartItemCount} Items | {money(totals.total, currency)}
+                </span>
+              </button>
+            ) : null}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                disabled={submitting || cartItemCount === 0}
+                onClick={() => void submitOrder("kot")}
+                className="min-h-12 rounded-2xl border border-neutral-300 bg-white text-sm font-bold disabled:opacity-40"
+              >
+                {submitting ? "Saving…" : "KOT & Hold"}
+              </button>
+              <button
+                type="button"
+                disabled={submitting || cartItemCount === 0}
+                onClick={() => void submitOrder("bill")}
+                className="min-h-12 rounded-2xl text-sm font-bold text-white disabled:opacity-40"
+                style={{ backgroundColor: ACCENT }}
+              >
+                {submitting ? "Saving…" : "KOT & Bill"}
+              </button>
             </div>
           </div>
-        </section>
-
-        {cartOpen ? (
-          <button
-            type="button"
-            aria-label="Close cart"
-            onClick={() => setCartOpen(false)}
-            className="fixed inset-0 z-40 bg-black/45 lg:hidden"
-          />
-        ) : null}
-        <aside className={`${cartOpen ? "translate-y-0" : "translate-y-full"} safe-bottom fixed inset-x-0 bottom-0 z-50 flex max-h-[92dvh] min-w-0 flex-col overflow-hidden rounded-t-3xl border border-neutral-900 bg-neutral-900 text-white shadow-2xl transition-transform duration-200 lg:static lg:max-h-none lg:min-h-0 lg:translate-y-0 lg:rounded-2xl lg:shadow-none`}>
-          <div className="shrink-0 border-b border-white/10 px-4 py-3">
-            <div className="flex items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold">
-              Current bill
-              {selectedLocation ? (
-                <span className="ml-2 text-sm font-normal text-white/60">· {selectedLocationName}</span>
-              ) : null}
-              <span className="ml-2 text-sm font-normal text-white/60">({cartItemCount} new{lastSavedOrder ? ` · ${lastSavedOrder.items.length} saved` : ""})</span>
-            </h2>
-            <button type="button" onClick={() => setCartOpen(false)} className="grid h-10 w-10 place-items-center rounded-full bg-white/10 lg:hidden" aria-label="Close cart">
-              <X className="h-5 w-5" />
+        </div>
+      ) : (
+        <div className="flex min-h-[100dvh] flex-col pb-28">
+          <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-neutral-200 bg-white px-3 py-3">
+            <button
+              type="button"
+              onClick={() => setScreen("menu")}
+              className="grid h-10 w-10 place-items-center rounded-full"
+              aria-label="Back to menu"
+            >
+              <ArrowLeft className="h-5 w-5" />
             </button>
-            </div>
-          </div>
+            <h1 className="text-lg font-bold">Cart</h1>
+          </header>
 
-          <ul className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain px-3 py-3">
-            {lastSavedOrder ? lastSavedOrder.items.map((item) => (
-              <li key={item.lineId ?? `${item.dishId}-${item.dishNameSnapshot}`} className="rounded-xl border border-white/15 bg-white/5 p-3">
-                <div className="flex items-start justify-between gap-3 text-sm"><span className="min-w-0 font-semibold">{item.quantity}× {item.dishNameSnapshot}{item.variantNameSnapshot ? ` · ${item.variantNameSnapshot}` : ""}</span><span className="shrink-0 font-semibold">{money(item.itemTotal, currency)}</span></div>
-                <p className="mt-1 text-[11px] text-white/60">{item.lineId && (lastSavedOrder.kotLineIds ?? []).includes(item.lineId) ? "Sent to kitchen" : "Waiting for KOT"}{item.note ? ` · ${item.note}` : ""}</p>
-              </li>
-            )) : null}
-            {session.cart.length === 0 && !lastSavedOrder ? (
-              <li className="flex min-h-[7rem] items-center justify-center rounded-xl border border-dashed border-white/20 p-4 text-center text-sm text-white/60">
-                Tap dishes to build this table&apos;s cart. Switching tables keeps each cart separate.
-              </li>
-            ) : (
-              session.cart.map((line) => (
-                <li key={line.key} className="rounded-xl bg-white/10 p-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium leading-snug">
-                        {line.name}
-                        {line.variantName ? ` · ${line.variantName}` : ""}
-                      </p>
-                      {line.addons.length > 0 ? (
-                        <p className="mt-0.5 text-xs text-white/60">
-                          {line.addons.map((addon) => addon.name).join(", ")}
-                        </p>
-                      ) : null}
-                    </div>
+          <div className="space-y-3 p-3">
+            <section className="scrollbar-none flex gap-3 overflow-x-auto pb-1">
+              {session.cart.map((line) => (
+                <article
+                  key={line.key}
+                  className="w-40 shrink-0 overflow-hidden rounded-2xl border border-neutral-200 bg-white"
+                >
+                  <div className="relative aspect-[4/3] bg-neutral-100">
+                    {line.image ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={line.image} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="grid h-full place-items-center text-neutral-300">
+                        <UtensilsCrossed className="h-6 w-6" />
+                      </div>
+                    )}
                     <button
                       type="button"
                       aria-label={`Remove ${line.name}`}
                       onClick={() =>
                         patchSession({ cart: session.cart.filter((entry) => entry.key !== line.key) })
                       }
-                      className="rounded-lg bg-rose-500/30 p-1.5 text-rose-50"
+                      className="absolute right-1 top-1 grid h-7 w-7 place-items-center rounded-full bg-black/50 text-white"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>
-                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
+                  <div className="space-y-2 p-2">
+                    <p className="line-clamp-2 text-xs font-semibold leading-snug">
+                      {line.name}
+                      {line.variantName ? `(${line.variantName})` : ""}
+                    </p>
+                    <p className="text-xs font-bold text-neutral-700">{money(line.unitPrice, currency)}</p>
+                    <div className="inline-flex items-center rounded-lg bg-blue-600 text-white">
                       <button
                         type="button"
-                        className="grid h-9 w-9 place-items-center rounded-lg bg-white/15"
-                        onClick={() =>
-                          patchSession({
-                            cart: session.cart
-                              .map((entry) =>
-                                entry.key === line.key
-                                  ? { ...entry, quantity: Math.max(0, entry.quantity - 1) }
-                                  : entry,
-                              )
-                              .filter((entry) => entry.quantity > 0),
-                          })
-                        }
+                        className="grid h-8 w-8 place-items-center"
+                        onClick={() => setLineQty(line.key, line.quantity - 1)}
                       >
                         <Minus className="h-3.5 w-3.5" />
                       </button>
-                      <span className="min-w-6 text-center font-semibold">{line.quantity}</span>
+                      <span className="min-w-5 text-center text-xs font-bold">{line.quantity}</span>
                       <button
                         type="button"
-                        className="grid h-9 w-9 place-items-center rounded-lg bg-white/15"
-                        onClick={() =>
-                          patchSession({
-                            cart: session.cart.map((entry) =>
-                              entry.key === line.key ? { ...entry, quantity: Math.min(99, entry.quantity + 1) } : entry,
-                            ),
-                          })
-                        }
+                        className="grid h-8 w-8 place-items-center"
+                        onClick={() => setLineQty(line.key, Math.min(99, line.quantity + 1))}
                       >
                         <Plus className="h-3.5 w-3.5" />
                       </button>
                     </div>
-                    {permissions.applyDiscount ? (
-                      <input
-                        type="number"
-                        min={0}
-                        placeholder="Item disc."
-                        aria-label="Item discount"
-                        value={line.itemDiscountAmount || ""}
-                        onChange={(event) => {
-                          const value = Number(event.target.value) || 0;
-                          patchSession({
-                            cart: session.cart.map((entry) =>
-                              entry.key === line.key ? { ...entry, itemDiscountAmount: value } : entry,
-                            ),
-                          });
-                        }}
-                        className="w-20 rounded-lg border border-white/20 bg-transparent px-2 py-1 text-xs"
-                      />
-                    ) : null}
-                    <span className="text-sm font-semibold">
-                      {money(
-                        lineItemTotal({
-                          unitPrice: line.unitPrice,
-                          quantity: line.quantity,
-                          addonTotals: line.addons.map((addon) => addon.price),
-                          itemDiscountAmount: line.itemDiscountAmount,
-                        }),
-                        currency,
-                      )}
-                    </span>
                   </div>
-                  <input
-                    value={line.note}
-                    onChange={(event) =>
-                      patchSession({
-                        cart: session.cart.map((entry) =>
-                          entry.key === line.key ? { ...entry, note: event.target.value } : entry,
-                        ),
-                      })
-                    }
-                    placeholder="Notes"
-                    className="mt-2 min-h-8 w-full rounded-lg border border-white/15 bg-transparent px-2 text-xs text-white placeholder:text-white/40"
-                  />
-                </li>
-              ))
-            )}
-          </ul>
+                </article>
+              ))}
+              {session.cart.length === 0 ? (
+                <p className="w-full rounded-2xl border border-dashed border-neutral-300 bg-white p-6 text-center text-sm text-neutral-500">
+                  Cart is empty. Add dishes from the menu.
+                </p>
+              ) : null}
+            </section>
 
-          {/* Compact dock — ordered items stay the main view */}
-          <div className="max-h-[58dvh] shrink-0 overflow-y-auto border-t border-white/10 bg-neutral-950 px-3 py-2.5 sm:px-4 lg:max-h-[65dvh]">
-            <div className="flex items-center gap-2">
-              <span className="shrink-0 rounded-lg border border-white/15 px-2 py-1.5 text-[11px] font-semibold text-white/70">
-                ₹ off
-              </span>
-              <input
-                type="number"
-                min={0}
-                value={session.billDiscount || ""}
-                onChange={(event) =>
-                  patchSession({ billDiscount: Number(event.target.value) || 0 })
-                }
-                disabled={!tableKey || !permissions.applyDiscount}
-                placeholder="0"
-                className="min-h-9 min-w-0 flex-1 rounded-lg border border-white/20 bg-transparent px-2 text-sm disabled:opacity-40"
-              />
-              <button
-                type="button"
-                onClick={() => setExtrasOpen((open) => !open)}
-                className="shrink-0 rounded-lg border border-white/15 px-2.5 py-1.5 text-[11px] font-semibold text-white/80"
-              >
-                {extrasOpen ? "Hide" : "Coupon · note · phone"}
-              </button>
-            </div>
-
-            {extrasOpen ? (
-              <div className="mt-2 grid gap-1.5 sm:grid-cols-3">
-                <input
-                  value={session.couponCode}
-                  onChange={(event) => patchSession({ couponCode: event.target.value })}
-                  disabled={!tableKey || !permissions.applyCoupon}
-                  placeholder="Coupon"
-                  className="min-h-9 rounded-lg border border-white/20 bg-transparent px-2 text-xs disabled:opacity-40"
-                />
-                <input
-                  value={session.orderNote}
-                  onChange={(event) => patchSession({ orderNote: event.target.value })}
-                  disabled={!tableKey}
-                  placeholder="Order note"
-                  className="min-h-9 rounded-lg border border-white/20 bg-transparent px-2 text-xs disabled:opacity-40"
-                />
-                <input
-                  value={session.customerPhone}
-                  onChange={(event) => patchSession({ customerPhone: event.target.value })}
-                  disabled={!tableKey}
-                  placeholder="Phone (optional)"
-                  className="min-h-9 rounded-lg border border-white/20 bg-transparent px-2 text-xs disabled:opacity-40"
-                />
-              </div>
+            {internalTracking ? (
+              <section className="rounded-2xl border border-neutral-200 bg-white">
+                <button
+                  type="button"
+                  onClick={() => setCustomerOpen((open) => !open)}
+                  className="flex min-h-12 w-full items-center justify-between px-4 text-sm font-semibold"
+                >
+                  <span>Customer Details</span>
+                  <span className="font-bold text-blue-700">{customerOpen ? "HIDE" : "ADD"}</span>
+                </button>
+                {customerOpen ? (
+                  <div className="grid gap-2 border-t border-neutral-100 px-4 py-3">
+                    <input
+                      value={session.guestName}
+                      onChange={(event) => patchSession({ guestName: event.target.value })}
+                      placeholder="Guest name"
+                      className="min-h-11 rounded-xl border border-neutral-200 px-3 text-sm"
+                    />
+                    <input
+                      value={session.customerPhone}
+                      onChange={(event) => patchSession({ customerPhone: event.target.value })}
+                      placeholder="Phone"
+                      inputMode="tel"
+                      className="min-h-11 rounded-xl border border-neutral-200 px-3 text-sm"
+                    />
+                    <input
+                      value={session.guestCount}
+                      onChange={(event) => patchSession({ guestCount: event.target.value })}
+                      placeholder="Guest count"
+                      inputMode="numeric"
+                      className="min-h-11 rounded-xl border border-neutral-200 px-3 text-sm"
+                    />
+                    <input
+                      value={session.orderNote}
+                      onChange={(event) => patchSession({ orderNote: event.target.value })}
+                      placeholder="Order note"
+                      className="min-h-11 rounded-xl border border-neutral-200 px-3 text-sm"
+                    />
+                  </div>
+                ) : null}
+              </section>
             ) : null}
 
-            <div className="mt-2 space-y-0.5 text-sm">
-              {lastSavedOrder ? <div className="space-y-0.5 border-b border-white/15 pb-1.5">
-                <div className="flex justify-between font-semibold"><span>Saved order #{lastOrderNumber}</span><span>{money(lastSavedOrder.total, currency)}</span></div>
-                <div className="flex justify-between text-xs text-white/55"><span>Items subtotal</span><span>{money(lastSavedOrder.subtotal, currency)}</span></div>
-                {(lastSavedOrder.serviceCharge ?? 0) > 0 ? <div className="flex justify-between text-xs text-white/55"><span>Service charge</span><span>{money(lastSavedOrder.serviceCharge ?? 0, currency)}</span></div> : null}
-                {(lastSavedOrder.taxAmount ?? 0) > 0 ? <div className="flex justify-between text-xs text-white/55"><span>{taxLabel} included in total</span><span>{money(lastSavedOrder.taxAmount ?? 0, currency)}</span></div> : null}
-                {(lastSavedOrder.cgstAmount ?? 0) > 0 ? <div className="flex justify-between pl-3 text-[11px] text-white/45"><span>Includes CGST</span><span>{money(lastSavedOrder.cgstAmount ?? 0, currency)}</span></div> : null}
-                {(lastSavedOrder.sgstAmount ?? 0) > 0 ? <div className="flex justify-between pl-3 text-[11px] text-white/45"><span>Includes SGST</span><span>{money(lastSavedOrder.sgstAmount ?? 0, currency)}</span></div> : null}
-                {(lastSavedOrder.payment.amountPaid ?? 0) > 0 ? <div className="flex justify-between text-xs text-emerald-200"><span>Paid</span><span>{money(lastSavedOrder.payment.amountPaid ?? 0, currency)}</span></div> : null}
-              </div> : null}
-              <div className="flex justify-between text-white/65">
-                <span>{lastSavedOrder ? "New items subtotal" : "Subtotal"}</span>
-                <span>{money(totals.itemsSubtotal, currency)}</span>
+            <section className="rounded-2xl border border-neutral-200 bg-white p-3">
+              <p className="mb-2 text-xs font-semibold text-neutral-500">Order type</p>
+              <div className="inline-flex rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700">
+                <UtensilsCrossed className="mr-2 h-4 w-4" />
+                Dine-In
               </div>
-              {totals.billDiscount > 0 ? (
-                <div className="flex justify-between text-emerald-200">
-                  <span>Discount</span>
-                  <span>−{money(totals.billDiscount, currency)}</span>
+            </section>
+
+            <section className="rounded-2xl border border-neutral-200 bg-white p-3">
+              <label className="block text-xs font-semibold text-neutral-500">
+                Table Number
+                <select
+                  value={tableId}
+                  onChange={(event) => {
+                    const nextId = event.target.value;
+                    const moving = session;
+                    setTableId(nextId);
+                    if (nextId && moving.cart.length) {
+                      setCartsByTable((prev) => ({
+                        ...prev,
+                        [nextId]: {
+                          ...(prev[nextId] ?? emptyCartState()),
+                          cart: [...(prev[nextId]?.cart ?? []), ...moving.cart],
+                          idempotencyKey: crypto.randomUUID(),
+                        },
+                        __draft__: emptyCartState(),
+                      }));
+                    }
+                    setMessage(null);
+                  }}
+                  className={`mt-1 block min-h-12 w-full rounded-xl border bg-white px-3 text-sm ${
+                    !selectedLocation ? "border-rose-400" : "border-neutral-200"
+                  }`}
+                >
+                  <option value="">Select Table</option>
+                  {tables.map((table) => (
+                    <option key={table.id} value={table.id}>
+                      {table.locationType === "ROOM" ? "Room" : "Table"} {table.tableNumber}
+                      {table.label ? ` · ${table.label}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </section>
+
+            {paymentOptions.length > 0 ? (
+              <section className="rounded-2xl border border-neutral-200 bg-white p-3">
+                <p className="mb-2 text-xs font-semibold text-neutral-500">Payment Type</p>
+                <div className="scrollbar-none flex gap-2 overflow-x-auto">
+                  {paymentOptions.map((method) => (
+                    <button
+                      key={method}
+                      type="button"
+                      onClick={() => setPayMethod(method)}
+                      className={`min-h-11 shrink-0 rounded-xl border px-4 text-sm font-semibold ${
+                        payMethod === method
+                          ? "border-blue-600 text-blue-700"
+                          : "border-neutral-200 text-neutral-700"
+                      }`}
+                    >
+                      {method === "CASH" ? "Cash" : method === "UPI" ? "UPI" : "Card"}
+                    </button>
+                  ))}
                 </div>
-              ) : null}
-              {totals.packagingCharge > 0 ? <div className="flex justify-between text-white/65"><span>Packaging</span><span>{money(totals.packagingCharge, currency)}</span></div> : null}
-              {totals.serviceCharge > 0 ? <div className="flex justify-between text-white/65"><span>Service charge</span><span>{money(totals.serviceCharge, currency)}</span></div> : null}
-              {totals.taxAmount > 0 ? <div className="flex justify-between text-white/65">
-                <span>
-                  {totals.taxLabel} ({totals.gstRatePercent}%)
-                </span>
-                <span>{money(totals.taxAmount, currency)}</span>
-              </div> : null}
-              {totals.cgstAmount > 0 ? <div className="flex justify-between pl-3 text-xs text-white/50"><span>Includes CGST</span><span>{money(totals.cgstAmount, currency)}</span></div> : null}
-              {totals.sgstAmount > 0 ? <div className="flex justify-between pl-3 text-xs text-white/50"><span>Includes SGST</span><span>{money(totals.sgstAmount, currency)}</span></div> : null}
-              <div className="flex justify-between text-lg font-bold">
-                <span>{lastSavedOrder ? cartItemCount > 0 ? "Estimated with new items" : "Running total" : "Total"}</span>
-                <span>{money((lastSavedOrder?.total ?? 0) + totals.total, currency)}</span>
-              </div>
-            </div>
+              </section>
+            ) : null}
 
-            <div className="mt-2 space-y-1.5">
-              <button
-                type="button"
-                disabled={pending || session.cart.length === 0 || !selectedLocation}
-                onClick={placeOrder}
-                className="min-h-11 w-full rounded-xl bg-[#f59e0b] text-sm font-bold text-neutral-950 disabled:opacity-40"
-              >
-                {pending ? "Saving items…" : "Save items to table"}
-              </button>
-              {lastOrderId ? (
-                <section className="space-y-2 rounded-xl border border-white/15 bg-white/5 p-3" aria-label="Saved order actions">
-                  <div className="flex items-center justify-between gap-2 text-xs"><strong>Saved order #{lastOrderNumber}</strong><span className="text-white/70">{selectedLocationName}</span></div>
-                  {selectedLocation ? <Link href={`/captain/${slug}/tables/${encodeURIComponent(selectedLocation.id)}`} className="flex min-h-11 items-center justify-center rounded-lg border border-white/30 bg-white/10 px-3 text-sm font-bold">View all table items &amp; bill</Link> : null}
-                  <p className="text-xs text-white/60">Saved on the table. KOT prints once when the guest finishes ordering.</p>
-                  {canRecordAny ? <>
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {(["CASH", "UPI", "CARD"] as PaymentMethod[]).map((method) => {
-                      const allowed =
-                        (method === "CASH" && permissions.recordCashPayment) ||
-                        (method === "UPI" && permissions.recordUpiPayment) ||
-                        (method === "CARD" && permissions.recordCardPayment);
-                      return (
-                        <button
-                          key={method}
-                          type="button"
-                          disabled={!allowed}
-                          onClick={() => { setPayMethod(method); if (method === "UPI" && !upiRequest && !paymentPending) createUpiQr(); }}
-                          className={`min-h-10 rounded-lg text-xs font-semibold disabled:opacity-30 ${
-                            payMethod === method ? "bg-[#f59e0b] text-neutral-950" : "bg-white/10"
-                          }`}
-                        >
-                          {method}
-                        </button>
-                      );
-                    })}
+            <section className="rounded-2xl border border-neutral-200 bg-white p-4">
+              <h2 className="text-sm font-bold">Bill Details</h2>
+              <dl className="mt-3 space-y-2.5 text-sm">
+                <div className="flex justify-between">
+                  <dt className="text-neutral-500">Sub Total</dt>
+                  <dd className="font-semibold">{money(totals.itemsSubtotal, currency)}</dd>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-neutral-500">Discount</dt>
+                  <dd>
+                    {permissions.applyDiscount ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDraftDiscountMode(session.discountMode);
+                          setDraftDiscountValue(session.discountInput || (session.billDiscount ? String(session.billDiscount) : ""));
+                          setDiscountOpen(true);
+                        }}
+                        className="font-bold text-blue-700"
+                      >
+                        {session.billDiscount > 0
+                          ? `−${money(session.billDiscount, currency)}`
+                          : "ADD"}
+                      </button>
+                    ) : (
+                      <span className="font-semibold">{money(0, currency)}</span>
+                    )}
+                  </dd>
+                </div>
+                {session.billDiscount > 0 ? (
+                  <div className="flex justify-between text-emerald-700">
+                    <dt>Effective Discount</dt>
+                    <dd className="font-semibold">−{money(session.billDiscount, currency)}</dd>
                   </div>
-                  {payMethod === "UPI" ? upiRequest ? (
-                    <div className="space-y-2 rounded-xl bg-white p-3 text-center text-neutral-900">
-                      <p className="text-xs font-bold">{upiRequest.status === "PAID" ? "Verified UPI payment" : "Scan exact-amount UPI QR"}</p>
-                      {upiRequest.qrImageUrl && !upiRequestNeedsReplacement ? <img src={upiRequest.qrImageUrl} alt={`UPI QR for order ${lastOrderNumber}`} className="mx-auto h-56 w-56 max-w-full object-contain" /> : null}
-                      <p className="text-xl font-black">{money(upiRequest.amount, currency)}</p>
-                      <p className="break-all text-[11px] text-neutral-600">Ref {upiRequest.paymentReferenceId}</p>
-                      <p className="text-xs font-semibold">{upiRequest.status === "PAID" ? "Provider confirmed · payment recorded" : upiRequestNeedsReplacement ? `Request ${upiRequest.status.toLowerCase()} · do not scan this QR` : `Status: ${upiRequest.status} · waiting for provider confirmation`}</p>
-                      {upiRequestNeedsReplacement ? <button type="button" onClick={createUpiQr} className="min-h-9 rounded-lg border px-3 text-xs">Create new request</button> : upiRequest.status !== "PAID" ? <div className="flex justify-center gap-2"><button type="button" onClick={() => void refreshUpiStatus(lastOrderId).catch((error) => setMessage(error instanceof Error ? error.message : "Refresh failed"))} className="min-h-9 rounded-lg border px-3 text-xs">Refresh status</button><button type="button" onClick={() => void fetch(`/api/captain/orders/${encodeURIComponent(lastOrderId)}/upi/cancel`, { method: "POST", body: "{}" }).then(async (response) => { const json = await response.json(); if (!response.ok || !json.success) throw new Error(json.error || "Cancel failed"); setUpiRequest(json.data); }).catch((error) => setMessage(error instanceof Error ? error.message : "Cancel failed"))} className="min-h-9 rounded-lg border px-3 text-xs">Cancel request</button></div> : null}
-                    </div>
-                  ) : <button type="button" disabled={paymentPending || pending} onClick={createUpiQr} className="min-h-10 w-full rounded-lg bg-white text-sm font-bold text-neutral-900 disabled:opacity-50">{paymentPending ? "Creating QR…" : "Generate UPI QR"}</button> : (
-                    <div className="flex gap-2"><label className="min-w-0 flex-1 text-xs text-white/70">{payMethod} received<input type="number" min="0.01" step="0.01" value={payAmount} onChange={(event) => setPayAmount(event.target.value === "" ? "" : Number(event.target.value))} className="mt-1 min-h-10 w-full rounded-lg border border-white/20 bg-transparent px-2 text-sm text-white" /></label><button type="button" disabled={pending || payAmount === ""} onClick={recordPay} className="self-end min-h-10 rounded-lg bg-white px-3 text-xs font-bold text-neutral-900 disabled:opacity-40">Confirm {payMethod}</button></div>
-                  )}
-                  </> : <p className="text-xs text-white/60">Payment is handled by an authorized cashier.</p>}
-                </section>
-              ) : (
-                <p className="text-[11px] text-white/55">
-                  Save the order first. Send KOT and payment stay in this panel.
-                </p>
-              )}
-            </div>
+                ) : null}
+                {totals.taxAmount > 0 ? (
+                  <div className="flex justify-between">
+                    <dt className="text-neutral-500">{totals.taxLabel || taxLabel}</dt>
+                    <dd className="font-semibold">{money(totals.taxAmount, currency)}</dd>
+                  </div>
+                ) : null}
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-neutral-500">Service Charge</dt>
+                  <dd>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDraftServiceValue(
+                          session.serviceChargeInput ||
+                            (session.serviceChargePercent ? String(session.serviceChargePercent) : ""),
+                        );
+                        setServiceOpen(true);
+                      }}
+                      className="font-bold text-blue-700"
+                    >
+                      {totals.serviceCharge > 0 ? money(totals.serviceCharge, currency) : "ADD"}
+                    </button>
+                  </dd>
+                </div>
+                <div className="flex justify-between border-t border-dashed border-neutral-200 pt-3 text-base font-bold">
+                  <dt>Total Amount</dt>
+                  <dd>{money(totals.total, currency)}</dd>
+                </div>
+              </dl>
+            </section>
           </div>
-        </aside>
-      </div>
 
-      <button
-        type="button"
-        onClick={() => setCartOpen(true)}
-        className="safe-bottom fixed inset-x-3 bottom-[4.55rem] z-30 flex min-h-16 items-center justify-between rounded-2xl bg-neutral-900 px-4 pt-3 text-left text-white shadow-[0_14px_35px_rgba(0,0,0,0.28)] lg:hidden"
-      >
-        <span className="flex items-center gap-3">
-          <span className="relative grid h-10 w-10 place-items-center rounded-xl bg-white/10">
-            <ShoppingBag className="h-5 w-5" />
-            {cartItemCount > 0 ? <span className="absolute -right-1.5 -top-1.5 grid h-5 min-w-5 place-items-center rounded-full bg-amber-500 px-1 text-[10px] font-bold text-neutral-950">{cartItemCount}</span> : null}
-          </span>
-          <span><span className="block text-sm font-bold">{cartItemCount ? "Review new items" : lastSavedOrder ? `Order #${lastOrderNumber} · ${savedUnsentCount} unsent` : "Cart is empty"}</span><span className="block text-xs text-white/60">{selectedLocationName}</span></span>
-        </span>
-        <span className="text-base font-bold">{money((lastSavedOrder?.total ?? 0) + totals.total, currency)}</span>
-      </button>
+          <div className="safe-bottom fixed inset-x-0 bottom-0 z-30 grid grid-cols-2 gap-2 border-t border-neutral-200 bg-white p-3">
+            <button
+              type="button"
+              disabled={submitting || cartItemCount === 0}
+              onClick={() => void submitOrder("hold")}
+              className="min-h-12 rounded-2xl border border-neutral-300 bg-white text-sm font-bold disabled:opacity-40"
+            >
+              Save & Hold
+            </button>
+            <button
+              type="button"
+              disabled={submitting || cartItemCount === 0}
+              onClick={() => void submitOrder("bill")}
+              className="min-h-12 rounded-2xl text-sm font-bold text-white disabled:opacity-40"
+              style={{ backgroundColor: ACCENT }}
+            >
+              Confirm & Save
+            </button>
+          </div>
+        </div>
+      )}
+
+      {discountOpen ? (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
+          <div className="relative w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
+            <button
+              type="button"
+              aria-label="Close"
+              onClick={() => setDiscountOpen(false)}
+              className="absolute -top-3 right-3 grid h-9 w-9 place-items-center rounded-full bg-neutral-700 text-white"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            <h3 className="text-lg font-bold">Add Discount</h3>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              {(["AMOUNT", "PERCENTAGE"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setDraftDiscountMode(mode)}
+                  className={`min-h-11 rounded-xl border text-sm font-semibold ${
+                    draftDiscountMode === mode
+                      ? "border-blue-600 text-blue-700"
+                      : "border-neutral-200 text-neutral-600"
+                  }`}
+                >
+                  {mode}
+                </button>
+              ))}
+            </div>
+            <label className="mt-4 block text-xs font-semibold text-neutral-500">
+              Discount
+              <div className="relative mt-1">
+                <input
+                  inputMode="decimal"
+                  value={draftDiscountValue}
+                  onChange={(event) => setDraftDiscountValue(event.target.value)}
+                  className="min-h-12 w-full rounded-xl border border-blue-500 px-3 pr-10 text-base"
+                />
+                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-neutral-500">
+                  {draftDiscountMode === "PERCENTAGE" ? "%" : "₹"}
+                </span>
+              </div>
+            </label>
+            <button
+              type="button"
+              onClick={applyDiscountDraft}
+              className="mt-5 min-h-12 w-full rounded-xl text-sm font-bold text-white"
+              style={{ backgroundColor: ACCENT }}
+            >
+              Save Details
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {serviceOpen ? (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
+          <div className="relative w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
+            <button
+              type="button"
+              aria-label="Close"
+              onClick={() => setServiceOpen(false)}
+              className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-full bg-neutral-100 text-neutral-600"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            <h3 className="text-lg font-bold">Add Service Charge</h3>
+            <label className="mt-4 block text-xs font-semibold text-neutral-500">
+              Service Charge
+              <div className="relative mt-1">
+                <input
+                  inputMode="decimal"
+                  value={draftServiceValue}
+                  onChange={(event) => setDraftServiceValue(event.target.value)}
+                  className="min-h-12 w-full rounded-xl border border-blue-500 px-3 pr-10 text-base"
+                />
+                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-neutral-500">
+                  %
+                </span>
+              </div>
+            </label>
+            <button
+              type="button"
+              onClick={applyServiceDraft}
+              className="mt-5 min-h-12 w-full rounded-xl text-sm font-bold text-white"
+              style={{ backgroundColor: ACCENT }}
+            >
+              Save Details
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {customizing ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
@@ -948,7 +1036,7 @@ export default function CaptainOrderPad({
                       type="button"
                       onClick={() => setSelectedVariantId(variant.id)}
                       className={`min-h-11 rounded-xl px-3 text-sm ${
-                        selectedVariantId === variant.id ? "bg-neutral-900 text-white" : "bg-neutral-100"
+                        selectedVariantId === variant.id ? "bg-blue-700 text-white" : "bg-neutral-100"
                       }`}
                     >
                       {variant.name} · {money(variant.price, currency)}
@@ -983,7 +1071,7 @@ export default function CaptainOrderPad({
                               });
                             }}
                             className={`min-h-10 rounded-xl px-3 text-sm ${
-                              selected ? "bg-neutral-900 text-white" : "bg-neutral-100"
+                              selected ? "bg-blue-700 text-white" : "bg-neutral-100"
                             }`}
                           >
                             {addon.name} · {money(addon.price, currency)}
@@ -1004,7 +1092,8 @@ export default function CaptainOrderPad({
               <button
                 type="button"
                 onClick={confirmCustomize}
-                className="min-h-11 flex-1 rounded-xl bg-neutral-900 text-white"
+                className="min-h-11 flex-1 rounded-xl text-white"
+                style={{ backgroundColor: ACCENT }}
               >
                 Add to cart
               </button>

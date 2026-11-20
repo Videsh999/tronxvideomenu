@@ -3,7 +3,7 @@ import CaptainManagement from "@/components/admin/CaptainManagement";
 import { getRestaurantAdminContext } from "@/lib/auth-server";
 import { restaurantService } from "@/lib/services/restaurant.service";
 import { tableRepository } from "@/lib/repositories/table.repository";
-import { requireRestaurantFeature } from "@/lib/feature-access";
+import { hasRestaurantFeature, requireRestaurantFeature } from "@/lib/feature-access";
 
 export const dynamic = "force-dynamic";
 
@@ -21,5 +21,7 @@ export default async function CaptainsPage({ params }: { params: Promise<{ slug:
     tables={tables}
     initialQrRequiresCaptainApproval={restaurant.orderSettings?.qrRequiresCaptainApproval !== false}
     initialCustomerOrderingMode={restaurant.orderSettings?.customerOrderingMode ?? (restaurant.orderSettings?.qrRequiresCaptainApproval === false ? "AUTOMATIC" : "CAPTAIN_APPROVAL")}
+    canUseInternalTracking={hasRestaurantFeature(restaurant, "INTERNAL_TRACKING")}
+    initialInternalTrackingEnabled={restaurant.orderSettings?.internalTrackingEnabled === true}
   />;
 }

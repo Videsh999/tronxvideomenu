@@ -23,11 +23,15 @@ export default function CaptainManagement({
   tables = [],
   initialQrRequiresCaptainApproval = true,
   initialCustomerOrderingMode,
+  canUseInternalTracking = false,
+  initialInternalTrackingEnabled = false,
 }: {
   restaurantSlug: string;
   tables?: RestaurantTable[];
   initialQrRequiresCaptainApproval?: boolean;
   initialCustomerOrderingMode?: "OFF" | "CAPTAIN_APPROVAL" | "AUTOMATIC";
+  canUseInternalTracking?: boolean;
+  initialInternalTrackingEnabled?: boolean;
 }) {
   const [captains, setCaptains] = useState<CaptainView[]>([]);
   const [name, setName] = useState("");
@@ -44,6 +48,7 @@ export default function CaptainManagement({
   const [assignDraft, setAssignDraft] = useState<Record<string, string[]>>({});
   const [qrRequiresCaptainApproval, setQrRequiresCaptainApproval] = useState(initialQrRequiresCaptainApproval);
   const [customerOrderingMode, setCustomerOrderingMode] = useState(initialCustomerOrderingMode ?? (initialQrRequiresCaptainApproval ? "CAPTAIN_APPROVAL" : "AUTOMATIC"));
+  const [internalTrackingEnabled, setInternalTrackingEnabled] = useState(initialInternalTrackingEnabled);
   const [savingApprovalPolicy, setSavingApprovalPolicy] = useState(false);
   const activeTables = tables.filter((table) => table.isActive);
 
@@ -69,6 +74,23 @@ export default function CaptainManagement({
   const saveCustomerOrderingMode = async (mode: "OFF" | "CAPTAIN_APPROVAL" | "AUTOMATIC") => {
     setSavingApprovalPolicy(true); setMessage("");
     try { await request("/api/admin/captain-settings", { method: "PATCH", body: JSON.stringify({ customerOrderingMode: mode }) }); setCustomerOrderingMode(mode); setQrRequiresCaptainApproval(mode === "CAPTAIN_APPROVAL"); setMessage(`Customer ordering: ${mode.replace(/_/g, " ").toLowerCase()}.`); } catch (error) { setMessage(error instanceof Error ? error.message : "Unable to save customer ordering mode"); } finally { setSavingApprovalPolicy(false); }
+  };
+
+  const saveInternalTracking = async (enabled: boolean) => {
+    setSavingApprovalPolicy(true);
+    setMessage("");
+    try {
+      await request("/api/admin/captain-settings", {
+        method: "PATCH",
+        body: JSON.stringify({ internalTrackingEnabled: enabled }),
+      });
+      setInternalTrackingEnabled(enabled);
+      setMessage(enabled ? "Internal tracking is on for captains." : "Internal tracking is off — simple table ordering.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to update internal tracking");
+    } finally {
+      setSavingApprovalPolicy(false);
+    }
   };
 
   const refresh = async () => {
@@ -344,6 +366,37 @@ export default function CaptainManagement({
           {(["OFF", "CAPTAIN_APPROVAL", "AUTOMATIC"] as const).map((mode) => <button key={mode} type="button" disabled={savingApprovalPolicy} onClick={() => void saveCustomerOrderingMode(mode)} className={`min-h-12 rounded-xl border px-3 text-sm font-bold ${customerOrderingMode === mode ? "border-neutral-900 bg-neutral-900 text-white" : "border-neutral-200 text-neutral-700"}`}>{mode === "OFF" ? "Captain only" : mode === "CAPTAIN_APPROVAL" ? "Captain approval" : "Automatic"}</button>)}
         </div>
       </section>
+
+      {canUseInternalTracking ? (
+        <section className="rounded-2xl border border-neutral-200 bg-white p-4 sm:p-5">
+          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-neutral-400">Table app</p>
+          <div className="mt-1 flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <h2 className="text-lg font-bold">Internal tracking</h2>
+              <p className="mt-1 text-sm text-neutral-500">
+                When on, captains can capture guest name, phone, notes, and guest count. When off, ordering stays simple — items, table, pay, KOT.
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={savingApprovalPolicy}
+              onClick={() => void saveInternalTracking(!internalTrackingEnabled)}
+              className={`relative inline-flex min-h-12 min-w-[11rem] shrink-0 items-center justify-between gap-3 rounded-xl px-4 text-sm font-bold transition disabled:opacity-50 ${
+                internalTrackingEnabled ? "bg-sky-600 text-white" : "bg-neutral-100 text-neutral-700"
+              }`}
+            >
+              <span>{internalTrackingEnabled ? "Tracking: ON" : "Tracking: OFF"}</span>
+              <span className={`relative h-6 w-11 rounded-full ${internalTrackingEnabled ? "bg-white/30" : "bg-neutral-300"}`}>
+                <span
+                  className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow transition-all ${
+                    internalTrackingEnabled ? "left-6" : "left-1"
+                  }`}
+                />
+              </span>
+            </button>
+          </div>
+        </section>
+      ) : null}
 
       <section className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4 text-sm text-neutral-600">
         <p className="font-semibold text-neutral-900">Captain sign-in portal</p>

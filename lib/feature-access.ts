@@ -54,6 +54,7 @@ export function getAllRestaurantFeatures(restaurant: Restaurant): Record<Feature
     HARDWARE_PAYMENT_TERMINAL: false,
     HARDWARE_CUSTOMER_DISPLAY: false,
     HARDWARE_LOCAL_CONNECTOR: false,
+    INTERNAL_TRACKING: false,
   };
 
   for (const key of Object.keys(features) as FeatureKey[]) {

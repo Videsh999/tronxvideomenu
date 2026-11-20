@@ -188,7 +188,9 @@ export type FeatureKey =
   | "HARDWARE_BARCODE"
   | "HARDWARE_PAYMENT_TERMINAL"
   | "HARDWARE_CUSTOMER_DISPLAY"
-  | "HARDWARE_LOCAL_CONNECTOR";
+  | "HARDWARE_LOCAL_CONNECTOR"
+  /** Optional floor tracking (guest details, notes, guest count) — grant per restaurant. */
+  | "INTERNAL_TRACKING";
 
 export type KitchenStation = "MAIN" | "BAR" | "BAKERY" | "DESSERT" | "OTHER";
 
@@ -287,6 +289,11 @@ export type RestaurantOrderSettings = {
   customerOrderingMode?: "OFF" | "CAPTAIN_APPROVAL" | "AUTOMATIC";
   /** Legacy compatibility. Defaults to true when mode is not set. */
   qrRequiresCaptainApproval?: boolean;
+  /**
+   * When INTERNAL_TRACKING is entitled and this is true, captain cart shows
+   * guest name / phone / notes / guest count. Off keeps the simple table-app flow.
+   */
+  internalTrackingEnabled?: boolean;
 };
 
 export type InventoryConsumptionPoint = "ACCEPTED" | "PREPARING" | "READY" | "SERVED";

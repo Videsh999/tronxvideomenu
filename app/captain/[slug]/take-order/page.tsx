@@ -1,4 +1,5 @@
 import { requireCaptain } from "@/lib/auth-server";
+import { hasRestaurantFeature } from "@/lib/features";
 import { restaurantService } from "@/lib/services/restaurant.service";
 import { tableService } from "@/lib/services/table.service";
 import CaptainOrderPad from "@/components/captain/CaptainOrderPad";
@@ -33,9 +34,13 @@ export default async function CaptainTakeOrderPage({
   const tableValue = Array.isArray(rawTable) ? rawTable[0] : rawTable;
   const initialTableId = tableValue && tables.some((table) => table.id === tableValue) ? tableValue : null;
 
+  const internalTracking =
+    hasRestaurantFeature(menu.restaurant, "INTERNAL_TRACKING") &&
+    menu.restaurant.orderSettings?.internalTrackingEnabled === true;
+
   return (
     <>
-    <RememberCaptainScreen path={`/captain/${slug}/take-order`} snap={{ kind: "title", title: "New order", detail: "Add items. They go straight to the kitchen." }} />
+    <RememberCaptainScreen path={`/captain/${slug}/take-order`} snap={{ kind: "title", title: "Add order", detail: "Pick items, then KOT & Hold or KOT & Bill." }} />
     <CaptainOrderPad
       slug={slug}
       currency={menu.restaurant.currency ?? "INR"}
@@ -51,6 +56,7 @@ export default async function CaptainTakeOrderPage({
       tables={tables}
       initialTableId={initialTableId}
       permissions={captain.permissions}
+      internalTracking={internalTracking}
     />
     </>
   );
