@@ -10,6 +10,7 @@ import UpiPaymentQr from "@/components/shared/UpiPaymentQr";
 import type { DynamicPaymentRequest, MasterBill, MasterBillLine, OrderSummary, RestaurantTable, TableSession } from "@/types";
 import { locationName } from "@/lib/service-location";
 import { printQueuedKitchenOrderTicket, printSessionKitchenTicket } from "@/lib/kot-print";
+import { isPendingCaptainApproval } from "@/lib/order-authorization";
 import { buildUpiPaymentUri, isValidUpiId } from "@/lib/upi-payment";
 import { serviceTaxAmount, type ServiceTaxMode } from "@/lib/billing/service-tax";
 
@@ -78,7 +79,18 @@ async function printBill(bill: MasterBill, orders: OrderSummary[], restaurantNam
   window.setTimeout(cleanup, 60_000);
 }
 
-export default function CaptainTableService({ slug, restaurantName, table, currency, upiSettings, initialOrders, initialSession, initialBill }: {
+export default function CaptainTableService({
+  slug,
+  restaurantName,
+  table,
+  currency,
+  upiSettings,
+  initialOrders,
+  initialSession,
+  initialBill,
+  openBillOnLoad = false,
+  initialTipPercent,
+}: {
   slug: string;
   restaurantName: string;
   table: RestaurantTable;
@@ -87,14 +99,21 @@ export default function CaptainTableService({ slug, restaurantName, table, curre
   initialOrders: OrderSummary[];
   initialSession: TableSession | null;
   initialBill: MasterBill | null;
+  openBillOnLoad?: boolean;
+  initialTipPercent?: number;
 }) {
   const router = useRouter();
   const saveLock = useRef(false);
+  const autoBillStarted = useRef(false);
   const [orders, setOrders] = useState(initialOrders);
   const [session, setSession] = useState(initialSession);
   const [bill, setBill] = useState(initialBill);
-  const [serviceTaxMode, setServiceTaxMode] = useState<ServiceTaxMode>(initialBill?.tipAmount ? "AMOUNT" : "PERCENT");
-  const [serviceTaxPercent, setServiceTaxPercent] = useState("");
+  const [serviceTaxMode, setServiceTaxMode] = useState<ServiceTaxMode>(
+    initialBill?.tipAmount ? "AMOUNT" : initialTipPercent != null ? "PERCENT" : "PERCENT",
+  );
+  const [serviceTaxPercent, setServiceTaxPercent] = useState(
+    initialTipPercent != null ? String(initialTipPercent) : "",
+  );
   const [serviceTaxAmountInput, setServiceTaxAmountInput] = useState(initialBill?.tipAmount ? String(initialBill.tipAmount) : "");
   const [method, setMethod] = useState<"CASH" | "CARD">("CASH");
   const [upi, setUpi] = useState<DynamicPaymentRequest | null>(null);
@@ -227,27 +246,61 @@ export default function CaptainTableService({ slug, restaurantName, table, curre
 
   function showBill() {
     if (saveLock.current) return;
-    if (activeOrders.some((order) => order.status === "PENDING")) {
-      setMessage("Approve the customer’s pending order first, then show the final bill.");
+    if (activeOrders.some((order) => isPendingCaptainApproval(order))) {
+      setMessage("Approve the guest’s QR order first, then show the bill.");
       return;
     }
-    if (!session) {
-      setMessage("No active table visit was found. Refresh the table and try again.");
+    if (!session && !activeOrders.length) {
+      setMessage("No items on this table yet.");
       return;
     }
     const previous = bill;
     const preview = localBill();
     if (preview) setBill(preview);
-    setMessage("Bill updated.");
+    setMessage("Preparing bill…");
     saveLock.current = true;
-    void postSession({ action: "GENERATE_BILL", sessionId: session.id, tipAmount: serviceTaxRupees, revise: Boolean(previous) })
-      .then((updated) => setBill(updated))
-      .catch((error) => {
+    void (async () => {
+      try {
+        // Send any waiting KOT lines first so the bill matches the kitchen ticket.
+        if (unsentOrders.length) {
+          await dispatchUnsentOrders();
+          await refresh();
+        }
+        let sessionId = session?.id;
+        if (!sessionId) {
+          const overview = await refresh();
+          sessionId = overview.session?.id;
+        }
+        if (!sessionId) throw new Error("No active table visit. Refresh and try again.");
+        const updated = await postSession({
+          action: "GENERATE_BILL",
+          sessionId,
+          tipAmount: serviceTaxRupees,
+          revise: Boolean(previous && previous.id !== "local-bill"),
+        });
+        setBill(updated);
+        setMessage("Bill ready — record payment below.");
+        window.requestAnimationFrame(() => {
+          document.getElementById("customer-bill")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+      } catch (error) {
         setBill(previous);
         setMessage(error instanceof Error ? error.message : "Could not save the bill.");
-      })
-      .finally(() => { saveLock.current = false; });
+      } finally {
+        saveLock.current = false;
+      }
+    })();
   }
+
+  useEffect(() => {
+    if (!openBillOnLoad || autoBillStarted.current) return;
+    if (!activeOrders.length) return;
+    autoBillStarted.current = true;
+    const timer = window.setTimeout(() => showBill(), 250);
+    return () => window.clearTimeout(timer);
+    // Intentionally once when arriving from KOT & Bill.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openBillOnLoad, activeOrders.length]);
 
   function recordPayment() {
     if (!bill || bill.id === "local-bill" || billNeedsUpdate || unsentOrders.length || saveLock.current) return;
@@ -297,8 +350,8 @@ export default function CaptainTableService({ slug, restaurantName, table, curre
   }, [upi, session, upiOrder, refreshUpi]);
 
   function endTableVisit() {
-    if (activeOrders.some((order) => order.status === "PENDING")) {
-      setMessage("Approve the customer’s pending order first. Then end the table visit.");
+    if (activeOrders.some((order) => isPendingCaptainApproval(order))) {
+      setMessage("Approve the guest’s QR order first. Then end the table visit.");
       return;
     }
     void run(async () => {
@@ -340,14 +393,14 @@ export default function CaptainTableService({ slug, restaurantName, table, curre
 
   return <div className="mx-auto max-w-4xl space-y-5 pb-24">
     <Link href={`/captain/${slug}/tables`} className="inline-flex items-center gap-1 text-sm font-semibold text-neutral-500"><ArrowLeft className="h-4 w-4" /> All tables</Link>
-    <header className="rounded-3xl bg-neutral-900 p-5 text-white sm:p-7"><p className="text-xs font-semibold uppercase tracking-widest text-white/50">{table.label || "Dining area"}</p><h1 className="mt-1 text-3xl font-black sm:text-4xl">{locationName(table)}</h1><p className="mt-2 text-sm text-white/70">{session ? `${activeOrders.length} order${activeOrders.length === 1 ? "" : "s"} · ${money(orderTotal, currency)} so far` : activeOrders.length ? `${activeOrders.length} order${activeOrders.length === 1 ? "" : "s"} · ${money(orderTotal, currency)} so far` : "Ready for a new order"}</p></header>
+    <header className="rounded-3xl bg-neutral-900 p-5 text-white sm:p-7"><p className="text-xs font-semibold uppercase tracking-widest text-white/50">{table.label || "Dining area"}</p><h1 className="mt-1 text-3xl font-black sm:text-4xl">{locationName(table)}</h1><p className="mt-2 text-sm text-white/70">{session ? `${activeOrders.length} order${activeOrders.length === 1 ? "" : "s"} · ${money(orderTotal, currency)} so far` : activeOrders.length ? `${activeOrders.length} order${activeOrders.length === 1 ? "" : "s"} · ${money(orderTotal, currency)} so far` : "Ready for a new order"}</p><p className="mt-3 text-xs text-white/55">1. Add items · 2. Send KOT · 3. Show bill · 4. Take payment · 5. Free table</p></header>
     {message ? <p role="status" className="rounded-xl border border-neutral-200 bg-white px-4 py-3 text-sm font-semibold">{message}</p> : null}
     <section className="rounded-3xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-bold">Table order</h2><p className="text-sm text-neutral-500">Add more items whenever the guest asks.</p></div><Link href={`/captain/${slug}/take-order?table=${encodeURIComponent(table.id)}`} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-neutral-900 px-4 text-sm font-bold text-white"><Plus className="h-4 w-4" /> {activeOrders.length ? "Add items" : "Take order"}</Link></div>
       {activeOrders.length ? <div className="mt-5 space-y-3">{activeOrders.map((order) => <div key={order.id} className="rounded-2xl border border-neutral-100 bg-neutral-50 p-4"><div className="mb-2 flex justify-between gap-2 text-xs font-semibold text-neutral-500"><span>Order #{order.orderNumber}</span><span>{order.status === "PREPARING" ? "Cooking" : order.status === "READY" ? "Ready" : order.status === "SERVED" ? "Served" : order.status === "PENDING" ? "New" : order.kotLineIds?.length ? "Sent to kitchen" : "KOT waiting"}</span></div>{order.items.filter((item) => item.quantity > (item.cancelledQuantity ?? 0)).map((item, index) => <div key={item.lineId ?? index} className="flex justify-between gap-3 border-t border-neutral-200 py-2 text-sm"><span>{item.quantity - (item.cancelledQuantity ?? 0)}× {item.dishNameSnapshot}{item.note ? <small className="block text-neutral-500">{item.note}</small> : null}</span><strong>{money(item.itemTotal, currency)}</strong></div>)}</div>)}</div> : <p className="mt-5 rounded-2xl border border-dashed border-neutral-200 p-8 text-center text-sm text-neutral-500">No items yet. Tap Take order to start.</p>}
       {activeOrders.length ? <div className="mt-4 flex flex-wrap gap-2">{unsentOrders.length ? <button type="button" disabled={busy} onClick={sendKot} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-amber-500 px-4 text-sm font-bold text-neutral-950 disabled:opacity-50"><Printer className="h-4 w-4" /> Send order to kitchen &amp; print KOT</button> : null}<button type="button" disabled={busy} onClick={() => printSessionKitchenTicket(activeOrders.map((order) => ({ ...order, items: order.items.filter((item) => item.lineId && (order.kotLineIds ?? []).includes(item.lineId)) })).filter((order) => order.items.length), restaurantName, locationName(table))} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-neutral-300 px-4 text-sm font-semibold disabled:opacity-50"><Printer className="h-4 w-4" /> Print KOT copy</button><button type="button" disabled={busy} onClick={() => { setMessage("Table updated."); void refresh().catch((error) => setMessage(error instanceof Error ? error.message : "Could not refresh.")); }} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-neutral-300 px-4 text-sm font-semibold disabled:opacity-50"><RefreshCw className="h-4 w-4" /> Refresh</button><p className="w-full text-xs text-neutral-500">Sending creates the Kitchen “New” ticket and keeps this order in Orders and today’s reports.</p></div> : null}
     </section>
-    {session || activeOrders.length ? <section className="rounded-3xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-6"><div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-xl font-bold">Customer bill</h2><p className="text-sm text-neutral-500">Item price, quantity, service charge and each GST amount before payment.</p></div><button type="button" disabled={busy || !activeOrders.length || activeOrders.some((order) => order.status === "PENDING")} onClick={showBill} className="min-h-11 rounded-xl bg-neutral-900 px-4 text-sm font-bold text-white disabled:opacity-40">{bill ? "Update bill" : "Show bill"}</button></div>{activeOrders.some((order) => order.status === "PENDING") ? <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Approve pending customer orders before preparing the final bill.</p> : null}
+    {session || activeOrders.length ? <section id="customer-bill" className="rounded-3xl border-2 border-blue-200 bg-white p-5 shadow-sm sm:p-6"><div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-xl font-bold">Bill</h2><p className="text-sm text-neutral-500">Show the bill, take payment, then free the table.</p></div><button type="button" disabled={busy || !activeOrders.length || activeOrders.some((order) => isPendingCaptainApproval(order))} onClick={showBill} className="min-h-12 rounded-xl bg-blue-700 px-5 text-sm font-bold text-white disabled:opacity-40">{bill ? "Update bill" : "Show bill"}</button></div>{activeOrders.some((order) => isPendingCaptainApproval(order)) ? <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Approve the guest’s QR order before the final bill.</p> : null}
       {(!bill || bill.amountPaid === 0) ? <div className="mt-4 rounded-2xl border border-neutral-200 p-4"><p className="text-sm font-semibold">Service tax (optional)</p><p className="text-xs text-neutral-500">Type any percent, such as 2.7 or 3.5, or type a rupee amount. The guest can say no.</p><div className="mt-3 grid gap-3 sm:grid-cols-2"><label className={`rounded-2xl border p-3 ${serviceTaxMode === "PERCENT" ? "border-neutral-900" : "border-neutral-200"}`}><span className="flex items-center gap-2 text-sm font-bold"><input type="radio" name="service-tax-mode" checked={serviceTaxMode === "PERCENT"} onChange={() => setServiceTaxMode("PERCENT")} /> Percent</span><input type="number" inputMode="decimal" min="0" max="100" step="0.1" placeholder="2.7" value={serviceTaxPercent} onChange={(event) => { setServiceTaxMode("PERCENT"); setServiceTaxPercent(event.target.value); }} className="mt-2 h-12 w-full rounded-xl border border-neutral-300 px-3 text-lg" /></label><label className={`rounded-2xl border p-3 ${serviceTaxMode === "AMOUNT" ? "border-neutral-900" : "border-neutral-200"}`}><span className="flex items-center gap-2 text-sm font-bold"><input type="radio" name="service-tax-mode" checked={serviceTaxMode === "AMOUNT"} onChange={() => setServiceTaxMode("AMOUNT")} /> Amount in ₹</span><input type="number" inputMode="decimal" min="0" step="0.01" placeholder="0" value={serviceTaxAmountInput} onChange={(event) => { setServiceTaxMode("AMOUNT"); setServiceTaxAmountInput(event.target.value); }} className="mt-2 h-12 w-full rounded-xl border border-neutral-300 px-3 text-lg" /></label></div><p className="mt-3 text-sm font-semibold">{serviceTaxMode === "PERCENT" && Number(serviceTaxPercent) > 0 ? `${serviceTaxPercent}% of ${money(foodBase, currency)} = ${money(serviceTaxRupees, currency)}` : `Service tax ${money(serviceTaxRupees, currency)}`}</p></div> : null}
       {!bill ? <div className="mt-4 space-y-3"><div className="divide-y divide-neutral-100 rounded-2xl border border-neutral-200 p-4">{activeOrders.flatMap((order) => order.items.filter((item) => item.quantity > (item.cancelledQuantity ?? 0)).map((item, index) => <div key={`${order.id}-${item.lineId ?? index}`} className="flex justify-between gap-3 py-2 text-sm"><span><span className="font-semibold">#{order.orderNumber} · {item.quantity - (item.cancelledQuantity ?? 0)}× {item.dishNameSnapshot}</span><small className="block text-neutral-500">{money(item.itemTotal / Math.max(1, item.quantity), currency)} each</small></span><span className="font-semibold">{money(item.itemTotal * (item.quantity - (item.cancelledQuantity ?? 0)) / Math.max(1, item.quantity), currency)}</span></div>))}</div><dl className="space-y-2 text-sm">{[["Items subtotal", activeOrders.reduce((sum, order) => sum + order.subtotal, 0)], ["Discount", -activeOrders.reduce((sum, order) => sum + (order.billDiscountAmount ?? 0), 0)], ["Packaging", activeOrders.reduce((sum, order) => sum + (order.packagingCharge ?? 0), 0)], ["Service charge", activeOrders.reduce((sum, order) => sum + (order.serviceCharge ?? 0), 0)], [serviceTaxLabel, serviceTaxRupees], ...billTaxLines.map(({ label, amount }) => [label, amount] as [string, number])].filter(([label, value]) => Number(value) > 0.01 || (label === "Discount" && Number(value) < -0.01)).map(([label, value]) => <div key={label} className="flex justify-between"><dt>{label}</dt><dd>{money(Number(value), currency)}</dd></div>)}<div className="flex justify-between border-t border-neutral-200 pt-3 text-lg font-black"><dt>Estimated total</dt><dd>{money(orderTotal + (serviceTaxRupees), currency)}</dd></div><p className="text-xs text-neutral-500">This itemized estimate uses the saved order prices. Tap Show bill to save the final bill.</p></dl></div> : <div className="mt-5 space-y-3"><div className="flex items-center justify-between"><strong>Bill {bill.billNumber}</strong><button type="button" onClick={() => void printBill(bill, orders, restaurantName, locationName(table), currency, upiSettings).catch((error) => setMessage(error instanceof Error ? error.message : "Unable to print bill."))} className="inline-flex items-center gap-1 rounded-lg border border-neutral-300 px-3 py-2 text-sm font-semibold"><Printer className="h-4 w-4" /> Print customer bill</button></div><div className="divide-y divide-neutral-100 rounded-2xl border border-neutral-200 p-4">{bill.lines.map((line) => { const unitPrice = line.lineTotal / Math.max(1, line.billableQuantity); const orderNumber = orders.find((order) => order.id === line.orderId)?.orderNumber ?? line.orderNumber; return <div key={line.allocationKey} className="flex justify-between gap-3 py-2 text-sm"><span><span className="font-semibold">#{orderNumber} · {line.billableQuantity}× {line.dishNameSnapshot}</span><small className="block text-neutral-500">{money(unitPrice, currency)} each</small></span><span>{money(line.lineTotal, currency)}</span></div>; })}</div><dl className="space-y-2 text-sm">{[["Subtotal", bill.subtotal], ["Discount", -bill.discountAmount], ["Packaging", bill.packagingCharge], ["Service charge", bill.serviceCharge], ["Service tax", bill.tipAmount], ...billTaxLines.map(({ label, amount }) => [label, amount] as [string, number])].filter(([label, value]) => Number(value) > 0.01 || (label === "Discount" && Number(value) < -0.01)).map(([label, value]) => <div key={label} className="flex justify-between"><dt>{label}</dt><dd>{money(Number(value), currency)}</dd></div>)}<div className="flex justify-between border-t border-neutral-200 pt-3 text-lg font-black"><dt>Total</dt><dd>{money(bill.total, currency)}</dd></div><div className="flex justify-between font-bold"><dt>Remaining</dt><dd>{money(bill.outstandingAmount, currency)}</dd></div></dl>
         {bill.outstandingAmount > 0 && upiSettings.enabled && (isValidUpiId(upiSettings.upiId) || upiSettings.staticQrUrl) ? <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-3"><h3 className="mb-3 text-sm font-bold">Customer payment QR</h3><UpiPaymentQr upiId={upiSettings.upiId} payeeName={upiSettings.payeeName} staticQrUrl={upiSettings.staticQrUrl} amount={bill.outstandingAmount} orderNumber={bill.billNumber} compact /></div> : null}

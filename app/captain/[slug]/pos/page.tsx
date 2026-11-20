@@ -13,6 +13,7 @@ export default async function CaptainPosAliasPage({
   const { slug } = await params;
   const raw = (await searchParams).table;
   const table = Array.isArray(raw) ? raw[0] : raw;
-  const qs = table && /^\d{1,4}$/.test(table) ? `?table=${table}` : "";
+  // Accept table id (UUID) or table number so deep links from the floor always work.
+  const qs = table?.trim() ? `?table=${encodeURIComponent(table.trim())}` : "";
   redirect(`/captain/${slug}/take-order${qs}`);
 }

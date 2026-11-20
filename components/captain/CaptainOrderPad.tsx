@@ -17,7 +17,6 @@ import type {
   CaptainPermissions,
   Category,
   Dish,
-  PaymentMethod,
   RestaurantBillingSettings,
   RestaurantTable,
 } from "@/types";
@@ -136,9 +135,6 @@ export default function CaptainOrderPad({
   const [customizing, setCustomizing] = useState<Dish | null>(null);
   const [selectedVariantId, setSelectedVariantId] = useState("");
   const [selectedAddons, setSelectedAddons] = useState<Record<string, string[]>>({});
-  const [payMethod, setPayMethod] = useState<PaymentMethod>(
-    permissions.recordCashPayment ? "CASH" : permissions.recordCardPayment ? "CARD" : "UPI",
-  );
   const [customerOpen, setCustomerOpen] = useState(false);
   const [discountOpen, setDiscountOpen] = useState(false);
   const [serviceOpen, setServiceOpen] = useState(false);
@@ -391,7 +387,8 @@ export default function CaptainOrderPad({
 
     const snapshot = session;
     setSubmitting(true);
-    setMessage(mode === "hold" ? "Saving order…" : "Sending to kitchen…");
+    // hold = save only · kot = send kitchen, keep table open · bill = send kitchen + open bill
+    setMessage(mode === "hold" ? "Saving…" : mode === "bill" ? "Sending KOT and opening bill…" : "Sending KOT…");
     patchSession(emptyCartState());
 
     try {
@@ -433,6 +430,7 @@ export default function CaptainOrderPad({
       if (!json.success) throw new Error(json.error || "Unable to place order");
 
       const orderId = json.data?.id as string | undefined;
+      // Order is already saved — never restore the cart on later failures (avoids duplicate tickets).
       if ((mode === "kot" || mode === "bill") && orderId) {
         const kotResponse = await fetch(
           `/api/captain/orders/${encodeURIComponent(orderId)}/send-kot`,
@@ -440,27 +438,36 @@ export default function CaptainOrderPad({
         );
         const kotJson = await kotResponse.json().catch(() => ({}));
         if (!kotResponse.ok || !kotJson.success) {
+          setScreen("menu");
           setMessage(
             typeof kotJson.error === "string"
-              ? kotJson.error
-              : "Order saved. Tap Send KOT on the table if kitchen did not get it.",
+              ? `${kotJson.error} Order is on the table — open it and tap Send KOT.`
+              : "Order saved on the table, but KOT failed. Open the table and tap Send KOT.",
           );
+          router.push(`/captain/${slug}/tables/${encodeURIComponent(selectedLocation.id)}`);
+          return;
         }
       }
 
       if (mode === "bill") {
-        setMessage("Opening bill…");
-        router.push(`/captain/${slug}/tables/${encodeURIComponent(selectedLocation.id)}`);
+        const tip =
+          snapshot.serviceChargePercent > 0
+            ? `&tip=${encodeURIComponent(String(snapshot.serviceChargePercent))}`
+            : "";
+        router.push(
+          `/captain/${slug}/tables/${encodeURIComponent(selectedLocation.id)}?bill=1${tip}`,
+        );
         return;
       }
 
       setScreen("menu");
       setMessage(
         mode === "hold"
-          ? `Saved on ${locationName(selectedLocation)} — held, not sent to kitchen.`
-          : `KOT sent for ${locationName(selectedLocation)}.`,
+          ? `Saved on ${locationName(selectedLocation)}. Not sent to kitchen yet — use Send KOT on the table when ready.`
+          : `KOT sent · ${locationName(selectedLocation)} still open for more items.`,
       );
     } catch (error) {
+      // Only restore cart when create order itself failed (items never saved).
       patchSession(snapshot);
       setMessage(error instanceof Error ? error.message : "Unable to place order");
     } finally {
@@ -479,14 +486,6 @@ export default function CaptainOrderPad({
       </div>
     );
   }
-
-  const paymentOptions: PaymentMethod[] = (
-    [
-      permissions.recordCashPayment ? "CASH" : null,
-      permissions.recordUpiPayment ? "UPI" : null,
-      permissions.recordCardPayment ? "CARD" : null,
-    ] as const
-  ).filter(Boolean) as PaymentMethod[];
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col bg-[#f3f4f6] text-neutral-900">
@@ -655,6 +654,9 @@ export default function CaptainOrderPad({
                 {submitting ? "Saving…" : "KOT & Bill"}
               </button>
             </div>
+            <p className="text-center text-[11px] text-neutral-500">
+              Hold = kitchen only · Bill = kitchen + open bill for payment
+            </p>
           </div>
         </div>
       ) : (
@@ -819,28 +821,6 @@ export default function CaptainOrderPad({
               </label>
             </section>
 
-            {paymentOptions.length > 0 ? (
-              <section className="rounded-2xl border border-neutral-200 bg-white p-3">
-                <p className="mb-2 text-xs font-semibold text-neutral-500">Payment Type</p>
-                <div className="scrollbar-none flex gap-2 overflow-x-auto">
-                  {paymentOptions.map((method) => (
-                    <button
-                      key={method}
-                      type="button"
-                      onClick={() => setPayMethod(method)}
-                      className={`min-h-11 shrink-0 rounded-xl border px-4 text-sm font-semibold ${
-                        payMethod === method
-                          ? "border-blue-600 text-blue-700"
-                          : "border-neutral-200 text-neutral-700"
-                      }`}
-                    >
-                      {method === "CASH" ? "Cash" : method === "UPI" ? "UPI" : "Card"}
-                    </button>
-                  ))}
-                </div>
-              </section>
-            ) : null}
-
             <section className="rounded-2xl border border-neutral-200 bg-white p-4">
               <h2 className="text-sm font-bold">Bill Details</h2>
               <dl className="mt-3 space-y-2.5 text-sm">
@@ -912,10 +892,10 @@ export default function CaptainOrderPad({
             <button
               type="button"
               disabled={submitting || cartItemCount === 0}
-              onClick={() => void submitOrder("hold")}
+              onClick={() => void submitOrder("kot")}
               className="min-h-12 rounded-2xl border border-neutral-300 bg-white text-sm font-bold disabled:opacity-40"
             >
-              Save & Hold
+              KOT & Hold
             </button>
             <button
               type="button"
@@ -924,7 +904,7 @@ export default function CaptainOrderPad({
               className="min-h-12 rounded-2xl text-sm font-bold text-white disabled:opacity-40"
               style={{ backgroundColor: ACCENT }}
             >
-              Confirm & Save
+              KOT & Bill
             </button>
           </div>
         </div>

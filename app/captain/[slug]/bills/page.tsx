@@ -47,7 +47,7 @@ export default async function CaptainBillsPage({ params }: { params: Promise<{ s
       <header>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Bills & payments</h1>
         <p className="mt-1 text-sm text-neutral-500">
-          Open bills on your assigned tables. Record payment from Active Orders or Captain POS when permitted.
+          Open a table bill, take payment, then free the table.
         </p>
       </header>
 
@@ -80,10 +80,10 @@ export default async function CaptainBillsPage({ params }: { params: Promise<{ s
                   <td className="px-4 py-3 font-semibold">{money(order.total ?? 0, currency)}</td>
                   <td className="px-4 py-3 text-right">
                     <Link
-                      href={`/captain/${slug}/orders`}
-                      className="text-xs font-semibold text-neutral-900 underline"
+                      href={`/captain/${slug}/tables/${encodeURIComponent(order.tableId)}?bill=1`}
+                      className="text-xs font-semibold text-blue-700 underline"
                     >
-                      Open
+                      Open bill
                     </Link>
                   </td>
                 </tr>

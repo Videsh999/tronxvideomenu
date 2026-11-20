@@ -12,10 +12,16 @@ export const dynamic = "force-dynamic";
 
 export default async function CaptainTableWorkspacePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string; tableId: string }>;
+  searchParams: Promise<{ bill?: string | string[]; tip?: string | string[] }>;
 }) {
   const { slug, tableId } = await params;
+  const query = await searchParams;
+  const openBill = (Array.isArray(query.bill) ? query.bill[0] : query.bill) === "1";
+  const tipRaw = Array.isArray(query.tip) ? query.tip[0] : query.tip;
+  const tipPercent = tipRaw && Number.isFinite(Number(tipRaw)) ? Math.min(100, Math.max(0, Number(tipRaw))) : undefined;
   const { captain, restaurant, error } = await requireCaptain("ORDER_MANAGEMENT");
   if (error || !captain || !restaurant) redirect(`/captain/${slug}`);
   if (restaurant.slug !== slug) redirect(`/captain/${restaurant.slug}/tables/${tableId}`);
@@ -53,6 +59,8 @@ export default async function CaptainTableWorkspacePage({
       initialOrders={orders}
       initialSession={overview.session}
       initialBill={overview.bill}
+      openBillOnLoad={openBill}
+      initialTipPercent={tipPercent}
     />
     </>
   );
