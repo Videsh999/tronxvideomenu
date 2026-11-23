@@ -513,7 +513,7 @@ export default function CaptainOrderPad({
               >
                 <ArrowLeft className="h-5 w-5" />
               </Link>
-              <h1 className="flex-1 text-xl font-black">Add food</h1>
+              <h1 className="flex-1 text-xl font-black">Add Order</h1>
             </div>
             <div className="mt-3 flex items-center gap-2">
               <div className="relative min-w-0 flex-1">
@@ -642,21 +642,18 @@ export default function CaptainOrderPad({
                 onClick={() => void submitOrder("kot")}
                 className="min-h-12 rounded-2xl border border-neutral-300 bg-white text-sm font-bold disabled:opacity-40"
               >
-                {submitting ? "Please wait…" : "Send kitchen"}
+                {submitting ? "Please wait…" : "KOT & Hold"}
               </button>
               <button
                 type="button"
                 disabled={submitting || cartItemCount === 0}
                 onClick={() => void submitOrder("bill")}
-                className="min-h-12 rounded-2xl text-sm font-bold text-white disabled:opacity-40"
+                className="min-h-12 rounded-2xl text-base font-bold text-white disabled:opacity-40"
                 style={{ backgroundColor: ACCENT }}
               >
-                {submitting ? "Please wait…" : "Send + Bill"}
+                {submitting ? "Please wait…" : "KOT & Bill"}
               </button>
             </div>
-            <p className="text-center text-xs font-semibold text-neutral-500">
-              Send kitchen = cook only · Send + Bill = cook and open bill
-            </p>
           </div>
         </div>
       ) : (
@@ -733,55 +730,83 @@ export default function CaptainOrderPad({
               ) : null}
             </section>
 
-            {internalTracking ? (
-              <section className="rounded-2xl border border-neutral-200 bg-white">
-                <button
-                  type="button"
-                  onClick={() => setCustomerOpen((open) => !open)}
-                  className="flex min-h-12 w-full items-center justify-between px-4 text-sm font-semibold"
-                >
-                  <span>Customer Details</span>
-                  <span className="font-bold text-blue-700">{customerOpen ? "HIDE" : "ADD"}</span>
-                </button>
-                {customerOpen ? (
-                  <div className="grid gap-2 border-t border-neutral-100 px-4 py-3">
-                    <input
-                      value={session.guestName}
-                      onChange={(event) => patchSession({ guestName: event.target.value })}
-                      placeholder="Guest name"
-                      className="min-h-11 rounded-xl border border-neutral-200 px-3 text-sm"
-                    />
-                    <input
-                      value={session.customerPhone}
-                      onChange={(event) => patchSession({ customerPhone: event.target.value })}
-                      placeholder="Phone"
-                      inputMode="tel"
-                      className="min-h-11 rounded-xl border border-neutral-200 px-3 text-sm"
-                    />
-                    <input
-                      value={session.guestCount}
-                      onChange={(event) => patchSession({ guestCount: event.target.value })}
-                      placeholder="Guest count"
-                      inputMode="numeric"
-                      className="min-h-11 rounded-xl border border-neutral-200 px-3 text-sm"
-                    />
-                    <input
-                      value={session.orderNote}
-                      onChange={(event) => patchSession({ orderNote: event.target.value })}
-                      placeholder="Order note"
-                      className="min-h-11 rounded-xl border border-neutral-200 px-3 text-sm"
-                    />
-                  </div>
-                ) : null}
-              </section>
-            ) : null}
+            <section className="rounded-2xl border border-neutral-200 bg-white">
+              <button
+                type="button"
+                onClick={() => setCustomerOpen((open) => !open)}
+                className="flex min-h-12 w-full items-center justify-between px-4 text-sm font-semibold"
+              >
+                <span>Customer Details</span>
+                <span className="font-bold text-blue-700">{customerOpen ? "HIDE" : "ADD"}</span>
+              </button>
+              {customerOpen ? (
+                <div className="grid gap-2 border-t border-neutral-100 px-4 py-3">
+                  <input
+                    value={session.guestName}
+                    onChange={(event) => patchSession({ guestName: event.target.value })}
+                    placeholder="Name"
+                    className="min-h-11 rounded-xl border border-neutral-200 px-3 text-sm"
+                  />
+                  <input
+                    value={session.customerPhone}
+                    onChange={(event) => patchSession({ customerPhone: event.target.value })}
+                    placeholder="Phone"
+                    inputMode="tel"
+                    className="min-h-11 rounded-xl border border-neutral-200 px-3 text-sm"
+                  />
+                  {internalTracking ? (
+                    <>
+                      <input
+                        value={session.guestCount}
+                        onChange={(event) => patchSession({ guestCount: event.target.value })}
+                        placeholder="Guests"
+                        inputMode="numeric"
+                        className="min-h-11 rounded-xl border border-neutral-200 px-3 text-sm"
+                      />
+                      <input
+                        value={session.orderNote}
+                        onChange={(event) => patchSession({ orderNote: event.target.value })}
+                        placeholder="Note"
+                        className="min-h-11 rounded-xl border border-neutral-200 px-3 text-sm"
+                      />
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
+            </section>
 
             <section className="rounded-2xl border border-neutral-200 bg-white p-3">
-              <p className="mb-2 text-xs font-semibold text-neutral-500">Order type</p>
-              <div className="inline-flex rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700">
-                <UtensilsCrossed className="mr-2 h-4 w-4" />
-                Dine-In
+              <div className="grid grid-cols-3 gap-2">
+                <div className="flex min-h-12 items-center justify-center gap-1 rounded-xl border border-blue-600 bg-blue-50 text-sm font-bold text-blue-700">
+                  <UtensilsCrossed className="h-4 w-4" />
+                  Dine-In
+                </div>
+                <div className="flex min-h-12 items-center justify-center rounded-xl border border-neutral-200 text-sm font-semibold text-neutral-400">
+                  Takeaway
+                </div>
+                <div className="flex min-h-12 items-center justify-center rounded-xl border border-neutral-200 text-sm font-semibold text-neutral-400">
+                  Delivery
+                </div>
               </div>
+            </section>
+
+            <section className="rounded-2xl border border-neutral-200 bg-white p-3">
+              <p className="mb-2 text-xs font-semibold text-neutral-500">Payment Type</p>
+              <div className="scrollbar-none flex gap-2 overflow-x-auto">
+                {(["CASH", "UPI", "CARD"] as const).map((method) => (
+                  <span
+                    key={method}
+                    className={`min-h-11 shrink-0 rounded-xl border px-4 text-sm font-semibold leading-[2.75rem] ${
+                      method === "CASH"
+                        ? "border-blue-600 text-blue-700"
+                        : "border-neutral-200 text-neutral-700"
+                    }`}
+                  >
+                    {method === "CASH" ? "Cash" : method === "UPI" ? "UPI" : "Card"}
+                  </span>
+                ))}
+              </div>
+              <p className="mt-2 text-xs text-neutral-500">Pay on the table bill after KOT & Bill.</p>
             </section>
 
             <section className="rounded-2xl border border-neutral-200 bg-white p-3">
@@ -895,16 +920,16 @@ export default function CaptainOrderPad({
               onClick={() => void submitOrder("kot")}
               className="min-h-12 rounded-2xl border border-neutral-300 bg-white text-sm font-bold disabled:opacity-40"
             >
-              Send kitchen
+              KOT & Hold
             </button>
             <button
               type="button"
               disabled={submitting || cartItemCount === 0}
               onClick={() => void submitOrder("bill")}
-              className="min-h-12 rounded-2xl text-sm font-bold text-white disabled:opacity-40"
+              className="min-h-12 rounded-2xl text-base font-bold text-white disabled:opacity-40"
               style={{ backgroundColor: ACCENT }}
             >
-              Send + Bill
+              KOT & Bill
             </button>
           </div>
         </div>
