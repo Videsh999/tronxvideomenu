@@ -132,9 +132,25 @@ export default function DishCard({
 
         <div className="mt-auto flex items-center justify-between gap-2 pt-3">
           <div className="min-w-0">
-            <span className="block text-base font-bold tabular-nums text-[var(--restaurant-text,#241416)] sm:text-lg">
-              ₹{Number.isFinite(dish.price) ? dish.price : "—"}
-            </span>
+            {typeof dish.offerPrice === "number" && Number.isFinite(dish.offerPrice) ? (
+              <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                <span className="text-base font-bold tabular-nums text-[var(--restaurant-primary)] sm:text-lg">
+                  ₹{dish.offerPrice}
+                </span>
+                <span className="text-xs font-medium tabular-nums text-neutral-400 line-through">
+                  ₹{dish.listPrice ?? dish.price}
+                </span>
+                {dish.offerBadge ? (
+                  <span className="rounded bg-[var(--restaurant-primary)]/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--restaurant-primary)]">
+                    {dish.offerBadge}
+                  </span>
+                ) : null}
+              </span>
+            ) : (
+              <span className="block text-base font-bold tabular-nums text-[var(--restaurant-text,#241416)] sm:text-lg">
+                ₹{Number.isFinite(dish.price) ? dish.price : "—"}
+              </span>
+            )}
             {customisable ? (
               <span className="block truncate text-[10px] font-semibold uppercase tracking-wider text-neutral-400">
                 {t("customisable")}

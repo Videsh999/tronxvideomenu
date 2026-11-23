@@ -1,19 +1,21 @@
 "use client";
 
 import { useEffect, useMemo, type CSSProperties } from "react";
-import type { Restaurant } from "@/types";
+import type { MenuOffer, Restaurant } from "@/types";
 import { getRestaurantTheme, getThemeCSSVariables } from "@/lib/theme";
+import { festiveThemeForOffer } from "@/lib/offers/menu-offer";
 
 type ThemeProviderProps = {
   restaurant: Restaurant;
+  activeOffer?: MenuOffer | null;
   children: React.ReactNode;
 };
 
-export default function ThemeProvider({ restaurant, children }: ThemeProviderProps) {
-  const cssVars = useMemo(
-    () => getThemeCSSVariables(getRestaurantTheme(restaurant)),
-    [restaurant],
-  );
+export default function ThemeProvider({ restaurant, activeOffer, children }: ThemeProviderProps) {
+  const cssVars = useMemo(() => {
+    const festive = festiveThemeForOffer(activeOffer);
+    return getThemeCSSVariables(festive ?? getRestaurantTheme(restaurant));
+  }, [restaurant, activeOffer]);
 
   useEffect(() => {
     const root = document.documentElement;

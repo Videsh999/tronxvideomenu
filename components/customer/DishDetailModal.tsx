@@ -128,7 +128,14 @@ export default function DishDetailModal({
     return total;
   }, [dish, selectedAddons]);
 
-  const totalPrice = (dish?.price ?? 0) + addonsTotal;
+  const unitPrice =
+    typeof dish?.offerPrice === "number" && Number.isFinite(dish.offerPrice)
+      ? dish.offerPrice
+      : (dish?.price ?? 0);
+  const totalPrice =
+    typeof dish?.offerPercentOff === "number" && dish.offerPercentOff > 0
+      ? Math.round(((dish.listPrice ?? dish.price) + addonsTotal) * (1 - dish.offerPercentOff / 100) * 100) / 100
+      : unitPrice + addonsTotal;
   const hasValidSelections = (dish?.addonGroups ?? []).every((group) => {
     if (group.isActive === false) return true;
     const ids = selectedAddons[group.id] ?? [];
@@ -269,9 +276,23 @@ export default function DishDetailModal({
                 </p>
               )}
 
-              <p className="text-2xl font-bold tabular-nums text-[var(--restaurant-text,#241416)]">
-                ₹{Number.isFinite(dish.price) ? dish.price : "—"}
-              </p>
+              {typeof dish.offerPrice === "number" && Number.isFinite(dish.offerPrice) ? (
+                <p className="flex flex-wrap items-baseline gap-2 text-2xl font-bold tabular-nums text-[var(--restaurant-primary)]">
+                  <span>₹{dish.offerPrice}</span>
+                  <span className="text-base font-medium text-neutral-400 line-through">
+                    ₹{dish.listPrice ?? dish.price}
+                  </span>
+                  {dish.offerBadge ? (
+                    <span className="rounded bg-[var(--restaurant-primary)]/10 px-2 py-0.5 text-xs font-bold uppercase tracking-wider text-[var(--restaurant-primary)]">
+                      {dish.offerBadge}
+                    </span>
+                  ) : null}
+                </p>
+              ) : (
+                <p className="text-2xl font-bold tabular-nums text-[var(--restaurant-text,#241416)]">
+                  ₹{Number.isFinite(dish.price) ? dish.price : "—"}
+                </p>
+              )}
             </div>
 
             {/* 3. ADD-ONS SECTION */}

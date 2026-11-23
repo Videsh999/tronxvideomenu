@@ -18,6 +18,9 @@ import cloudinary from "@/lib/cloudinary";
 import type { RestaurantWifiConfiguration } from "@/types";
 import { encryptWifiPassword, decryptWifiPassword } from "@/lib/security/wifi-crypto";
 import { getWifiCustomerDetails, resolveWifiConfigurationUpdate } from "@/lib/wifi-configuration";
+import { menuOfferRepository } from "@/lib/repositories/menu-offer.repository";
+import { stampDishesWithOffer } from "@/lib/offers/menu-offer";
+import { hasRestaurantFeature } from "@/lib/features";
 
 export type RestaurantWifiAdminView = {
   ssid: string;
@@ -54,15 +57,21 @@ async function loadFullMenu(idOrSlug: string): Promise<RestaurantMenu | null> {
   const restaurant = await restaurantRepository.findByIdOrSlug(idOrSlug);
   if (!restaurant || restaurant.isActive === false) return null;
 
-  const [categories, rawDishes, addonGroups] = await Promise.all([
+  const [categories, rawDishes, addonGroups, activeOffer] = await Promise.all([
     categoryRepository.findByRestaurantId(restaurant.id),
     dishRepository.findByRestaurantId(restaurant.id),
     addonRepository.findGroupsByRestaurantId(restaurant.id),
+    hasRestaurantFeature(restaurant, "MENU_OFFERS")
+      ? menuOfferRepository.findActive(restaurant.id)
+      : Promise.resolve(null),
   ]);
 
-  const dishes = rawDishes
-    .map((dish) => toCustomerDish(dish, addonGroups))
-    .filter((dish) => dish.isAvailable !== false);
+  const dishes = stampDishesWithOffer(
+    rawDishes
+      .map((dish) => toCustomerDish(dish, addonGroups))
+      .filter((dish) => dish.isAvailable !== false),
+    activeOffer,
+  );
   const normalized = normalizeRestaurant(restaurant);
   normalized.hasGuestWifi = Boolean(restaurant.wifi?.ssid?.trim());
 
@@ -70,6 +79,7 @@ async function loadFullMenu(idOrSlug: string): Promise<RestaurantMenu | null> {
     restaurant: normalized,
     categories: categories.filter((category) => category.isActive),
     dishes,
+    ...(activeOffer ? { activeOffer } : {}),
   };
 }
 

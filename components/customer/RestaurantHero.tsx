@@ -1,15 +1,17 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Armchair, ChevronDown, Clock, MapPin, Phone } from "lucide-react";
-import type { Restaurant } from "@/types";
+import { Armchair, ChevronDown, Clock, Gift, MapPin, Phone } from "lucide-react";
+import type { MenuOffer, Restaurant } from "@/types";
 import SmartImage from "@/components/shared/SmartImage";
 import { useI18n } from "./I18nProvider";
+import { isMenuOfferLive } from "@/lib/offers/menu-offer";
 
 type RestaurantHeroProps = {
   restaurant: Restaurant;
   tableNumber?: number | null;
   locationType?: "TABLE" | "ROOM";
+  activeOffer?: MenuOffer | null;
   extraActions?: ReactNode;
 };
 
@@ -21,12 +23,20 @@ export function directionsUrl(restaurant: Restaurant) {
     : null;
 }
 
-export default function RestaurantHero({ restaurant, tableNumber, locationType = "TABLE", extraActions }: RestaurantHeroProps) {
+export default function RestaurantHero({ restaurant, tableNumber, locationType = "TABLE", activeOffer, extraActions }: RestaurantHeroProps) {
   const { t, tc } = useI18n();
   const [hoursOpen, setHoursOpen] = useState(false);
   const [playCoverVideo, setPlayCoverVideo] = useState(false);
   const hoursRef = useRef<HTMLDivElement>(null);
   const directions = directionsUrl(restaurant);
+  const liveOffer = activeOffer && isMenuOfferLive(activeOffer) ? activeOffer : null;
+  const offerHeadline =
+    liveOffer?.presentation.bannerHeadline?.trim() ||
+    (liveOffer ? `${liveOffer.name} — ${liveOffer.percentOff}% off` : null);
+  const offerSubtext =
+    liveOffer?.presentation.bannerSubtext?.trim() ||
+    liveOffer?.description?.trim() ||
+    null;
 
   useEffect(() => {
     if (!restaurant.coverVideo) return;
@@ -87,6 +97,20 @@ export default function RestaurantHero({ restaurant, tableNumber, locationType =
               <p className="mt-2 max-w-2xl text-sm text-white/80 sm:text-base">
                 {tc(restaurant.tagline?.trim() || restaurant.description?.trim()) || t("digitalMenu")}
               </p>
+              {offerHeadline ? (
+                <div className="mt-4 max-w-xl animate-fade-up rounded-2xl border border-white/25 bg-black/35 px-4 py-3 backdrop-blur-md">
+                  <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-amber-200">
+                    <Gift className="h-3.5 w-3.5" />
+                    Special offer
+                  </p>
+                  <p className="mt-1 font-condensed text-2xl uppercase leading-tight text-white sm:text-3xl">
+                    {offerHeadline}
+                  </p>
+                  {offerSubtext ? (
+                    <p className="mt-1 text-sm text-white/75">{offerSubtext}</p>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           </div>
 

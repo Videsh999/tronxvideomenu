@@ -190,7 +190,9 @@ export type FeatureKey =
   | "HARDWARE_CUSTOMER_DISPLAY"
   | "HARDWARE_LOCAL_CONNECTOR"
   /** Optional floor tracking (guest details, notes, guest count) — grant per restaurant. */
-  | "INTERNAL_TRACKING";
+  | "INTERNAL_TRACKING"
+  /** Seasonal / promotional menu % off with optional festive banner theme. */
+  | "MENU_OFFERS";
 
 export type KitchenStation = "MAIN" | "BAR" | "BAKERY" | "DESSERT" | "OTHER";
 
@@ -410,6 +412,12 @@ export type Dish = {
   kitchenStation?: KitchenStation;
   /** Dish-level GST override (%). Wins over category and outlet defaults. */
   taxRatePercent?: number | null;
+  /** Catalog price when an active menu offer discounts this dish (display helper). */
+  listPrice?: number;
+  /** Discounted unit price from the active menu offer (display helper). */
+  offerPrice?: number;
+  offerPercentOff?: number;
+  offerBadge?: string;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -434,11 +442,51 @@ export type Media = {
   updatedAt?: string;
 };
 
+/** Festive presentation presets for guest menu banner / theme. */
+export type OfferThemePreset =
+  | "NONE"
+  | "CHRISTMAS"
+  | "NEW_YEAR"
+  | "SANKRANTI"
+  | "DIWALI"
+  | "CUSTOM";
+
+/**
+ * Restaurant-wide or selected-item % off campaign (Christmas, Sankranti, etc.).
+ * Distinct from CRM coupons — applied automatically while the offer is live.
+ */
+export type MenuOffer = {
+  id: string;
+  restaurantId: string;
+  name: string;
+  description?: string;
+  /** Percent off (1–100). */
+  percentOff: number;
+  scope: "ALL_MENU" | "SELECTED_DISHES";
+  /** Required when scope is SELECTED_DISHES. */
+  dishIds: string[];
+  startsAt?: string;
+  endsAt?: string;
+  isActive: boolean;
+  presentation: {
+    themePreset: OfferThemePreset;
+    bannerHeadline?: string;
+    bannerSubtext?: string;
+    badgeText?: string;
+    /** When true, guest menu CSS theme shifts to the festive preset. */
+    applyTheme: boolean;
+  };
+  createdAt: string;
+  updatedAt: string;
+};
+
 // Aggregated Menu
 export type RestaurantMenu = {
   restaurant: Restaurant;
   categories: Category[];
   dishes: Dish[];
+  /** Currently running seasonal / promotional offer, if any. */
+  activeOffer?: MenuOffer;
 };
 
 export type RestaurantTable = {

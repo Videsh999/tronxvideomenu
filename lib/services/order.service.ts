@@ -15,6 +15,7 @@ import { connectToDatabase } from "@/lib/db/mongodb";
 import { toDomain } from "@/lib/db/mongo-mappers";
 import { hasRestaurantFeature } from "@/lib/features";
 import { lineItemTotal, computeBillTotals, amountRemaining, roundMoney } from "@/lib/order-pricing";
+import { applyMenuOfferToLines } from "@/lib/offers/menu-offer";
 import type { OrderLineCancellation } from "@/types";
 import { canTransition } from "@/lib/order-transitions";
 import {
@@ -272,11 +273,13 @@ export class OrderService {
       };
     });
 
+    const pricedItems = applyMenuOfferToLines(items, menu.activeOffer);
+
     const { calculateRestaurantBill } = await import("@/lib/billing/calculate-bill");
     const { resolveLineTaxRate } = await import("@/lib/billing/resolve-tax-rate");
     const categoryById = new Map(menu.categories.map((category) => [category.id, category]));
     const bill = calculateRestaurantBill({
-      lines: items.map((item) => {
+      lines: pricedItems.map((item) => {
         const dish = menu.dishes.find((entry) => entry.id === item.dishId);
         const category = dish ? categoryById.get(dish.categoryId) : undefined;
         const resolved = resolveLineTaxRate({
@@ -338,7 +341,7 @@ export class OrderService {
       source: "QR",
       captainAuthorization,
       customerId: loyaltyCustomerId,
-      items,
+      items: pricedItems,
       subtotal: bill.itemsSubtotal,
       billDiscountAmount: 0,
       taxRatePercent: bill.gstRatePercent,
@@ -419,7 +422,7 @@ export class OrderService {
       menu.categories.map((category) => [category.id, category.kitchenStation] as const),
     );
 
-    const items: OrderItemSnapshot[] = input.items.map((requested) => {
+    const rawPosItems: OrderItemSnapshot[] = input.items.map((requested) => {
       const dish = menu.dishes.find((entry) => entry.id === requested.dishId);
       if (!dish || dish.restaurantId !== restaurantId) {
         throw new OrderServiceError("A selected dish is no longer available.");
@@ -500,6 +503,8 @@ export class OrderService {
         itemTotal,
       };
     });
+
+    const items = applyMenuOfferToLines(rawPosItems, menu.activeOffer);
 
     let billDiscountAmount = input.billDiscountAmount ?? 0;
     let couponCodeSnapshot: string | undefined;
@@ -828,7 +833,8 @@ export class OrderService {
       };
     });
 
-    const merged = [...current.items, ...newItems];
+    const offeredNewItems = applyMenuOfferToLines(newItems, menu.activeOffer);
+    const merged = [...current.items, ...offeredNewItems];
     const { calculateRestaurantBill } = await import("@/lib/billing/calculate-bill");
     const { resolveLineTaxRate } = await import("@/lib/billing/resolve-tax-rate");
     const categoryById = new Map(menu.categories.map((category) => [category.id, category]));
@@ -853,11 +859,11 @@ export class OrderService {
 
     const event = makeEvent(
       "NOTE",
-      `Added ${newItems.length} item(s) to order`,
+      `Added ${offeredNewItems.length} item(s) to order`,
       actor,
       {
         appendIdempotencyKey: input.idempotencyKey,
-        newLineIds: newItems.map((item) => item.lineId),
+        newLineIds: offeredNewItems.map((item) => item.lineId),
         billSnapshot: bill,
       },
     );

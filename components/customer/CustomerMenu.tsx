@@ -332,7 +332,12 @@ export default function CustomerMenu({
       const group = dish.addonGroups?.find((entry) => entry.id === selection.groupId);
       return selection.addonIds.map((addonId) => group?.addons.find((addon) => addon.id === addonId)?.price ?? 0);
     }).reduce((sum, price) => sum + price, 0);
-    return (dish.price + addonTotal) * line.quantity;
+    const catalogUnit = dish.listPrice ?? dish.price;
+    const catalogGross = (catalogUnit + addonTotal) * line.quantity;
+    if (typeof dish.offerPercentOff === "number" && dish.offerPercentOff > 0) {
+      return Math.round(catalogGross * (1 - dish.offerPercentOff / 100) * 100) / 100;
+    }
+    return catalogGross;
   };
   const cartCount = cart.reduce((sum, line) => sum + line.quantity, 0);
   const cartTotal = cart.reduce((sum, line) => sum + priceForLine(line), 0);
@@ -635,6 +640,7 @@ export default function CustomerMenu({
         restaurant={menu.restaurant}
         tableNumber={tableResolved ? tableNumber : null}
         locationType={locationType}
+        activeOffer={menu.activeOffer}
         extraActions={<>
           {wifiEnabled && <button type="button" onClick={() => setWifiOpen(true)} className={`${heroPill} sm:hidden`}><Wifi className="h-3.5 w-3.5" />{t("wifi")}</button>}
           <button type="button" onClick={surpriseMe} className={heroPill}><Dices className="h-3.5 w-3.5" />{t("surpriseMe")}</button>

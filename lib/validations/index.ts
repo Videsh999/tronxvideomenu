@@ -711,6 +711,44 @@ export const createCouponSchema = z
     }
   });
 
+const menuOfferPresentationSchema = z
+  .object({
+    themePreset: z.enum(["NONE", "CHRISTMAS", "NEW_YEAR", "SANKRANTI", "DIWALI", "CUSTOM"]).optional(),
+    bannerHeadline: z.string().trim().max(80).optional(),
+    bannerSubtext: z.string().trim().max(160).optional(),
+    badgeText: z.string().trim().max(40).optional(),
+    applyTheme: z.boolean().optional(),
+  })
+  .strict();
+
+export const createMenuOfferSchema = z
+  .object({
+    name: z.string().trim().min(2).max(80),
+    description: z.string().trim().max(300).optional(),
+    percentOff: z.number().min(1).max(100),
+    scope: z.enum(["ALL_MENU", "SELECTED_DISHES"]),
+    dishIds: z.array(z.string().min(1)).max(500).optional(),
+    startsAt: z.string().optional(),
+    endsAt: z.string().optional(),
+    isActive: z.boolean().optional(),
+    presentation: menuOfferPresentationSchema.optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.scope === "SELECTED_DISHES" && (!value.dishIds || value.dishIds.length === 0)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["dishIds"],
+        message: "Select at least one dish.",
+      });
+    }
+  });
+
+export const updateMenuOfferSchema = createMenuOfferSchema.partial().strict();
+
+export type CreateMenuOfferInput = z.infer<typeof createMenuOfferSchema>;
+export type UpdateMenuOfferInput = z.infer<typeof updateMenuOfferSchema>;
+
 export const customerFeedbackSchema = z
   .object({
     rating: z.number().int().min(1).max(5),

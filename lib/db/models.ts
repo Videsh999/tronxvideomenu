@@ -1182,6 +1182,42 @@ const couponSchema = new Schema(
 );
 couponSchema.index({ restaurantId: 1, code: 1 }, { unique: true });
 
+const menuOfferPresentationSchema = new Schema(
+  {
+    themePreset: {
+      type: String,
+      enum: ["NONE", "CHRISTMAS", "NEW_YEAR", "SANKRANTI", "DIWALI", "CUSTOM"],
+      required: true,
+      default: "NONE",
+    },
+    bannerHeadline: String,
+    bannerSubtext: String,
+    badgeText: String,
+    applyTheme: { type: Boolean, required: true, default: true },
+  },
+  { _id: false, strict: true },
+);
+
+const menuOfferSchema = new Schema(
+  {
+    id: { type: String, required: true, unique: true, index: true },
+    restaurantId: { type: String, required: true, index: true },
+    name: { type: String, required: true, trim: true, maxlength: 80 },
+    description: { type: String, trim: true, maxlength: 300 },
+    percentOff: { type: Number, required: true, min: 1, max: 100 },
+    scope: { type: String, enum: ["ALL_MENU", "SELECTED_DISHES"], required: true },
+    dishIds: { type: [String], required: true, default: [] },
+    startsAt: String,
+    endsAt: String,
+    isActive: { type: Boolean, required: true, default: false },
+    presentation: { type: menuOfferPresentationSchema, required: true },
+    createdAt: { type: String, required: true },
+    updatedAt: { type: String, required: true },
+  },
+  { ...baseOptions, collection: "menuOffers" },
+);
+menuOfferSchema.index({ restaurantId: 1, isActive: 1, updatedAt: -1 });
+
 const couponRedemptionSchema = new Schema(
   {
     id: { type: String, required: true, unique: true, index: true },
@@ -1316,6 +1352,8 @@ export const LoyaltyTransactionModel =
   mongoose.model("LoyaltyTransaction", loyaltyTransactionSchema);
 export const CouponModel =
   mongoose.models.Coupon ?? mongoose.model("Coupon", couponSchema);
+export const MenuOfferModel =
+  mongoose.models.MenuOffer ?? mongoose.model("MenuOffer", menuOfferSchema);
 export const CouponRedemptionModel =
   mongoose.models.CouponRedemption ??
   mongoose.model("CouponRedemption", couponRedemptionSchema);

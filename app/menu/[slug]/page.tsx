@@ -42,7 +42,7 @@ export default async function RestaurantMenuPage({
   const view = Array.isArray(rawView) ? rawView[0] : rawView;
 
   return (
-    <ThemeProvider restaurant={menu.restaurant}>
+    <ThemeProvider restaurant={menu.restaurant} activeOffer={menu.activeOffer}>
       <I18nProvider slug={menu.restaurant.slug}>
       <CustomerMenu
         initialMenu={menu}
