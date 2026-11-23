@@ -19,6 +19,7 @@ function CaptainLoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [showExtra, setShowExtra] = useState(Boolean(params.get("restaurant")));
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -40,16 +41,16 @@ function CaptainLoginForm() {
         data?: { restaurantSlug: string };
       };
       if (!response.ok || !result.success || !result.data) {
-        throw new Error(result.error ?? "Unable to sign in");
+        throw new Error(result.error ?? "Wrong email or password");
       }
       const next = params.get("next") ?? "";
       window.location.assign(
         next.startsWith(`/captain/${result.data.restaurantSlug}`)
           ? next
-          : `/captain/${result.data.restaurantSlug}`,
+          : `/captain/${result.data.restaurantSlug}/tables`,
       );
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to sign in");
+      setError(cause instanceof Error ? cause.message : "Could not open. Try again.");
       setBusy(false);
     }
   };
@@ -57,49 +58,56 @@ function CaptainLoginForm() {
   return (
     <AuthLayout
       eyebrow="Captain"
-      title="Start your shift"
-      description="Sign in to see your restaurant’s live orders and tables."
+      title="Open tables"
+      description="Enter email and password. Then tap your table and take the order."
       highlights={[
-        "Live order queue with one-tap status updates",
-        "Table status at a glance across the floor",
-        "Record payments without leaving the order",
+        "Tap table → add food → send kitchen → bill → free table",
+        "Big buttons. One step at a time.",
+        "Ask owner if login does not work.",
       ]}
     >
       <form onSubmit={submit} className="space-y-5">
         <AuthError message={error || null} />
-        <AuthField label="Restaurant slug (optional)">
-          <input
-            type="text"
-            value={restaurantSlug}
-            onChange={(event) => setRestaurantSlug(event.target.value)}
-            autoComplete="organization"
-            placeholder="your-restaurant"
-            className={authInputClass}
-          />
-          <span className="mt-1.5 block text-xs font-normal text-neutral-500">
-            Needed only if the same email is used at more than one restaurant. Prefer{" "}
-            <span className="font-mono text-neutral-700">/menu/…/captain</span>.
-          </span>
-        </AuthField>
         <AuthField label="Email">
           <input
             type="email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             autoComplete="username"
-            placeholder="captain@restaurant.com"
+            inputMode="email"
+            placeholder="your email"
             required
             className={authInputClass}
           />
         </AuthField>
         <AuthField label="Password">
-          <PasswordInput value={password} onChange={setPassword} />
+          <PasswordInput value={password} onChange={setPassword} placeholder="password" />
         </AuthField>
-        <AuthSubmit busy={busy} label="Sign in" busyLabel="Signing in…" />
+        {showExtra ? (
+          <AuthField label="Restaurant code (only if asked)">
+            <input
+              type="text"
+              value={restaurantSlug}
+              onChange={(event) => setRestaurantSlug(event.target.value)}
+              autoComplete="organization"
+              placeholder="restaurant code"
+              className={authInputClass}
+            />
+          </AuthField>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowExtra(true)}
+            className="text-sm font-semibold text-neutral-500 underline"
+          >
+            Need restaurant code?
+          </button>
+        )}
+        <AuthSubmit busy={busy} label="Open app" busyLabel="Opening…" />
         <p className="text-center text-sm text-neutral-500">
-          Restaurant owner?{" "}
+          Owner?{" "}
           <Link href="/admin/login" className="font-bold text-neutral-900">
-            Admin sign in
+            Admin login
           </Link>
         </p>
       </form>

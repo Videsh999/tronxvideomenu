@@ -8,10 +8,10 @@ import RememberCaptainScreen from "@/components/captain/RememberCaptainScreen";
 export const dynamic = "force-dynamic";
 
 function money(value: number, currency = "INR") {
-  return new Intl.NumberFormat(undefined, {
+  return new Intl.NumberFormat("en-IN", {
     style: "currency",
     currency,
-    maximumFractionDigits: 2,
+    maximumFractionDigits: 0,
   }).format(value);
 }
 
@@ -24,11 +24,9 @@ export default async function CaptainBillsPage({ params }: { params: Promise<{ s
   const permissions = resolveCaptainPermissions(captain);
   if (!permissions.viewBill && !permissions.requestBill) {
     return (
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6">
-        <h1 className="text-xl font-bold text-amber-950">Bills locked</h1>
-        <p className="mt-2 text-sm text-amber-900/80">
-          Your captain account does not have bill view permission. Ask a manager to enable VIEW_BILL.
-        </p>
+      <div className="rounded-3xl border border-amber-200 bg-amber-50 p-6">
+        <h1 className="text-2xl font-black text-amber-950">Bills locked</h1>
+        <p className="mt-2 text-base text-amber-900">Ask the owner to open bill access for you.</p>
       </div>
     );
   }
@@ -42,56 +40,54 @@ export default async function CaptainBillsPage({ params }: { params: Promise<{ s
   const currency = restaurant.currency ?? "INR";
 
   return (
-    <div className="space-y-5 pb-24 lg:pb-6">
-      <RememberCaptainScreen path={`/captain/${slug}/bills`} snap={{ kind: "list", title: "Bills", rows: orders.slice(0, 20).map((order) => ({ title: `Table ${order.tableNumber} · #${order.orderNumber}`, detail: `${order.payment?.status ?? order.status} · ₹${order.total}` })) }} />
+    <div className="space-y-4 pb-24 lg:pb-6">
+      <RememberCaptainScreen
+        path={`/captain/${slug}/bills`}
+        snap={{
+          kind: "list",
+          title: "Bills",
+          rows: orders.slice(0, 20).map((order) => ({
+            title: `Table ${order.tableNumber}`,
+            detail: money(order.total ?? 0, currency),
+          })),
+        }}
+      />
       <header>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Bills & payments</h1>
-        <p className="mt-1 text-sm text-neutral-500">
-          Open a table bill, take payment, then free the table.
-        </p>
+        <h1 className="text-3xl font-black tracking-tight">Bills</h1>
+        <p className="mt-1 text-base text-neutral-600">Tap a table. Take money. Free table.</p>
       </header>
 
-      <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white">
-        <table className="min-w-full text-left text-sm">
-          <thead className="bg-neutral-50 text-xs uppercase tracking-wide text-neutral-500">
-            <tr>
-              <th className="px-4 py-3">Order</th>
-              <th className="px-4 py-3">Table</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Payment</th>
-              <th className="px-4 py-3">Total</th>
-              <th className="px-4 py-3" />
-            </tr>
-          </thead>
-          <tbody>
-            {orders.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-neutral-500">
-                  No open bills on your tables.
-                </td>
-              </tr>
-            ) : (
-              orders.map((order) => (
-                <tr key={order.id} className="border-t border-neutral-100">
-                  <td className="px-4 py-3 font-semibold">#{order.orderNumber}</td>
-                  <td className="px-4 py-3">T{order.tableNumber}</td>
-                  <td className="px-4 py-3">{order.status}</td>
-                  <td className="px-4 py-3">{order.payment?.status ?? "UNPAID"}</td>
-                  <td className="px-4 py-3 font-semibold">{money(order.total ?? 0, currency)}</td>
-                  <td className="px-4 py-3 text-right">
-                    <Link
-                      href={`/captain/${slug}/tables/${encodeURIComponent(order.tableId)}?bill=1`}
-                      className="text-xs font-semibold text-blue-700 underline"
-                    >
-                      Open bill
-                    </Link>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      {orders.length === 0 ? (
+        <p className="rounded-3xl border border-dashed border-neutral-300 bg-white p-10 text-center text-base text-neutral-500">
+          No open bills. Start from Tables.
+        </p>
+      ) : (
+        <div className="grid gap-3">
+          {orders.map((order) => {
+            const unpaid = (order.payment?.status ?? "UNPAID") !== "PAID";
+            return (
+              <Link
+                key={order.id}
+                href={`/captain/${slug}/tables/${encodeURIComponent(order.tableId)}?bill=1`}
+                className={`flex min-h-20 items-center justify-between gap-3 rounded-3xl border-2 px-4 py-4 ${
+                  unpaid ? "border-amber-300 bg-amber-50" : "border-emerald-200 bg-emerald-50"
+                }`}
+              >
+                <div>
+                  <p className="text-2xl font-black">Table {order.tableNumber}</p>
+                  <p className="text-sm font-semibold text-neutral-600">
+                    {unpaid ? "Pay now" : "Paid"} · Order #{order.orderNumber}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xl font-black">{money(order.total ?? 0, currency)}</p>
+                  <p className="text-sm font-bold text-blue-700">Open bill →</p>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

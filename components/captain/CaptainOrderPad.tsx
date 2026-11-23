@@ -513,7 +513,7 @@ export default function CaptainOrderPad({
               >
                 <ArrowLeft className="h-5 w-5" />
               </Link>
-              <h1 className="flex-1 text-lg font-bold">Add Order</h1>
+              <h1 className="flex-1 text-xl font-black">Add food</h1>
             </div>
             <div className="mt-3 flex items-center gap-2">
               <div className="relative min-w-0 flex-1">
@@ -642,7 +642,7 @@ export default function CaptainOrderPad({
                 onClick={() => void submitOrder("kot")}
                 className="min-h-12 rounded-2xl border border-neutral-300 bg-white text-sm font-bold disabled:opacity-40"
               >
-                {submitting ? "Saving…" : "KOT & Hold"}
+                {submitting ? "Please wait…" : "Send kitchen"}
               </button>
               <button
                 type="button"
@@ -651,11 +651,11 @@ export default function CaptainOrderPad({
                 className="min-h-12 rounded-2xl text-sm font-bold text-white disabled:opacity-40"
                 style={{ backgroundColor: ACCENT }}
               >
-                {submitting ? "Saving…" : "KOT & Bill"}
+                {submitting ? "Please wait…" : "Send + Bill"}
               </button>
             </div>
-            <p className="text-center text-[11px] text-neutral-500">
-              Hold = kitchen only · Bill = kitchen + open bill for payment
+            <p className="text-center text-xs font-semibold text-neutral-500">
+              Send kitchen = cook only · Send + Bill = cook and open bill
             </p>
           </div>
         </div>
@@ -895,7 +895,7 @@ export default function CaptainOrderPad({
               onClick={() => void submitOrder("kot")}
               className="min-h-12 rounded-2xl border border-neutral-300 bg-white text-sm font-bold disabled:opacity-40"
             >
-              KOT & Hold
+              Send kitchen
             </button>
             <button
               type="button"
@@ -904,7 +904,7 @@ export default function CaptainOrderPad({
               className="min-h-12 rounded-2xl text-sm font-bold text-white disabled:opacity-40"
               style={{ backgroundColor: ACCENT }}
             >
-              KOT & Bill
+              Send + Bill
             </button>
           </div>
         </div>
