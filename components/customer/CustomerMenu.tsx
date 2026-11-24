@@ -118,6 +118,8 @@ type CustomerMenuProps = {
   wifiEnabled?: boolean;
   videoMenuEnabled?: boolean;
   tableOrderingEnabled?: boolean;
+  /** Guest “Surprise me” meal picker — gated by AI_GUEST_MENU. */
+  guestAiEnabled?: boolean;
   loyaltyEnabled?: boolean;
   upiSettings?: { enabled: boolean; upiId: string; payeeName: string; staticQrUrl?: string };
 };
@@ -135,6 +137,7 @@ export default function CustomerMenu({
   wifiEnabled = false,
   videoMenuEnabled = true,
   tableOrderingEnabled = true,
+  guestAiEnabled = true,
   loyaltyEnabled = false,
   upiSettings,
 }: CustomerMenuProps) {
@@ -612,7 +615,9 @@ export default function CustomerMenu({
                 <div className="mt-4 flex items-center justify-between gap-2 border-t border-[var(--customer-border)] pt-4">
                   <button type="button" onClick={resetFilters} disabled={!activeFilterCount} className="text-xs font-semibold text-neutral-500 underline-offset-4 hover:text-neutral-900 hover:underline disabled:opacity-40">{t("reset")}</button>
                   <div className="flex gap-2">
-                    <button type="button" onClick={surpriseMe} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[var(--customer-border)] px-3 text-xs font-semibold text-neutral-800 hover:bg-neutral-50"><Dices className="h-3.5 w-3.5" />{t("surpriseMe")}</button>
+                    {guestAiEnabled ? (
+                      <button type="button" onClick={surpriseMe} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[var(--customer-border)] px-3 text-xs font-semibold text-neutral-800 hover:bg-neutral-50"><Dices className="h-3.5 w-3.5" />{t("surpriseMe")}</button>
+                    ) : null}
                     <button type="button" onClick={() => setFiltersOpen(false)} className="h-9 rounded-full bg-[var(--restaurant-text)] px-4 text-xs font-bold text-white">{t("show", { count: filteredDishes.length })}</button>
                   </div>
                 </div>
@@ -643,7 +648,9 @@ export default function CustomerMenu({
         activeOffer={menu.activeOffer}
         extraActions={<>
           {wifiEnabled && <button type="button" onClick={() => setWifiOpen(true)} className={`${heroPill} sm:hidden`}><Wifi className="h-3.5 w-3.5" />{t("wifi")}</button>}
-          <button type="button" onClick={surpriseMe} className={heroPill}><Dices className="h-3.5 w-3.5" />{t("surpriseMe")}</button>
+          {guestAiEnabled ? (
+            <button type="button" onClick={surpriseMe} className={heroPill}><Dices className="h-3.5 w-3.5" />{t("surpriseMe")}</button>
+          ) : null}
         </>}
       />
 
@@ -746,15 +753,17 @@ export default function CustomerMenu({
         </div>
       </footer>
 
-      <button
-        type="button"
-        onClick={surpriseMe}
-        title={t("surpriseHint")}
-        className={`fixed right-3 z-30 inline-flex h-12 items-center gap-2 rounded-full border border-[var(--customer-border)] bg-white pl-2 pr-4 text-sm font-semibold text-neutral-900 shadow-[0_12px_32px_-12px_rgba(0,0,0,0.4)] transition hover:-translate-y-0.5 sm:right-6 ${tableOrderingEnabled && loadedCartKey === cartKey && cart.length > 0 ? "bottom-24" : "bottom-5"}`}
-      >
-        <span className="grid h-8 w-8 place-items-center rounded-full bg-[var(--restaurant-text)] text-white"><Dices className="h-4 w-4" /></span>
-        {t("surpriseMe")}
-      </button>
+      {guestAiEnabled ? (
+        <button
+          type="button"
+          onClick={surpriseMe}
+          title={t("surpriseHint")}
+          className={`fixed right-3 z-30 inline-flex h-12 items-center gap-2 rounded-full border border-[var(--customer-border)] bg-white pl-2 pr-4 text-sm font-semibold text-neutral-900 shadow-[0_12px_32px_-12px_rgba(0,0,0,0.4)] transition hover:-translate-y-0.5 sm:right-6 ${tableOrderingEnabled && loadedCartKey === cartKey && cart.length > 0 ? "bottom-24" : "bottom-5"}`}
+        >
+          <span className="grid h-8 w-8 place-items-center rounded-full bg-[var(--restaurant-text)] text-white"><Dices className="h-4 w-4" /></span>
+          {t("surpriseMe")}
+        </button>
+      ) : null}
 
       {selectedDish ? (
         <DishDetailModal
@@ -769,7 +778,7 @@ export default function CustomerMenu({
         />
       ) : null}
 
-      {surpriseOpen && (
+      {guestAiEnabled && surpriseOpen && (
         <SurpriseMe
           dishes={menu.dishes}
           categories={activeCategories}

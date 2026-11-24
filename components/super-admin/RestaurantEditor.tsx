@@ -570,7 +570,9 @@ export default function RestaurantEditor({
         </label>
         <div className="space-y-5">
           <p className="text-sm font-medium text-neutral-600">
-            Features · <span className="font-semibold text-neutral-900">Offers & Discounts</span> is its own section (festival % off on menu) — separate from CRM loyalty coupons
+            Features · <span className="font-semibold text-neutral-900">Offers & Discounts</span> is festival % off;
+            <span className="font-semibold text-neutral-900"> AI on guest menu</span> gates Surprise me;
+            admin <span className="font-semibold text-neutral-900">AI Intelligence</span> tabs are under their own group.
           </p>
           {FEATURE_GROUPS.map((group) => (
             <div key={group.title} className="space-y-2">

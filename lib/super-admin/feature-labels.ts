@@ -23,8 +23,9 @@ export const FEATURE_LABELS: Record<FeatureKey, string> = {
   AI_BUSINESS_ASSISTANT: "AI assistant",
   AI_SALES_FORECAST: "AI sales forecast",
   AI_INVENTORY_INTELLIGENCE: "AI inventory intel",
-  AI_MENU_INTELLIGENCE: "AI menu intel",
+  AI_MENU_INTELLIGENCE: "AI menu intelligence (admin)",
   AI_OPERATIONAL_ALERTS: "AI operational alerts",
+  AI_GUEST_MENU: "AI on guest menu (Surprise me)",
   HARDWARE_SIMULATOR: "Hardware simulator",
   HARDWARE_PRINTING: "Hardware printing",
   HARDWARE_CASH_DRAWER: "Cash drawer",
@@ -38,7 +39,7 @@ export const FEATURE_LABELS: Record<FeatureKey, string> = {
 export const FEATURE_GROUPS: { title: string; keys: FeatureKey[] }[] = [
   {
     title: "Guest menu",
-    keys: ["VIDEO_MENU", "MEDIA_LIBRARY", "CUSTOM_THEME", "WIFI", "MENU_IMPORT"],
+    keys: ["VIDEO_MENU", "MEDIA_LIBRARY", "CUSTOM_THEME", "WIFI", "MENU_IMPORT", "AI_GUEST_MENU"],
   },
   {
     title: "Offers & Discounts",

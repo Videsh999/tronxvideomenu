@@ -1,28 +1,36 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { AiForecastHorizon, AiForecastRun } from "@/types";
 
 export default function AiForecastPanel() {
   const [horizon, setHorizon] = useState<AiForecastHorizon>("NEXT_7_DAYS");
   const [run, setRun] = useState<AiForecastRun | null>(null);
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const load = async () => {
+  const load = async (nextHorizon = horizon, signal?: AbortSignal) => {
     setLoading(true);
     setError("");
     try {
-      const response = await fetch(`/api/ai/forecast?horizon=${horizon}`, { cache: "no-store" });
+      const response = await fetch(`/api/ai/forecast?horizon=${nextHorizon}`, { cache: "no-store", signal });
       const json = (await response.json()) as { success: boolean; data?: AiForecastRun; error?: string };
+      if (signal?.aborted) return;
       if (!response.ok || !json.success || !json.data) throw new Error(json.error ?? "Forecast failed");
       setRun(json.data);
     } catch (cause) {
+      if (signal?.aborted || (cause instanceof DOMException && cause.name === "AbortError")) return;
       setError(cause instanceof Error ? cause.message : "Forecast failed");
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void load(horizon, controller.signal);
+    return () => controller.abort();
+  }, [horizon]);
 
   return (
     <div className="space-y-4">
@@ -45,7 +53,7 @@ export default function AiForecastPanel() {
           onClick={() => void load()}
           className="h-9 rounded-lg bg-neutral-900 px-3 text-sm font-semibold text-white disabled:opacity-50"
         >
-          {loading ? "Running…" : "Generate"}
+          {loading ? "Running…" : "Refresh"}
         </button>
       </div>
       {error ? <p className="text-sm text-rose-600">{error}</p> : null}

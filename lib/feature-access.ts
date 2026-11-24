@@ -47,6 +47,7 @@ export function getAllRestaurantFeatures(restaurant: Restaurant): Record<Feature
     AI_INVENTORY_INTELLIGENCE: false,
     AI_MENU_INTELLIGENCE: false,
     AI_OPERATIONAL_ALERTS: false,
+    AI_GUEST_MENU: false,
     HARDWARE_SIMULATOR: false,
     HARDWARE_PRINTING: false,
     HARDWARE_CASH_DRAWER: false,

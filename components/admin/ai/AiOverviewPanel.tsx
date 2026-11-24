@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type OverviewData = {
   sales: {
@@ -13,42 +13,62 @@ type OverviewData = {
   stockRisks: { name: string; suggestedReorder: number; reason: string }[];
   menuHighlights: { dishName: string; estimatedGrossMarginPercent: number | null }[];
   alerts: { title: string; severity: string; reason: string }[];
+  partial?: boolean;
 };
 
 export default function AiOverviewPanel() {
   const [data, setData] = useState<OverviewData | null>(null);
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const load = async () => {
+  const load = async (signal?: AbortSignal) => {
     setLoading(true);
     setError("");
     try {
-      const response = await fetch("/api/ai/overview", { cache: "no-store" });
+      const response = await fetch("/api/ai/overview", { cache: "no-store", signal });
       const json = (await response.json()) as { success: boolean; data?: OverviewData; error?: string };
+      if (signal?.aborted) return;
       if (!response.ok || !json.success || !json.data) throw new Error(json.error ?? "Failed to load overview");
       setData(json.data);
     } catch (cause) {
+      if (signal?.aborted || (cause instanceof DOMException && cause.name === "AbortError")) return;
       setError(cause instanceof Error ? cause.message : "Failed to load");
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void load(controller.signal);
+    return () => controller.abort();
+  }, []);
 
   const forecastTotal = data?.forecast?.points.reduce((sum, p) => sum + p.revenueP50, 0) ?? null;
 
   return (
     <div className="space-y-4">
-      <button
-        type="button"
-        onClick={() => void load()}
-        disabled={loading}
-        className="h-10 rounded-xl bg-neutral-900 px-4 text-sm font-semibold text-white disabled:opacity-50"
-      >
-        {loading ? "Loading…" : data ? "Refresh overview" : "Load overview"}
-      </button>
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={() => void load()}
+          disabled={loading}
+          className="h-10 rounded-xl bg-neutral-900 px-4 text-sm font-semibold text-white disabled:opacity-50"
+        >
+          {loading ? "Loading…" : data ? "Refresh overview" : "Load overview"}
+        </button>
+        {loading && !data ? (
+          <p className="text-sm text-neutral-500">Fetching today’s analytics snapshot…</p>
+        ) : null}
+      </div>
       {error ? <p className="text-sm text-rose-600">{error}</p> : null}
-      {!data && !error ? (
+      {data?.partial ? (
+        <p className="text-sm text-amber-800">
+          Some AI modules timed out or failed — sales below are still from verified analytics. Other panels may
+          need a refresh.
+        </p>
+      ) : null}
+      {!data && !error && !loading ? (
         <p className="text-sm text-neutral-500">Load the overview to see today’s AI snapshot for this outlet.</p>
       ) : null}
       {data ? (
@@ -64,7 +84,10 @@ export default function AiOverviewPanel() {
           <section className="rounded-2xl border border-neutral-200 bg-white p-4">
             <h2 className="text-sm font-semibold text-neutral-900">7-day forecast (p50)</h2>
             {forecastTotal == null ? (
-              <p className="mt-2 text-sm text-neutral-500">Forecast unavailable on this plan.</p>
+              <p className="mt-2 text-sm text-neutral-500">
+                Forecast unavailable on this plan, or not enough history yet (heuristic weekday model — not a
+                neural net).
+              </p>
             ) : (
               <>
                 <p className="mt-2 text-2xl font-semibold text-neutral-900">₹{forecastTotal.toFixed(2)}</p>
@@ -78,7 +101,7 @@ export default function AiOverviewPanel() {
             <h2 className="text-sm font-semibold text-neutral-900">Stock risks</h2>
             <ul className="mt-2 space-y-2 text-sm text-neutral-700">
               {data.stockRisks.length === 0 ? (
-                <li className="text-neutral-500">No predicted stockouts.</li>
+                <li className="text-neutral-500">No predicted stockouts (or inventory AI off).</li>
               ) : (
                 data.stockRisks.map((row) => (
                   <li key={row.name}>

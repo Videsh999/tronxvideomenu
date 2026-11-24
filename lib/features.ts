@@ -8,6 +8,7 @@ export const PLAN_ENTITLEMENTS: Record<SubscriptionPlan, FeatureKey[]> = {
     "ORDER_MANAGEMENT",
     "MEDIA_LIBRARY",
     "MENU_OFFERS",
+    "AI_GUEST_MENU",
   ],
   PRO: [
     "VIDEO_MENU",
@@ -16,6 +17,7 @@ export const PLAN_ENTITLEMENTS: Record<SubscriptionPlan, FeatureKey[]> = {
     "ORDER_MANAGEMENT",
     "MEDIA_LIBRARY",
     "MENU_OFFERS",
+    "AI_GUEST_MENU",
     "RESERVATIONS",
     "CAPTAIN_ACCESS",
     "MENU_IMPORT",
@@ -31,6 +33,7 @@ export const PLAN_ENTITLEMENTS: Record<SubscriptionPlan, FeatureKey[]> = {
     "ORDER_MANAGEMENT",
     "MEDIA_LIBRARY",
     "MENU_OFFERS",
+    "AI_GUEST_MENU",
     "RESERVATIONS",
     "CAPTAIN_ACCESS",
     "WIFI",

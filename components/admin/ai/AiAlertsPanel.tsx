@@ -1,31 +1,39 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { AiAlert } from "@/types";
 
 export default function AiAlertsPanel() {
   const [alerts, setAlerts] = useState<AiAlert[]>([]);
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(true);
 
-  const refresh = async () => {
+  const refresh = async (signal?: AbortSignal) => {
     setBusy(true);
     setError("");
     try {
-      const response = await fetch("/api/ai/alerts", { cache: "no-store" });
+      const response = await fetch("/api/ai/alerts", { cache: "no-store", signal });
       const json = (await response.json()) as {
         success: boolean;
         data?: { alerts: AiAlert[] };
         error?: string;
       };
+      if (signal?.aborted) return;
       if (!response.ok || !json.success || !json.data) throw new Error(json.error ?? "Failed");
       setAlerts(json.data.alerts);
     } catch (cause) {
+      if (signal?.aborted || (cause instanceof DOMException && cause.name === "AbortError")) return;
       setError(cause instanceof Error ? cause.message : "Failed");
     } finally {
-      setBusy(false);
+      if (!signal?.aborted) setBusy(false);
     }
   };
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void refresh(controller.signal);
+    return () => controller.abort();
+  }, []);
 
   const scan = async () => {
     setBusy(true);

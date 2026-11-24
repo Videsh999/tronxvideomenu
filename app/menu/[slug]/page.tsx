@@ -36,6 +36,7 @@ export default async function RestaurantMenuPage({
   const wifiEnabled = wifiConfigured;
   const videoMenuEnabled = hasRestaurantFeature(menu.restaurant, "VIDEO_MENU");
   const tableOrderingEnabled = hasRestaurantFeature(menu.restaurant, "TABLE_ORDERING");
+  const guestAiEnabled = hasRestaurantFeature(menu.restaurant, "AI_GUEST_MENU");
   const loyaltyEnabled =
     hasRestaurantFeature(menu.restaurant, "CRM_LOYALTY") &&
     menu.restaurant.loyaltySettings?.enabled !== false;
@@ -57,6 +58,7 @@ export default async function RestaurantMenuPage({
         wifiEnabled={wifiEnabled}
         videoMenuEnabled={videoMenuEnabled}
         tableOrderingEnabled={tableOrderingEnabled}
+        guestAiEnabled={guestAiEnabled}
         loyaltyEnabled={loyaltyEnabled}
         upiSettings={{
           enabled: menu.restaurant.billing?.upiEnabled === true || menu.restaurant.name.toLowerCase().includes("triparna"),

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type Rec = {
   ingredientId: string;
@@ -19,27 +19,35 @@ export default function AiInventoryPanel() {
   const [rows, setRows] = useState<Rec[]>([]);
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const load = async () => {
+  const load = async (signal?: AbortSignal) => {
     setLoading(true);
     setError("");
     try {
-      const response = await fetch("/api/ai/inventory", { cache: "no-store" });
+      const response = await fetch("/api/ai/inventory", { cache: "no-store", signal });
       const json = (await response.json()) as {
         success: boolean;
         data?: { recommendations: Rec[]; note?: string };
         error?: string;
       };
+      if (signal?.aborted) return;
       if (!response.ok || !json.success || !json.data) throw new Error(json.error ?? "Failed");
       setRows(json.data.recommendations);
       setNote(json.data.note ?? "");
     } catch (cause) {
+      if (signal?.aborted || (cause instanceof DOMException && cause.name === "AbortError")) return;
       setError(cause instanceof Error ? cause.message : "Failed");
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void load(controller.signal);
+    return () => controller.abort();
+  }, []);
 
   return (
     <div className="space-y-4">

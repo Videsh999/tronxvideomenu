@@ -182,6 +182,8 @@ export type FeatureKey =
   | "AI_INVENTORY_INTELLIGENCE"
   | "AI_MENU_INTELLIGENCE"
   | "AI_OPERATIONAL_ALERTS"
+  /** Guest menu “Surprise me” meal picker — heuristic, not a model. */
+  | "AI_GUEST_MENU"
   | "HARDWARE_SIMULATOR"
   | "HARDWARE_PRINTING"
   | "HARDWARE_CASH_DRAWER"

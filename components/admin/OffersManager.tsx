@@ -21,6 +21,15 @@ function statusLabel(offer: MenuOffer) {
   return { text: "Off", className: "bg-neutral-100 text-neutral-600" };
 }
 
+/** Convert ISO timestamp to `datetime-local` value in the browser's local zone. */
+function toDatetimeLocal(iso?: string) {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 export default function OffersManager({ restaurantName, restaurantId }: Props) {
   const [offers, setOffers] = useState<MenuOffer[]>([]);
   const [dishes, setDishes] = useState<Dish[]>([]);
@@ -28,6 +37,7 @@ export default function OffersManager({ restaurantName, restaurantId }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -49,6 +59,8 @@ export default function OffersManager({ restaurantName, restaurantId }: Props) {
     if (!q) return dishes;
     return dishes.filter((dish) => dish.name.toLowerCase().includes(q));
   }, [dishes, dishQuery]);
+
+  const editingOffer = editingId ? offers.find((offer) => offer.id === editingId) : null;
 
   async function refresh() {
     setLoading(true);
@@ -78,6 +90,7 @@ export default function OffersManager({ restaurantName, restaurantId }: Props) {
   }, [restaurantId]);
 
   function resetForm() {
+    setEditingId(null);
     setName("");
     setDescription("");
     setPercentOff(50);
@@ -93,43 +106,74 @@ export default function OffersManager({ restaurantName, restaurantId }: Props) {
     setApplyTheme(true);
   }
 
-  async function createOffer(event: FormEvent) {
+  function loadOfferIntoForm(offer: MenuOffer) {
+    setEditingId(offer.id);
+    setName(offer.name);
+    setDescription(offer.description ?? "");
+    setPercentOff(offer.percentOff);
+    setScope(offer.scope);
+    setSelectedDishIds(offer.dishIds ?? []);
+    setStartsAt(toDatetimeLocal(offer.startsAt));
+    setEndsAt(toDatetimeLocal(offer.endsAt));
+    setIsActive(offer.isActive);
+    setThemePreset(offer.presentation.themePreset);
+    setBannerHeadline(offer.presentation.bannerHeadline ?? "");
+    setBannerSubtext(offer.presentation.bannerSubtext ?? "");
+    setBadgeText(offer.presentation.badgeText ?? "");
+    setApplyTheme(offer.presentation.applyTheme);
+    setMessage(null);
+    setError(null);
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }
+
+  function buildPayload() {
+    return {
+      name,
+      description: description || undefined,
+      percentOff,
+      scope,
+      dishIds: scope === "SELECTED_DISHES" ? selectedDishIds : undefined,
+      startsAt: startsAt ? new Date(startsAt).toISOString() : undefined,
+      endsAt: endsAt ? new Date(endsAt).toISOString() : undefined,
+      isActive,
+      presentation: {
+        themePreset,
+        bannerHeadline: bannerHeadline || undefined,
+        bannerSubtext: bannerSubtext || undefined,
+        badgeText: badgeText || undefined,
+        applyTheme,
+      },
+    };
+  }
+
+  async function submitOffer(event: FormEvent) {
     event.preventDefault();
     setSaving(true);
     setMessage(null);
     setError(null);
-    const response = await fetch("/api/offers", {
-      method: "POST",
+    const payload = buildPayload();
+    const response = await fetch(editingId ? `/api/offers/${editingId}` : "/api/offers", {
+      method: editingId ? "PATCH" : "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name,
-        description: description || undefined,
-        percentOff,
-        scope,
-        dishIds: scope === "SELECTED_DISHES" ? selectedDishIds : undefined,
-        startsAt: startsAt ? new Date(startsAt).toISOString() : undefined,
-        endsAt: endsAt ? new Date(endsAt).toISOString() : undefined,
-        isActive,
-        presentation: {
-          themePreset,
-          bannerHeadline: bannerHeadline || undefined,
-          bannerSubtext: bannerSubtext || undefined,
-          badgeText: badgeText || undefined,
-          applyTheme,
-        },
-      }),
+      body: JSON.stringify(payload),
     });
     const json = await response.json();
     setSaving(false);
     if (!json.success) {
-      setError(json.error || "Could not create offer.");
+      setError(json.error || (editingId ? "Could not update offer." : "Could not create offer."));
       return;
     }
-    setMessage(
-      isActive
-        ? `“${json.data.name}” is running on the guest menu.`
-        : `“${json.data.name}” saved as draft.`,
-    );
+    if (editingId) {
+      setMessage(`“${json.data.name}” updated.`);
+    } else {
+      setMessage(
+        isActive
+          ? `“${json.data.name}” is running on the guest menu.`
+          : `“${json.data.name}” saved as draft.`,
+      );
+    }
     resetForm();
     await refresh();
   }
@@ -148,6 +192,7 @@ export default function OffersManager({ restaurantName, restaurantId }: Props) {
       return;
     }
     setMessage(next ? `“${offer.name}” is now live.` : `“${offer.name}” stopped.`);
+    if (editingId === offer.id) setIsActive(next);
     await refresh();
   }
 
@@ -160,6 +205,7 @@ export default function OffersManager({ restaurantName, restaurantId }: Props) {
       return;
     }
     setMessage(`Deleted “${offer.name}”.`);
+    if (editingId === offer.id) resetForm();
     await refresh();
   }
 
@@ -195,12 +241,23 @@ export default function OffersManager({ restaurantName, restaurantId }: Props) {
       ) : null}
 
       <form
-        onSubmit={createOffer}
+        onSubmit={submitOffer}
         className="space-y-5 rounded-3xl border border-neutral-200 bg-white p-5 shadow-sm sm:p-6"
       >
-        <div className="flex items-center gap-2 text-sm font-semibold text-neutral-900">
-          <Sparkles className="h-4 w-4 text-amber-500" />
-          Create offer
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-sm font-semibold text-neutral-900">
+            <Sparkles className="h-4 w-4 text-amber-500" />
+            {editingId ? `Edit offer${editingOffer ? ` — ${editingOffer.name}` : ""}` : "Create offer"}
+          </div>
+          {editingId ? (
+            <button
+              type="button"
+              onClick={resetForm}
+              className="text-xs font-semibold text-neutral-500 underline-offset-2 hover:text-neutral-900 hover:underline"
+            >
+              Cancel edit
+            </button>
+          ) : null}
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
@@ -362,18 +419,33 @@ export default function OffersManager({ restaurantName, restaurantId }: Props) {
               onChange={(e) => setIsActive(e.target.checked)}
               className="rounded border-neutral-300"
             />
-            Start running immediately
+            {editingId ? "Offer is running / scheduled" : "Start running immediately"}
           </label>
         </div>
 
-        <button
-          type="submit"
-          disabled={saving}
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-neutral-900 px-5 text-sm font-semibold text-white transition hover:bg-neutral-800 disabled:opacity-60"
-        >
-          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Gift className="h-4 w-4" />}
-          {isActive ? "Create & run offer" : "Save draft offer"}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="submit"
+            disabled={saving}
+            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-neutral-900 px-5 text-sm font-semibold text-white transition hover:bg-neutral-800 disabled:opacity-60"
+          >
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Gift className="h-4 w-4" />}
+            {editingId
+              ? "Save changes"
+              : isActive
+                ? "Create & run offer"
+                : "Save draft offer"}
+          </button>
+          {editingId ? (
+            <button
+              type="button"
+              onClick={resetForm}
+              className="inline-flex h-11 items-center justify-center rounded-xl border border-neutral-200 px-5 text-sm font-semibold text-neutral-700 hover:bg-neutral-50"
+            >
+              Cancel
+            </button>
+          ) : null}
+        </div>
       </form>
 
       <section className="space-y-3">
@@ -390,10 +462,13 @@ export default function OffersManager({ restaurantName, restaurantId }: Props) {
           <ul className="space-y-3">
             {offers.map((offer) => {
               const status = statusLabel(offer);
+              const isEditing = editingId === offer.id;
               return (
                 <li
                   key={offer.id}
-                  className="flex flex-col gap-3 rounded-2xl border border-neutral-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between"
+                  className={`flex flex-col gap-3 rounded-2xl border bg-white p-4 sm:flex-row sm:items-center sm:justify-between ${
+                    isEditing ? "border-neutral-900" : "border-neutral-200"
+                  }`}
                 >
                   <div className="min-w-0 space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
@@ -401,6 +476,11 @@ export default function OffersManager({ restaurantName, restaurantId }: Props) {
                       <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider ${status.className}`}>
                         {status.text}
                       </span>
+                      {isEditing ? (
+                        <span className="rounded-full bg-neutral-900 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-white">
+                          Editing
+                        </span>
+                      ) : null}
                     </div>
                     <p className="text-sm text-neutral-600">
                       {offer.percentOff}% off ·{" "}
@@ -413,6 +493,13 @@ export default function OffersManager({ restaurantName, restaurantId }: Props) {
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => loadOfferIntoForm(offer)}
+                      className="h-9 rounded-lg border border-neutral-900 px-3 text-xs font-semibold text-neutral-900 hover:bg-neutral-900 hover:text-white"
+                    >
+                      Edit
+                    </button>
                     <button
                       type="button"
                       onClick={() => void setRunning(offer, !offer.isActive)}

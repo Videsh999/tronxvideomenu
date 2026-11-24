@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type Dish = {
   dishId: string;
@@ -17,9 +17,9 @@ export default function AiMenuPanel() {
   const [dishes, setDishes] = useState<Dish[]>([]);
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const load = async () => {
+  const load = async (signal?: AbortSignal) => {
     setLoading(true);
     setError("");
     try {
@@ -27,22 +27,30 @@ export default function AiMenuPanel() {
       const from = new Date(Date.now() - 30 * 86_400_000).toISOString();
       const response = await fetch(
         `/api/ai/menu?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
-        { cache: "no-store" },
+        { cache: "no-store", signal },
       );
       const json = (await response.json()) as {
         success: boolean;
         data?: { dishes: Dish[]; note?: string };
         error?: string;
       };
+      if (signal?.aborted) return;
       if (!response.ok || !json.success || !json.data) throw new Error(json.error ?? "Failed");
       setDishes(json.data.dishes);
       setNote(json.data.note ?? "");
     } catch (cause) {
+      if (signal?.aborted || (cause instanceof DOMException && cause.name === "AbortError")) return;
       setError(cause instanceof Error ? cause.message : "Failed");
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void load(controller.signal);
+    return () => controller.abort();
+  }, []);
 
   return (
     <div className="space-y-4">

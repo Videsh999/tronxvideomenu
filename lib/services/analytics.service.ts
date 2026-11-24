@@ -3,7 +3,6 @@ import { inventoryRepository } from "@/lib/repositories/inventory.repository";
 import { procurementRepository } from "@/lib/repositories/procurement.repository";
 import { organizationRepository } from "@/lib/repositories/organization.repository";
 import { dishRepository } from "@/lib/repositories/dish.repository";
-import { inventoryService } from "@/lib/services/inventory.service";
 import { procurementService } from "@/lib/services/procurement.service";
 import {
   comparePeriods,
@@ -14,6 +13,7 @@ import {
 import { restaurantTimezone } from "@/lib/analytics/period";
 import { classifyMenuDishes } from "@/lib/analytics/menu-intelligence";
 import { recommendIngredientReorder } from "@/lib/analytics/inventory-intelligence";
+import { costRecipeLines } from "@/lib/inventory/recipe-cost";
 import { convertToBase, roundQty } from "@/lib/inventory/units";
 import type { AnalyticsToolCall } from "@/lib/analytics/tools";
 import type { FiguresSource, Restaurant, RestaurantOrder } from "@/types";
@@ -155,24 +155,47 @@ export class AnalyticsService {
   }
 
   async menuMargins(restaurantId: string, from?: string, to?: string, limit = 20) {
-    const dishSales = await this.salesByDish(restaurantId, from, to, 100);
-    const dishes = await dishRepository.findByRestaurantId(restaurantId);
+    const [dishSales, dishes, recipes, ingredients] = await Promise.all([
+      this.salesByDish(restaurantId, from, to, 100),
+      dishRepository.findByRestaurantId(restaurantId),
+      inventoryRepository.listRecipes(restaurantId),
+      inventoryRepository.listIngredients(restaurantId),
+    ]);
     const priceById = new Map(dishes.map((dish) => [dish.id, dish.price]));
+    const recipeByDishId = new Map(
+      recipes.filter((recipe) => recipe.isActive).map((recipe) => [recipe.dishId, recipe]),
+    );
+    const ingredientsById = new Map(ingredients.map((ingredient) => [ingredient.id, ingredient]));
     const rows = [];
     for (const sale of dishSales.slice(0, limit)) {
-      try {
-        const profitability = await inventoryService.dishProfitability(
-          restaurantId,
-          sale.dishId,
-          priceById.get(sale.dishId) ?? sale.revenue / Math.max(1, sale.quantitySold),
-        );
+      const sellPrice = priceById.get(sale.dishId) ?? sale.revenue / Math.max(1, sale.quantitySold);
+      const recipe = recipeByDishId.get(sale.dishId);
+      if (!recipe) {
         rows.push({
           ...sale,
-          estimatedCostPerPortion: profitability.cost.costPerPortion,
-          estimatedGrossMargin: profitability.margin.estimatedGrossMargin,
-          estimatedGrossMarginPercent: profitability.margin.estimatedGrossMarginPercent,
+          estimatedCostPerPortion: null,
+          estimatedGrossMargin: null,
+          estimatedGrossMarginPercent: null,
+          figuresSource: "INSUFFICIENT_DATA" as FiguresSource,
+          disclaimer: "Recipe cost unavailable.",
+        });
+        continue;
+      }
+      try {
+        const cost = costRecipeLines(recipe.lines, ingredientsById, recipe.yieldPortions);
+        const estimatedGrossMargin =
+          cost.costPerPortion != null ? Math.round((sellPrice - cost.costPerPortion) * 100) / 100 : null;
+        const estimatedGrossMarginPercent =
+          estimatedGrossMargin != null && sellPrice > 0
+            ? Math.round((estimatedGrossMargin / sellPrice) * 10000) / 100
+            : null;
+        rows.push({
+          ...sale,
+          estimatedCostPerPortion: cost.costPerPortion,
+          estimatedGrossMargin,
+          estimatedGrossMarginPercent,
           figuresSource: "ESTIMATED" as FiguresSource,
-          disclaimer: profitability.margin.disclaimer,
+          disclaimer: "Estimated gross margin is not net/accounting profit.",
         });
       } catch {
         rows.push({
@@ -204,18 +227,27 @@ export class AnalyticsService {
   }
 
   async menuIntelligence(restaurantId: string, from?: string, to?: string) {
-    const dishSales = await this.salesByDish(restaurantId, from, to, 100);
-    const dishes = await dishRepository.findByRestaurantId(restaurantId);
+    const [dishSales, dishes, recipes, ingredients] = await Promise.all([
+      this.salesByDish(restaurantId, from, to, 100),
+      dishRepository.findByRestaurantId(restaurantId),
+      inventoryRepository.listRecipes(restaurantId),
+      inventoryRepository.listIngredients(restaurantId),
+    ]);
+    const recipeByDishId = new Map(
+      recipes.filter((recipe) => recipe.isActive).map((recipe) => [recipe.dishId, recipe]),
+    );
+    const ingredientsById = new Map(ingredients.map((ingredient) => [ingredient.id, ingredient]));
     const costsByDishId = new Map<string, { costPerPortion: number | null; sellPrice: number }>();
     for (const dish of dishes) {
+      const recipe = recipeByDishId.get(dish.id);
+      if (!recipe) {
+        costsByDishId.set(dish.id, { costPerPortion: null, sellPrice: dish.price });
+        continue;
+      }
       try {
-        const profitability = await inventoryService.dishProfitability(
-          restaurantId,
-          dish.id,
-          dish.price,
-        );
+        const cost = costRecipeLines(recipe.lines, ingredientsById, recipe.yieldPortions);
         costsByDishId.set(dish.id, {
-          costPerPortion: profitability.cost.costPerPortion,
+          costPerPortion: cost.costPerPortion,
           sellPrice: dish.price,
         });
       } catch {
