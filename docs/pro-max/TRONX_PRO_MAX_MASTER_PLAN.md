@@ -1,6 +1,6 @@
 # TRONX PRO MAX Master Plan – Restaurant OS (ROS): Level 1 → Pro Max
 
-**Status:** Draft v0.2.2 (v0.2.1 backed up as `.v2.1.bak`). Earlier: v0.2.1 (v0.2 as `.v2.bak`). Earlier: v0.2 (v0.1 backed up as `.v1.bak`; adds CEO decisions, CTO review incl. `docs/pro-max/PATH_OWNERS.md`, Epic E15). Originally drafted (TRONX Project Director, 2026-11-07). Source of every fact: audit PR https://github.com/Videsh999/tronxvideomenu/pull/1, branch `pro-max/audit`, files `docs/pro-max/TRONX_PRO_MAX_MODULE_INVENTORY.md`, `docs/pro-max/TRONX_PRO_MAX_FINDINGS.md`, `docs/pro-max/TRONX_PRO_MAX_ARCHITECTURE.md`. Audit baseline: `main` @ `fcc89586190e2dd40673c7cb04f6baa358dd7969`. Task detail: `TRONX_PRO_MAX_TASK_BOARD.md`.
+**Status:** Draft v0.2.4 (backups `.v2.3.bak` … `.v1.bak`). Earlier: v0.2.2. Earlier: v0.2.1 (v0.2 as `.v2.bak`). Earlier: v0.2 (v0.1 backed up as `.v1.bak`; adds CEO decisions, CTO review incl. `docs/pro-max/PATH_OWNERS.md`, Epic E15). Originally drafted (TRONX Project Director, 2026-11-07). Source of every fact: audit PR https://github.com/Videsh999/tronxvideomenu/pull/1, branch `pro-max/audit`, files `docs/pro-max/TRONX_PRO_MAX_MODULE_INVENTORY.md`, `docs/pro-max/TRONX_PRO_MAX_FINDINGS.md`, `docs/pro-max/TRONX_PRO_MAX_ARCHITECTURE.md`. Audit baseline: `main` @ `fcc89586190e2dd40673c7cb04f6baa358dd7969`. Task detail: `TRONX_PRO_MAX_TASK_BOARD.md`.
 
 ## 1. Goal
 
@@ -27,7 +27,7 @@ Take the existing Restaurant OS to production-grade ("Pro Max") by **evolving th
 | Epic | Stream | Delivers | Owner (audit) |
 |---|---|---|---|
 | ROS-E00 | Wave 0 | Split `lib/validations/index.ts` into domain modules (no feature change) | Backend, CTO review |
-| ROS-E01 | A – Authz matrix | `customer` + `connector` proxy classes; every route classified by test (F-01, F-07) | Backend |
+| ROS-E01 | A – Authz matrix | Per-handler contracts (ADR 0002). No blanket customer or connector class. Login, register, and reset do not require an existing customer session. Pair is a pairing code. Heartbeat, jobs, and ack use the connector secret (F-01, F-07) | Backend |
 | ROS-E02 | B – Order aggregate | Cancel uses `calculateRestaurantBill` & writes all money fields; QR variants; QR idempotency returns existing order (F-02, F-04, F-11, F-12, F-15) | Backend |
 | ROS-E03 | C – Bill UI | POS & captain previews equal server bill; parity test (F-03) | Frontend (Backend reviews calculator import) |
 | ROS-E04 | D – Identities | Fix credential test; demo passwords out of git; memberships; audited/no password reveal (F-06, F-09, F-13, F-16) | Backend, UI by Frontend |
@@ -37,7 +37,7 @@ Take the existing Restaurant OS to production-grade ("Pro Max") by **evolving th
 | ROS-E08 | H – Schema steward | Sole editor of `lib/db/models.ts`, `types/index.ts`, `lib/db/mongo-mappers.ts`; membership collection (F-09, F-18) | Backend, CTO reviews every change |
 | ROS-E09 | I1–I5 – Inventory / Procurement / CRM / Multi-outlet / Reports | Tests still pass; idempotency kept; separate owners and merge queues | Backend (one per sub-stream) |
 | ROS-E10 | J – AI | Heuristic still refuses unknown tools; no provider call in unit tests | Backend |
-| ROS-E11 | K – Hardware | Connector handlers/client work via `connector` class | Backend |
+| ROS-E11 | K – Hardware | Pair uses a pairing code. Heartbeat, job poll, and ack use the connector secret (ADR 0002). No staff cookie (F-01) | Backend |
 | ROS-E12 | L – DevOps | PR workflow (lint, typecheck, unit), integration on replica set, remove `ignoreBuildErrors`, env template (F-05, F-10, F-21, F-22) | DevOps |
 | ROS-E13 | M – Demo & QA | `seed-pro-max-demo.ts` / `cleanup-pro-max-demo.ts` (loopback only), E2E, API, load tests | QA; DevOps supplies DB |
 | ROS-E15 | O – WhatsApp Billing + Dynamic UPI + Billing Policies + Tips | Provider abstraction, per-outlet merchant mapping, dynamic QR, verified webhooks, ledger states, partial/refunds, policy engine, tips, WhatsApp Cloud API, admin/captain/POS/customer payment UI, 12 docs in `docs/whatsapp-payments/` | CTO, Finance, Backend, Frontend, UI/UX, QA (Founder order 2026-11-07, UX_SPEC.md) |
@@ -73,12 +73,13 @@ Founder approval (via CEO) is an extra gate, on top of normal review, for:
 - the first real-money test (ROS-E15-T048)
 - going live (ROS-E15-T047)
 - any merge or deploy of `pro-max/release` to `main` (ROS-E12-T014)
+- any new paid service, e.g. staging infrastructure or an evidence bucket (CTO proposal, pending DevOps agreement)
 
 ## 5. Dependencies between workstreams
 
-- G loyalty → A (proxy). K connector → A (connector class).
+- G loyalty → A (per-handler allow-list, ADR 0002, not a customer-session class). K connector → A (pair is a pairing code; heartbeat, jobs, and ack are the connector secret).
 - G variant UI → B (server accepts variantId). B variant schema → Wave 0 split.
-- C → may import `calculateRestaurantBill` now; must not edit `lib/order-pricing.ts` until B removes the cancel dependency.
+- C starts after B's billing contract (ADR 0003). C imports that contract and does not edit `lib/billing/**` or `lib/order-pricing.ts`.
 - L `ignoreBuildErrors` removal → E (table statuses) and B leave `tsc` clean.
 - D memberships, Phase B demo users (M) → H membership collection.
 - M → L/DevOps for a local replica-set database.
