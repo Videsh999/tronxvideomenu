@@ -147,6 +147,7 @@ export default function RestaurantEditor({
   const [enriching, setEnriching] = useState(false);
   const [enrichError, setEnrichError] = useState<string | null>(null);
   const [enrichment, setEnrichment] = useState<RestaurantEnrichmentProposal | null>(null);
+  const [includeSuggestedCover, setIncludeSuggestedCover] = useState(false);
 
   const setField = <K extends keyof RestaurantFields>(
     key: K,
@@ -175,6 +176,7 @@ export default function RestaurantEditor({
         throw new Error(result.error || "Enrichment failed");
       }
       setEnrichment(result.data);
+      setIncludeSuggestedCover(false);
     } catch (cause) {
       setEnrichError(cause instanceof Error ? cause.message : "Enrichment failed");
     } finally {
@@ -186,6 +188,8 @@ export default function RestaurantEditor({
     if (!enrichment) return;
     const p = enrichment.proposal;
     const nextName = p.name?.trim();
+    const cover = includeSuggestedCover ? p.coverImageUrl?.trim() : undefined;
+    const logo = includeSuggestedCover ? p.logoUrl?.trim() : undefined;
     setFields((current) => {
       const name = nextName || current.name;
       return {
@@ -197,8 +201,8 @@ export default function RestaurantEditor({
         address: p.address?.trim() || current.address,
         phone: p.phone?.trim() || current.phone,
         openingHours: p.openingHours?.trim() || current.openingHours,
-        logo: p.logoUrl?.trim() || current.logo,
-        coverImage: p.coverImageUrl?.trim() || current.coverImage,
+        logo: logo || current.logo,
+        coverImage: cover || current.coverImage,
         socialLinks: {
           ...current.socialLinks,
           website: p.socialLinks?.website?.trim() || current.socialLinks.website,
@@ -206,6 +210,7 @@ export default function RestaurantEditor({
       };
     });
     setEnrichment(null);
+    setIncludeSuggestedCover(false);
   };
 
   const setName = (name: string) =>
@@ -335,11 +340,31 @@ export default function RestaurantEditor({
               </ul>
             ) : null}
             <p className="text-[11px] text-neutral-500">{enrichment.photoAutomation.summary}</p>
+            {enrichment.proposal.coverImageUrl || enrichment.proposal.logoUrl ? (
+              <label className="flex items-start gap-2 text-[11px] text-neutral-700">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={includeSuggestedCover}
+                  onChange={(event) => setIncludeSuggestedCover(event.target.checked)}
+                />
+                <span>
+                  Also apply suggested public image URLs (Wikipedia/Wikimedia). Confirm rights and brand fit before Save — never auto-scraped into production.
+                </span>
+              </label>
+            ) : null}
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={applyEnrichment} className="rounded-lg bg-neutral-900 px-3 py-2 text-xs font-semibold text-white">
-                Apply to form (still needs Save)
+                Apply text fields (still needs Save)
               </button>
-              <button type="button" onClick={() => setEnrichment(null)} className="rounded-lg border border-neutral-300 px-3 py-2 text-xs font-semibold text-neutral-700">
+              <button
+                type="button"
+                onClick={() => {
+                  setEnrichment(null);
+                  setIncludeSuggestedCover(false);
+                }}
+                className="rounded-lg border border-neutral-300 px-3 py-2 text-xs font-semibold text-neutral-700"
+              >
                 Discard
               </button>
             </div>
