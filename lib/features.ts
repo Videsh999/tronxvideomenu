@@ -55,6 +55,7 @@ export const PLAN_ENTITLEMENTS: Record<SubscriptionPlan, FeatureKey[]> = {
     "HARDWARE_PAYMENT_TERMINAL",
     "HARDWARE_CUSTOMER_DISPLAY",
     "HARDWARE_LOCAL_CONNECTOR",
+    "INTERNAL_TRACKING",
   ],
 };
 

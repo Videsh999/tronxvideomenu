@@ -22,7 +22,10 @@ export function classifyApiRequest(method: string, pathname: string): ApiAuthCla
   }
 
   // Local/staging demo seed — handler enforces NODE_ENV / ALLOW_PRODUCTION_SEED / optional token.
-  if (method === "POST" && pathname === "/api/dev/seed-demo-kitchen") {
+  if (
+    method === "POST" &&
+    (pathname === "/api/dev/seed-demo-kitchen" || pathname === "/api/dev/seed-cheese")
+  ) {
     return "public";
   }
 

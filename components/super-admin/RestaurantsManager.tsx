@@ -2,12 +2,15 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
-import type { Restaurant } from "@/types";
+import { useMemo, useState } from "react";
+import type { Restaurant, SubscriptionPlan } from "@/types";
 import type { RestaurantAdminCredentialStatus } from "@/types";
-import { ExternalLink, Power, Settings2, Trash2 } from "lucide-react";
+import { ExternalLink, Power, Search, Settings2, Trash2 } from "lucide-react";
 import RestaurantAdminCredentials from "@/components/super-admin/RestaurantAdminCredentials";
 import SmartImage from "@/components/shared/SmartImage";
+
+type PlanFilter = "ALL" | SubscriptionPlan;
+type ActiveFilter = "ALL" | "ACTIVE" | "INACTIVE";
 
 export default function RestaurantsManager({
   restaurants,
@@ -21,10 +24,38 @@ export default function RestaurantsManager({
   const [error, setError] = useState<string | null>(null);
   const [activeOverrides, setActiveOverrides] = useState<Record<string, boolean>>({});
   const [deletedIds, setDeletedIds] = useState<string[]>([]);
-  const items = restaurants.filter((restaurant) => !deletedIds.includes(restaurant.id)).map((restaurant) => ({
-    ...restaurant,
-    ...(activeOverrides[restaurant.id] === undefined ? {} : { isActive: activeOverrides[restaurant.id] }),
-  }));
+  const [query, setQuery] = useState("");
+  const [planFilter, setPlanFilter] = useState<PlanFilter>("ALL");
+  const [activeFilter, setActiveFilter] = useState<ActiveFilter>("ALL");
+
+  const items = restaurants
+    .filter((restaurant) => !deletedIds.includes(restaurant.id))
+    .map((restaurant) => ({
+      ...restaurant,
+      ...(activeOverrides[restaurant.id] === undefined ? {} : { isActive: activeOverrides[restaurant.id] }),
+    }));
+
+  const filtered = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return items.filter((restaurant) => {
+      if (planFilter !== "ALL" && (restaurant.subscriptionPlan ?? "PRO") !== planFilter) return false;
+      const isActive = restaurant.isActive !== false;
+      if (activeFilter === "ACTIVE" && !isActive) return false;
+      if (activeFilter === "INACTIVE" && isActive) return false;
+      if (!needle) return true;
+      const haystack = [
+        restaurant.name,
+        restaurant.slug,
+        restaurant.address,
+        restaurant.phone,
+        restaurant.email,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(needle);
+    });
+  }, [items, query, planFilter, activeFilter]);
 
   const setActive = async (restaurant: Restaurant) => {
     setPendingId(restaurant.id);
@@ -92,8 +123,53 @@ export default function RestaurantsManager({
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-col gap-3 rounded-2xl border border-neutral-200 bg-white p-4 sm:flex-row sm:items-end sm:justify-between">
+        <label className="relative min-w-0 flex-1 space-y-1 text-xs font-medium text-neutral-600">
+          Search restaurants
+          <span className="relative mt-1 block">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Name, slug, address, phone…"
+              className="w-full rounded-xl border border-neutral-200 bg-neutral-50 py-2.5 pl-10 pr-3 text-sm text-neutral-900 placeholder:text-neutral-400"
+            />
+          </span>
+        </label>
+        <div className="flex flex-wrap gap-2">
+          <label className="space-y-1 text-xs font-medium text-neutral-600">
+            Plan
+            <select
+              value={planFilter}
+              onChange={(event) => setPlanFilter(event.target.value as PlanFilter)}
+              className="block rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2.5 text-sm text-neutral-900"
+            >
+              <option value="ALL">All plans</option>
+              <option value="STARTER">Starter</option>
+              <option value="PRO">Pro</option>
+              <option value="ENTERPRISE">Enterprise</option>
+            </select>
+          </label>
+          <label className="space-y-1 text-xs font-medium text-neutral-600">
+            Status
+            <select
+              value={activeFilter}
+              onChange={(event) => setActiveFilter(event.target.value as ActiveFilter)}
+              className="block rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2.5 text-sm text-neutral-900"
+            >
+              <option value="ALL">All</option>
+              <option value="ACTIVE">Active</option>
+              <option value="INACTIVE">Deactivated</option>
+            </select>
+          </label>
+        </div>
+      </div>
+      <p className="text-xs text-neutral-500">
+        Showing {filtered.length} of {items.length} restaurants · Manage → Plan & features includes Offers & Discounts
+      </p>
+
       {error ? <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-600">{error}</p> : null}
-      {items.map((restaurant) => {
+      {filtered.map((restaurant) => {
         const credentialStatus = credentialStatuses.find((status) => status.restaurantId === restaurant.id);
         const logo = restaurant.logoUrl ?? restaurant.logo;
         return (
@@ -165,10 +241,26 @@ export default function RestaurantsManager({
           </article>
         );
       })}
-      {items.length === 0 ? (
+      {filtered.length === 0 ? (
         <div className="rounded-3xl border border-dashed border-neutral-300 px-6 py-14 text-center">
-          <p className="text-sm text-neutral-500">No restaurants available.</p>
-          <Link href="/super-admin/restaurants/new" className="mt-4 inline-flex h-10 items-center rounded-xl bg-neutral-900 px-4 text-xs font-bold text-white">Add your first restaurant</Link>
+          <p className="text-sm text-neutral-500">
+            {items.length === 0 ? "No restaurants available." : "No restaurants match this search."}
+          </p>
+          {items.length === 0 ? (
+            <Link href="/super-admin/restaurants/new" className="mt-4 inline-flex h-10 items-center rounded-xl bg-neutral-900 px-4 text-xs font-bold text-white">Add your first restaurant</Link>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setQuery("");
+                setPlanFilter("ALL");
+                setActiveFilter("ALL");
+              }}
+              className="mt-4 inline-flex h-10 items-center rounded-xl border border-neutral-300 px-4 text-xs font-bold text-neutral-700"
+            >
+              Clear filters
+            </button>
+          )}
         </div>
       ) : null}
     </div>

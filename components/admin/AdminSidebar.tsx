@@ -114,7 +114,7 @@ export default function AdminSidebar({
         ...(features.INVENTORY ? [{ label: "Recipes", href: buildRoute("/inventory/recipes"), icon: Package }] : []),
         ...(features.PROCUREMENT ? [{ label: "Procurement", href: buildRoute("/procurement"), icon: Truck }] : []),
         ...(features.CRM_LOYALTY ? [{ label: "CRM", href: buildRoute("/crm"), icon: HeartHandshake }] : []),
-        ...(features.MENU_OFFERS ? [{ label: "Offers", href: buildRoute("/offers"), icon: Gift }] : []),
+        ...(features.MENU_OFFERS ? [{ label: "Offers & Discounts", href: buildRoute("/offers"), icon: Gift }] : []),
         ...(features.MULTI_OUTLET ? [{ label: "Organization", href: buildRoute("/organization"), icon: Store }] : []),
         ...(features.ANALYTICS || features.ORDER_MANAGEMENT
           ? [{ label: "Reports", href: buildRoute("/reports"), icon: BarChart3 }]

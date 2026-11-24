@@ -9,8 +9,10 @@ import type {
   SubscriptionPlan,
 } from "@/types";
 import { DEFAULT_PLAN, PLAN_ENTITLEMENTS, hasRestaurantFeature } from "@/lib/features";
+import { FEATURE_GROUPS, FEATURE_LABELS } from "@/lib/super-admin/feature-labels";
+import type { RestaurantEnrichmentProposal } from "@/lib/services/restaurant-enrichment.service";
 
-const featureKeys: FeatureKey[] = ["VIDEO_MENU", "TABLE_MANAGEMENT", "TABLE_ORDERING", "ORDER_MANAGEMENT", "MEDIA_LIBRARY", "MENU_OFFERS", "RESERVATIONS", "CAPTAIN_ACCESS", "WIFI", "CUSTOM_THEME", "ANALYTICS", "MENU_IMPORT", "POS", "KITCHEN_DISPLAY", "INVENTORY", "PROCUREMENT", "CRM_LOYALTY", "MULTI_OUTLET", "AI_BUSINESS_ASSISTANT", "AI_SALES_FORECAST", "AI_INVENTORY_INTELLIGENCE", "AI_MENU_INTELLIGENCE", "AI_OPERATIONAL_ALERTS", "HARDWARE_SIMULATOR", "HARDWARE_PRINTING", "HARDWARE_CASH_DRAWER", "HARDWARE_BARCODE", "HARDWARE_PAYMENT_TERMINAL", "HARDWARE_CUSTOMER_DISPLAY", "HARDWARE_LOCAL_CONNECTOR", "INTERNAL_TRACKING"];
+const featureKeys: FeatureKey[] = FEATURE_GROUPS.flatMap((group) => group.keys);
 
 type RestaurantFields = {
   name: string;
@@ -141,11 +143,70 @@ export default function RestaurantEditor({
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [slugEdited, setSlugEdited] = useState(Boolean(restaurant));
+  const [enrichLocation, setEnrichLocation] = useState(restaurant?.address ?? "");
+  const [enriching, setEnriching] = useState(false);
+  const [enrichError, setEnrichError] = useState<string | null>(null);
+  const [enrichment, setEnrichment] = useState<RestaurantEnrichmentProposal | null>(null);
 
   const setField = <K extends keyof RestaurantFields>(
     key: K,
     value: RestaurantFields[K],
   ) => setFields((current) => ({ ...current, [key]: value }));
+
+  const runEnrichment = async () => {
+    setEnrichError(null);
+    setEnrichment(null);
+    setEnriching(true);
+    try {
+      const response = await fetch("/api/super-admin/restaurants/enrich", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: fields.name || restaurant?.name || "",
+          location: enrichLocation.trim() || undefined,
+        }),
+      });
+      const result = (await response.json()) as {
+        success: boolean;
+        error?: string;
+        data?: RestaurantEnrichmentProposal;
+      };
+      if (!response.ok || !result.success || !result.data) {
+        throw new Error(result.error || "Enrichment failed");
+      }
+      setEnrichment(result.data);
+    } catch (cause) {
+      setEnrichError(cause instanceof Error ? cause.message : "Enrichment failed");
+    } finally {
+      setEnriching(false);
+    }
+  };
+
+  const applyEnrichment = () => {
+    if (!enrichment) return;
+    const p = enrichment.proposal;
+    const nextName = p.name?.trim();
+    setFields((current) => {
+      const name = nextName || current.name;
+      return {
+        ...current,
+        name,
+        slug: !slugEdited && !restaurant && nextName ? slugify(nextName) : current.slug,
+        tagline: p.tagline?.trim() || current.tagline,
+        description: p.description?.trim() || current.description,
+        address: p.address?.trim() || current.address,
+        phone: p.phone?.trim() || current.phone,
+        openingHours: p.openingHours?.trim() || current.openingHours,
+        logo: p.logoUrl?.trim() || current.logo,
+        coverImage: p.coverImageUrl?.trim() || current.coverImage,
+        socialLinks: {
+          ...current.socialLinks,
+          website: p.socialLinks?.website?.trim() || current.socialLinks.website,
+        },
+      };
+    });
+    setEnrichment(null);
+  };
 
   const setName = (name: string) =>
     setFields((current) => ({ ...current, name, slug: slugEdited ? current.slug : slugify(name) }));
@@ -214,6 +275,77 @@ export default function RestaurantEditor({
         </p>
       </div>
       {error ? <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-600">{error}</p> : null}
+
+      <section className="space-y-3 rounded-2xl border border-sky-100 bg-sky-50/60 p-4">
+        <div>
+          <h2 className="text-sm font-semibold text-neutral-900">Enrich from web</h2>
+          <p className="mt-0.5 text-xs text-neutral-600">
+            Looks up public OpenStreetMap + Wikipedia data. Review sources, then confirm before fields are filled — nothing is saved until you hit Save.
+          </p>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+          <label className="flex-1 space-y-1 text-xs text-neutral-600">
+            Location hint (city / area / address)
+            <input
+              value={enrichLocation}
+              onChange={(event) => setEnrichLocation(event.target.value)}
+              placeholder="e.g. Hyderabad, Banjara Hills"
+              className={inputClass}
+            />
+          </label>
+          <button
+            type="button"
+            disabled={enriching || fields.name.trim().length < 2}
+            onClick={() => void runEnrichment()}
+            className="h-[42px] shrink-0 rounded-lg bg-sky-700 px-4 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {enriching ? "Searching…" : "Enrich from web"}
+          </button>
+        </div>
+        {enrichError ? <p role="alert" className="text-xs text-rose-600">{enrichError}</p> : null}
+        {enrichment ? (
+          <div className="space-y-3 rounded-xl border border-sky-200 bg-white p-3 text-sm">
+            <p className="text-xs font-medium text-neutral-700">Proposed fields (confirm to apply to this form)</p>
+            <dl className="grid gap-1.5 text-xs text-neutral-600 sm:grid-cols-2">
+              {enrichment.proposal.name ? <div><dt className="font-semibold text-neutral-800">Name</dt><dd>{enrichment.proposal.name}</dd></div> : null}
+              {enrichment.proposal.tagline ? <div><dt className="font-semibold text-neutral-800">Tagline</dt><dd>{enrichment.proposal.tagline}</dd></div> : null}
+              {enrichment.proposal.phone ? <div><dt className="font-semibold text-neutral-800">Phone</dt><dd>{enrichment.proposal.phone}</dd></div> : null}
+              {enrichment.proposal.openingHours ? <div><dt className="font-semibold text-neutral-800">Hours</dt><dd>{enrichment.proposal.openingHours}</dd></div> : null}
+              {enrichment.proposal.address ? <div className="sm:col-span-2"><dt className="font-semibold text-neutral-800">Address</dt><dd>{enrichment.proposal.address}</dd></div> : null}
+              {enrichment.proposal.description ? <div className="sm:col-span-2"><dt className="font-semibold text-neutral-800">Description</dt><dd className="line-clamp-4">{enrichment.proposal.description}</dd></div> : null}
+              {enrichment.proposal.coverImageUrl ? <div className="sm:col-span-2"><dt className="font-semibold text-neutral-800">Suggested cover</dt><dd className="truncate font-mono">{enrichment.proposal.coverImageUrl}</dd></div> : null}
+              {enrichment.proposal.socialLinks?.website ? <div className="sm:col-span-2"><dt className="font-semibold text-neutral-800">Website</dt><dd className="truncate">{enrichment.proposal.socialLinks.website}</dd></div> : null}
+            </dl>
+            {enrichment.sources.length > 0 ? (
+              <ul className="flex flex-wrap gap-2 text-[11px]">
+                {enrichment.sources.map((source) => (
+                  <li key={source.url}>
+                    <a href={source.url} target="_blank" rel="noreferrer" className="font-medium text-sky-700 underline underline-offset-2">
+                      {source.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {enrichment.notes.length > 0 ? (
+              <ul className="list-disc space-y-0.5 pl-4 text-[11px] text-neutral-500">
+                {enrichment.notes.map((note) => (
+                  <li key={note}>{note}</li>
+                ))}
+              </ul>
+            ) : null}
+            <p className="text-[11px] text-neutral-500">{enrichment.photoAutomation.summary}</p>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={applyEnrichment} className="rounded-lg bg-neutral-900 px-3 py-2 text-xs font-semibold text-white">
+                Apply to form (still needs Save)
+              </button>
+              <button type="button" onClick={() => setEnrichment(null)} className="rounded-lg border border-neutral-300 px-3 py-2 text-xs font-semibold text-neutral-700">
+                Discard
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </section>
 
       <section className="space-y-4">
         <SectionHeading step={1} title="Basics" body="What guests see first." />
@@ -411,52 +543,80 @@ export default function RestaurantEditor({
           <input type="checkbox" checked={fields.subscriptionEnabled} onChange={(event) => setField("subscriptionEnabled", event.target.checked)} />
           Subscription {fields.subscriptionEnabled ? "ON" : "OFF"}
         </label>
-        <div className="space-y-2">
-          <p className="text-sm font-medium text-neutral-600">Features</p>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {featureKeys.map((feature) => (
-              <div key={feature} className="rounded-lg border border-neutral-200 p-3 text-sm text-neutral-700">
-                {(() => {
+        <div className="space-y-5">
+          <p className="text-sm font-medium text-neutral-600">
+            Features · <span className="font-semibold text-neutral-900">Offers & Discounts</span> is its own section (festival % off on menu) — separate from CRM loyalty coupons
+          </p>
+          {FEATURE_GROUPS.map((group) => (
+            <div key={group.title} className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">{group.title}</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {group.keys.map((feature) => {
                   const effective = hasRestaurantFeature(fields, feature);
                   const override = fields.featureOverrides[feature];
                   const planAccess = PLAN_ENTITLEMENTS[fields.subscriptionPlan ?? DEFAULT_PLAN].includes(feature);
                   const configuredAccess = override ?? planAccess;
-                  return <>
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="font-medium">{feature.replace(/_/g, " ").toLowerCase()}</p>
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={configuredAccess}
-                        aria-label={`${feature.replace(/_/g, " ")} feature setting`}
-                        onClick={() => setFields((current) => ({
-                          ...current,
-                          featureOverrides: { ...current.featureOverrides, [feature]: !configuredAccess },
-                        }))}
-                        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition ${configuredAccess ? "bg-neutral-900" : "bg-neutral-300"}`}
-                      >
-                        <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${configuredAccess ? "translate-x-6" : "translate-x-1"}`} />
-                        <span className="sr-only">{configuredAccess ? "ON" : "OFF"}</span>
-                      </button>
+                  const label = FEATURE_LABELS[feature];
+                  return (
+                    <div key={feature} className="rounded-lg border border-neutral-200 p-3 text-sm text-neutral-700">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="font-medium">{label}</p>
+                          <p className="font-mono text-[10px] text-neutral-400">{feature}</p>
+                        </div>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={configuredAccess}
+                          aria-label={`${label} feature setting`}
+                          onClick={() =>
+                            setFields((current) => ({
+                              ...current,
+                              featureOverrides: { ...current.featureOverrides, [feature]: !configuredAccess },
+                            }))
+                          }
+                          className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition ${configuredAccess ? "bg-neutral-900" : "bg-neutral-300"}`}
+                        >
+                          <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${configuredAccess ? "translate-x-6" : "translate-x-1"}`} />
+                          <span className="sr-only">{configuredAccess ? "ON" : "OFF"}</span>
+                        </button>
+                      </div>
+                      <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-neutral-500">
+                        <span>
+                          Effective:{" "}
+                          <strong className={effective ? "text-emerald-700" : "text-neutral-600"}>
+                            {effective ? "ON" : "OFF"}
+                          </strong>
+                        </span>
+                        <span>
+                          {override === true
+                            ? "Override: ON"
+                            : override === false
+                              ? "Override: OFF"
+                              : `Plan default (${planAccess ? "ON" : "OFF"})`}
+                        </span>
+                      </div>
+                      {override !== undefined ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setFields((current) => {
+                              const featureOverrides = { ...current.featureOverrides };
+                              delete featureOverrides[feature];
+                              return { ...current, featureOverrides };
+                            })
+                          }
+                          className="mt-2 text-[11px] font-medium text-sky-700 underline underline-offset-2"
+                        >
+                          Use plan default
+                        </button>
+                      ) : null}
                     </div>
-                    <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-neutral-500">
-                      <span>Effective access: <strong className={effective ? "text-emerald-700" : "text-neutral-600"}>{effective ? "ON" : "OFF"}</strong></span>
-                      <span>{override === true ? "Explicit override: ON" : override === false ? "Explicit override: OFF" : `Use plan default (${planAccess ? "ON" : "OFF"})`}</span>
-                    </div>
-                    {override !== undefined && <button
-                      type="button"
-                      onClick={() => setFields((current) => {
-                        const featureOverrides = { ...current.featureOverrides };
-                        delete featureOverrides[feature];
-                        return { ...current, featureOverrides };
-                      })}
-                      className="mt-2 text-[11px] font-medium text-sky-700 underline underline-offset-2 hover:text-sky-700"
-                    >Use plan default</button>}
-                  </>;
-                })()}
+                  );
+                })}
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
         </div>
       </div>
       <div className="space-y-4 border-t border-neutral-200 pt-6">

@@ -10,6 +10,7 @@ export default function AiAssistantPanel() {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [heuristicMode, setHeuristicMode] = useState(false);
 
   const send = async () => {
     const message = input.trim();
@@ -26,11 +27,19 @@ export default function AiAssistantPanel() {
       });
       const json = (await response.json()) as {
         success: boolean;
-        data?: { threadId: string; answer: string; figuresSource: string; tool: string };
+        data?: {
+          threadId: string;
+          answer: string;
+          figuresSource: string;
+          tool: string;
+          provider?: string;
+          providerUnavailable?: boolean;
+        };
         error?: string;
       };
       if (!response.ok || !json.success || !json.data) throw new Error(json.error ?? "Assistant failed");
       setThreadId(json.data.threadId);
+      setHeuristicMode(Boolean(json.data.providerUnavailable || json.data.provider === "heuristic"));
       setMessages((current) => [
         ...current,
         {
@@ -47,6 +56,15 @@ export default function AiAssistantPanel() {
 
   return (
     <div className="space-y-4">
+      {heuristicMode ? (
+        <p
+          role="status"
+          className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+        >
+          Running without an LLM key — keyword tool routing only. Figures still come from live
+          analytics. Set <code className="font-mono text-xs">AI_API_KEY</code> for model-selected tools.
+        </p>
+      ) : null}
       <div className="max-h-[28rem] space-y-3 overflow-y-auto rounded-2xl border border-neutral-200 bg-white p-4">
         {messages.length === 0 ? (
           <p className="text-sm text-neutral-500">

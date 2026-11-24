@@ -580,8 +580,13 @@ export default function PosTerminal({
                 >
                   Takeaway
                 </button>
-                <button type="button" disabled className="flex min-h-12 items-center justify-center gap-1 rounded-xl border border-neutral-200 text-sm font-semibold text-neutral-400">
-                  <Truck className="h-4 w-4" /> Delivery
+                <button
+                  type="button"
+                  disabled
+                  title="Delivery channel is not enabled yet"
+                  className="flex min-h-12 items-center justify-center gap-1 rounded-xl border border-neutral-200 text-sm font-semibold text-neutral-400"
+                >
+                  <Truck className="h-4 w-4" /> Delivery (soon)
                 </button>
               </div>
             </section>

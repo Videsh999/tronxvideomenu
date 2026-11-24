@@ -22,5 +22,16 @@ export default async function AiLayout({
     hasRestaurantFeature(restaurant, "AI_MENU_INTELLIGENCE") ||
     hasRestaurantFeature(restaurant, "AI_OPERATIONAL_ALERTS");
   if (!anyAi) notFound();
-  return <AiIntelligenceShell slug={slug}>{children}</AiIntelligenceShell>;
+  const features = {
+    AI_BUSINESS_ASSISTANT: hasRestaurantFeature(restaurant, "AI_BUSINESS_ASSISTANT"),
+    AI_SALES_FORECAST: hasRestaurantFeature(restaurant, "AI_SALES_FORECAST"),
+    AI_INVENTORY_INTELLIGENCE: hasRestaurantFeature(restaurant, "AI_INVENTORY_INTELLIGENCE"),
+    AI_MENU_INTELLIGENCE: hasRestaurantFeature(restaurant, "AI_MENU_INTELLIGENCE"),
+    AI_OPERATIONAL_ALERTS: hasRestaurantFeature(restaurant, "AI_OPERATIONAL_ALERTS"),
+  };
+  return (
+    <AiIntelligenceShell slug={slug} features={features}>
+      {children}
+    </AiIntelligenceShell>
+  );
 }

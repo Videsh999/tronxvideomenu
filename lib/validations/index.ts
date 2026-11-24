@@ -721,7 +721,7 @@ const menuOfferPresentationSchema = z
   })
   .strict();
 
-export const createMenuOfferSchema = z
+const menuOfferFieldsSchema = z
   .object({
     name: z.string().trim().min(2).max(80),
     description: z.string().trim().max(300).optional(),
@@ -733,18 +733,25 @@ export const createMenuOfferSchema = z
     isActive: z.boolean().optional(),
     presentation: menuOfferPresentationSchema.optional(),
   })
-  .strict()
-  .superRefine((value, ctx) => {
-    if (value.scope === "SELECTED_DISHES" && (!value.dishIds || value.dishIds.length === 0)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["dishIds"],
-        message: "Select at least one dish.",
-      });
-    }
-  });
+  .strict();
 
-export const updateMenuOfferSchema = createMenuOfferSchema.partial().strict();
+function refineSelectedDishesOffer(
+  value: { scope?: "ALL_MENU" | "SELECTED_DISHES"; dishIds?: string[] },
+  ctx: z.RefinementCtx,
+) {
+  if (value.scope === "SELECTED_DISHES" && (!value.dishIds || value.dishIds.length === 0)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["dishIds"],
+      message: "Select at least one dish.",
+    });
+  }
+}
+
+export const createMenuOfferSchema = menuOfferFieldsSchema.superRefine(refineSelectedDishesOffer);
+
+/** Partial update — must not call .partial() on a refined schema (Zod 4). */
+export const updateMenuOfferSchema = menuOfferFieldsSchema.partial().strict().superRefine(refineSelectedDishesOffer);
 
 export type CreateMenuOfferInput = z.infer<typeof createMenuOfferSchema>;
 export type UpdateMenuOfferInput = z.infer<typeof updateMenuOfferSchema>;

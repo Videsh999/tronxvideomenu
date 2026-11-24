@@ -71,8 +71,8 @@ export default function AiEvaluationPanel() {
   return (
     <div className="space-y-4">
       <p className="text-sm text-neutral-600">
-        Automated validation against deterministic fixtures and chronological backtests. Results are
-        real suite outcomes — not decorative status lights.
+        Platform regression suite on <strong>fixture data</strong> (not this outlet’s live books). Use
+        it to verify TRONX AI math and tool wiring; it does not audit Cheese’s sales.
       </p>
       <button
         type="button"

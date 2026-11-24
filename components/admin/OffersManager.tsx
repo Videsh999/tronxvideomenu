@@ -175,10 +175,10 @@ export default function OffersManager({ restaurantName, restaurantId }: Props) {
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-400">{restaurantName}</p>
         <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-neutral-900 sm:text-3xl">
           <Gift className="h-7 w-7 text-rose-600" />
-          Offers
+          Offers & Discounts
         </h1>
         <p className="max-w-2xl text-sm text-neutral-600">
-          Run Christmas, New Year, Sankranti, or custom % off on the whole menu or selected dishes.
+          Festival and seasonal % off — entire menu or selected dishes (e.g. Diwali 10% off everything).
           Turning an offer on updates guest prices and can switch the banner to a festive theme.
         </p>
       </header>

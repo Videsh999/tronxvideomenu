@@ -2,26 +2,38 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { FeatureKey } from "@/types";
 
-const LINKS: { suffix: string; label: string; exact?: boolean }[] = [
+type AiNavLink = {
+  suffix: string;
+  label: string;
+  exact?: boolean;
+  /** When set, tab shows only if that feature is entitled. Overview has no gate. */
+  feature?: FeatureKey;
+};
+
+const LINKS: AiNavLink[] = [
   { suffix: "", label: "Overview", exact: true },
-  { suffix: "/assistant", label: "Assistant" },
-  { suffix: "/forecast", label: "Forecast" },
-  { suffix: "/inventory", label: "Inventory" },
-  { suffix: "/menu", label: "Menu" },
-  { suffix: "/alerts", label: "Alerts" },
-  { suffix: "/evaluation", label: "Evaluation" },
+  { suffix: "/assistant", label: "Assistant", feature: "AI_BUSINESS_ASSISTANT" },
+  { suffix: "/forecast", label: "Forecast", feature: "AI_SALES_FORECAST" },
+  { suffix: "/inventory", label: "Inventory", feature: "AI_INVENTORY_INTELLIGENCE" },
+  { suffix: "/menu", label: "Menu", feature: "AI_MENU_INTELLIGENCE" },
+  { suffix: "/alerts", label: "Alerts", feature: "AI_OPERATIONAL_ALERTS" },
+  { suffix: "/evaluation", label: "Evaluation", feature: "AI_BUSINESS_ASSISTANT" },
 ];
 
 export default function AiIntelligenceShell({
   slug,
+  features,
   children,
 }: {
   slug: string;
+  features: Partial<Record<FeatureKey, boolean>>;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
   const base = `/admin/${slug}/ai`;
+  const visible = LINKS.filter((link) => !link.feature || features[link.feature]);
 
   return (
     <div className="space-y-6">
@@ -32,7 +44,7 @@ export default function AiIntelligenceShell({
         </p>
       </header>
       <nav className="flex flex-wrap gap-2 border-b border-neutral-200 pb-3">
-        {LINKS.map((link) => {
+        {visible.map((link) => {
           const href = `${base}${link.suffix}`;
           const active = link.exact
             ? pathname === href

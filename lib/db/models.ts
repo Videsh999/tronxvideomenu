@@ -144,6 +144,8 @@ const restaurantSchema = new Schema<Restaurant>(
     orderSettings: {
       customerOrderingMode: { type: String, enum: ["OFF", "CAPTAIN_APPROVAL", "AUTOMATIC"], default: "CAPTAIN_APPROVAL" },
       qrRequiresCaptainApproval: { type: Boolean, default: true },
+      /** Captain cart guest name / phone / notes — requires INTERNAL_TRACKING entitlement. */
+      internalTrackingEnabled: { type: Boolean, default: false },
     },
   },
   { ...baseOptions, collection: "restaurants" },

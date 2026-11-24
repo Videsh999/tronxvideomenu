@@ -29,8 +29,8 @@ export async function GET(request: Request) {
     }
 
     const { searchParams } = new URL(request.url);
-    const restaurantId = searchParams.get("restaurantId");
-    if (!restaurantId || restaurantId !== admin.restaurantId) {
+    const restaurantId = searchParams.get("restaurantId") || admin.restaurantId;
+    if (restaurantId !== admin.restaurantId) {
       return NextResponse.json(
         { success: false, error: "Restaurant not found" },
         { status: 404 },
