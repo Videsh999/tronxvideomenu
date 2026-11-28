@@ -1,6 +1,6 @@
-# TRONX PRO MAX Task Board – Restaurant OS (ROS) — v2.3
+# TRONX PRO MAX Task Board – Restaurant OS (ROS) — v2.4
 
-Sources: audit PR https://github.com/Videsh999/tronxvideomenu/pull/1 (branch `pro-max/audit`): `docs/pro-max/TRONX_PRO_MAX_MODULE_INVENTORY.md`, `TRONX_PRO_MAX_FINDINGS.md`, `TRONX_PRO_MAX_ARCHITECTURE.md` (CTO-revised), `PATH_OWNERS.md`. E15 from `whatsapp-payments/FOUNDER_ORDER_2026-11-07.md` and `whatsapp-payments/UX_SPEC.md`. v2.3 by TRONX Project Director, 2026-11-07. Previous versions: `.v2.2.bak`, `.v2.1.bak`, `.v2.bak`, `.v1.bak`; change log in `CHANGES_v2.1.md` (includes v2.2 and v2.3 sections). A task is done only when TRONX QA ENGINEER marks it **Verified**. `EXT:` dependencies are external inputs, not tasks.
+Sources: audit PR https://github.com/Videsh999/tronxvideomenu/pull/1 (branch `pro-max/audit`): `docs/pro-max/TRONX_PRO_MAX_MODULE_INVENTORY.md`, `TRONX_PRO_MAX_FINDINGS.md`, `TRONX_PRO_MAX_ARCHITECTURE.md` (CTO-revised), `PATH_OWNERS.md`. E15 from `whatsapp-payments/FOUNDER_ORDER_2026-11-07.md` and `whatsapp-payments/UX_SPEC.md`. v2.4 by TRONX Project Director, 2026-11-07. Previous versions: `.v2.3.bak`, `.v2.2.bak`, `.v2.1.bak`, `.v2.bak`, `.v1.bak`; change log in `CHANGES_v2.1.md` (includes v2.2–v2.4 sections). A task is done only when TRONX QA ENGINEER marks it **Verified**. `EXT:` dependencies are external inputs, not tasks.
 
 ## Epic → workstream mapping
 
@@ -21,9 +21,9 @@ Sources: audit PR https://github.com/Videsh999/tronxvideomenu/pull/1 (branch `pr
 | ROS-E12 | L | DevOps | 14 |
 | ROS-E13 | M | Demo and QA | 7 |
 | ROS-E14 | N | UI shell | 1 |
-| ROS-E15 | O | WhatsApp Billing + Dynamic UPI + Billing Policies + Tips | 51 |
+| ROS-E15 | O | WhatsApp Billing + Dynamic UPI + Billing Policies + Tips | 53 |
 
-**Status counts:** In Progress 35, Backlog 66, Ready 13, In Review 7, Blocked 8 (total 129)
+**Status counts:** In Progress 35, Backlog 68, Ready 13, In Review 7, Blocked 8 (total 131)
 
 ## Summary
 
@@ -158,6 +158,8 @@ Sources: audit PR https://github.com/Videsh999/tronxvideomenu/pull/1 (branch `pr
 | ROS-E15-T049 | Tip report/export in Reports (I5) | TRONX BACKEND ENGINEER | Backlog | TRONX CTO + TRONX FINANCE MANAGER |
 | ROS-E15-T050 | Customer 'request bill' screen (Part H #4) | TRONX FRONTEND ENGINEER | Backlog | TRONX CTO |
 | ROS-E15-T051 | E15 regression run (POS, Captain, QR, KDS, payment) | TRONX QA ENGINEER | Backlog | TRONX CTO |
+| ROS-E15-T052 | KDS 'Awaiting payment' lane and manual release (PAY_BEFORE_PREPARATION) | TRONX FRONTEND ENGINEER | Backlog | TRONX CTO |
+| ROS-E15-T053 | Version-pinned signed mocked-webhook fixture suite (Razorpay) | TRONX BACKEND ENGINEER | Backlog | TRONX CTO |
 
 ## CEO decisions (2026-11-07)
 
@@ -203,14 +205,57 @@ Sources: audit PR https://github.com/Videsh999/tronxvideomenu/pull/1 (branch `pr
 | AC-3.2 Amount above remaining → 'Max ₹300', no request created | §7 Screen 3 | ROS-E15-T041, ROS-E15-T028 |
 | AC-4.2 Saved secret shown only as masked last-4 in UI and API | §8 Screen 4 | ROS-E15-T023, ROS-E15-T042 |
 | AC-4b.1 New outlet has tips OFF | §9 Screen 4b | ROS-E15-T032, ROS-E15-T043 |
-| AC-5.1 Late payment on SUPERSEDED always Manual review; EXPIRED auto-matches only if the bill version is unchanged and the amount matches exactly | §10 Screen 5 | ROS-E15-T027, ROS-E15-T044 |
+| AC-5.1 Late payment on SUPERSEDED always Manual review; EXPIRED auto-matches only if the bill version is unchanged and the amount matches exactly (ADR 0007) | §10 Screen 5 | ROS-E15-T027, ROS-E15-T044 |
 
 Other spec ACs already tagged with existing IDs (ROS-E04-T007, E03-T001/T002, E04-T005, E08-T003) also map to the E15 Frontend tasks named in their acceptance criteria.
 
+## CEO defaults (pending Founder override)
+
+- **D2 partial payments:** OFF by default. Restaurant B's test config has partials ON, so Order 1's 200 + 300 flow runs at B; restaurant A covers the default-off path.
+- **WhatsApp message:** summary + secure link. The itemized bill and QR are on the linked payment page.
+- **Tips at B (CEO correction):** 5%, 10% and 15%, plus a custom amount, as Part H specifies. Custom tips are capped at 25% of the tip base. The ₹20/₹50/₹100 fallback does not apply to B.
+- **Printing:** browser-print of the receipt only, with no thermal or hardware printing, until the Founder decides.
+
+## CTO decisions (2026-11-07)
+
+- **C1 bill close:** a bill can't close while any payment request is MANUAL_REVIEW, or is ACTIVE and not yet expired. A payment arriving after close becomes a post-close exception. Confirms and extends PD-1.
+- **C2 KDS under PAY_BEFORE_PREPARATION:**
+  - Unpaid orders go to a read-only "Awaiting payment" lane, visible to kitchen and cashier, with no prep actions.
+  - An order is auto-released only on a verified ledger payment, never on client-side success.
+  - A Manager or Admin can release manually with a reason; the release is audit-logged.
+  - A SUPERSEDED request keeps the order held. An EXPIRED request stays held unless a late payment matches the unchanged bill exactly, which releases it, or a Manager or Admin releases it with an audited reason (ADR 0007 and ADR 0009).
+  - Aging alert, configurable, default 10 minutes.
+  - Tips never gate release.
+- **C3 webhooks:**
+  - Signature is mandatory. Unsigned or bad-signature requests are rejected with no side effects.
+  - Dedupe table on (provider, eventId) with a unique index and 90-day TTL.
+  - Permanent unique indexes on provider payment ID and refund ID in the ledger.
+  - Events up to 48h old are processed normally. The retry window is still open.
+  - Older events, or a dedupe miss on a known payment: fetch from the provider and reconcile, otherwise MANUAL_REVIEW.
+- **C4 WhatsApp opt-out:**
+  - STOP / UNSUBSCRIBE / OPT OUT, case-insensitive, plus per-org local-language keywords.
+  - Consent revoked with org, outlet, hashed and encrypted phone, source, timestamp and inbound message ID.
+  - Suppression checked at outbox send time, logged as SKIPPED_SUPPRESSED.
+  - One confirmation message, then only customer-requested replies within 24h.
+  - START re-subscribes with a new consent record.
+  - Staff opt-out from the UI is audited.
+- **C5 (Razorpay docs check):**
+  - The ₹1 minimum is UNVERIFIED and not promised; the minimum amount is configurable and set from the first real-money test (ROS-E15-T048).
+  - Replay defence is event-ID dedupe plus permanent unique payment and refund IDs. There is no timestamp check, because Razorpay signs no timestamp.
+  - Razorpay retries for 24h and then disables the webhook. The 48h processing window stays, and webhook-disabled alerting plus a reconciliation poll are added.
+  - During secret rotation, signatures verify against both the current and previous secret.
+  - FAILED → PAID is allowed for the same payment.
+- **C6 test mode:**
+  - Test-mode QRs can't be scanned.
+  - Use success@razorpay and failure@razorpay to simulate outcomes.
+  - A cancelled UPI payment counts as success in test mode, so it's never used as a failure test.
+  - Wrong amount, expiry and refunds use signed mocked webhooks (ROS-E15-T053).
+
 ## PD decisions (2026-11-07)
 
-- **PD-1 (confirmed in ADR 0008):** a bill cannot close while any of its PaymentRequests is MANUAL_REVIEW, or ACTIVE and unexpired. Only a Manager or Admin resolves MANUAL_REVIEW, by accepting, refunding, or rejecting it with a reason, and every resolution is audit-logged. A payment after close leaves the bill closed and goes to MANUAL_REVIEW as a post-close exception. A closed bill is never silently reopened.
+- **PD-1:** a Manager or Admin cannot close a bill while a payment is in Manual review; the review must be resolved first. Confirmed and extended by the CTO (see CTO decisions C1).
 - **PD-2:** when the tip base is ₹0, the tip prompt is hidden, so no fixed or custom tip can be added (Finance case V36). The Founder may override this.
+- **PD-4 (confirmed by CEO):** Restaurant C: dine-in = pay-after, takeaway = pay-before.
 - **PD-3:** a customer regenerates an expired link only through a new request. The old request stays EXPIRED, because the bill version did not change. It is not marked SUPERSEDED (ADR 0007).
 
 ## Docs awaiting CEO commit to `docs/whatsapp-payments/`
@@ -225,7 +270,7 @@ ROS-E15-T003 (UX_SPEC.md v1.1), T007 (PAYMENT_WORKFLOWS.md §5), T009 (TEST_PLAN
 4. **RPO 15 min / RTO 1 h** are stated in the audit as drill-design targets, not measurements. The board records them only as targets. — CTO
 5. **Rate-limit thresholds** (public order, Wi-Fi, loyalty, pairing, payment) are not specified. — CTO
 6. **Product decisions not specified by the audit:** password recovery removed vs audited reveal (F-06), non-Kolkata reservation timezones (F-18), replacement marketing copy (F-19). — Founder via CEO
-7. **Payment gateway/provider:** Research recommends Razorpay as primary and Cashfree as fallback. Both are conditional on verified capabilities and merchant onboarding. This is a recommendation only: CTO review (ROS-E15-T001) and the Founder's decision are pending (ROS-E04-T007, ROS-E15-T001). This also covers UX_SPEC §15 Q2 on which capabilities are guaranteed. — Founder, then CTO verifies
+7. **Payment gateway/provider:** ADR 0006: Razorpay is the conditional primary, pending the Founder. Cashfree is a capability proof only, with no exception to credential isolation. CTO review (ROS-E15-T001) and the Founder's decision are pending (ROS-E04-T007). This also covers UX_SPEC §15 Q2. — Founder, then CTO verifies
 8. **TRONX FINANCE MANAGER** is a new owner bot not in the original owner list. Confirm it exists. It is also the reviewer on CTO/Finance-pair tasks. — PD/CEO
 9. **Local vs repo copies:** `pro-max/audit` now has `docs/pro-max/TRONX_PRO_MAX_MASTER_PLAN.md` and `TRONX_PRO_MAX_TASK_BOARD.md` committed. This local v2 diverges from them. — CEO (single source)
 10. **Deadlines, budget, client:** TBD – needs Founder approval via CEO.
@@ -233,9 +278,9 @@ ROS-E15-T003 (UX_SPEC.md v1.1), T007 (PAYMENT_WORKFLOWS.md §5), T009 (TEST_PLAN
 UX_SPEC §15 questions not answered by the Founder brief:
 
 11. Template constraints: can a variable-length itemized list fit an approved template, or summary + link/PDF? Can the QR be a media header? Which BSP or Cloud API? (Q3) — CTO
-12. Policy precedence: order type > outlet > org default? The brief requires "clear precedence" but doesn't define it. (Q4) — PD proposes, Founder confirms
+12. Policy precedence is ADR 0009: order override, then table or session, then channel, then outlet, then organization, then default. Kitchen release is separate. (Q4) — Founder confirms the CEO defaults
 13. Can the public payment page show the itemized bill (privacy review)? (Q5) — PD with CTO security review
-14. UX Q6 is decided in ADR 0007. SUPERSEDED is its own PaymentRequest status. It means the bill version changed, and supersededBy points to the replacement request. EXPIRED means time ran out on an unchanged bill. Store reason and supersededBy on the request. Copy must distinguish the two.
+14. UX Q6 is decided in ADR 0007. SUPERSEDED is its own PaymentRequest status. It means the bill version changed, and supersededBy points to the replacement request. EXPIRED means time ran out on an unchanged bill. Copy must distinguish the two.
 15. Customer-facing tip wording and tip % base (pre- or post-tax) (Q7), tip tax and receipt presentation (Q8). The brief only says "no assumed tax treatment". — Finance; Founder for wording
 16. Captain-device tip entry for guests without phones? (Q9) — PD (product), Founder if policy
 17. Which roles edit vs view Payments settings? (Q10) Who resolves MANUAL_REVIEW is decided in ADR 0008: Manager or Admin only, by accepting, refunding, or rejecting with a reason. Settings edit vs view stays open. — PD with CTO
@@ -245,18 +290,13 @@ UX_SPEC §15 questions not answered by the Founder brief:
 21. **Tip base (Finance answer D9, pending Founder confirmation):** the tip base is the item subtotal after discount and before tax, so it excludes packaging and service charge. This matches CEO default D6. Finance proposal D9 (ROS-E15-T008) awaits the Founder's confirmation via CEO.
 22. **T008 tip tax:** waiting on written guidance from the CA. — Finance (ROS-E15-T008)
 23. **Receipt tip label:** Finance proposes 'Tip (voluntary)'; UX_SPEC uses 'Tip'. — Founder approves (via CEO)
-24. **Partial payments:** Order 1's 200 + 300 flow vs CEO default D2 (partials OFF). Is partial pay on or off for restaurant B (Part H #13)? (QA-2) — Founder
-25. **WhatsApp content:** Order 1 asks for an itemized bill + QR in WhatsApp; the CEO default is summary + link. (QA 9f-6) — Founder (the CTO advises on template limits)
-26. **Restaurant B fixed tip amounts** (Part H #8) and the **maximum custom tip** (QA-4, QA-5). — Founder
-27. **Printing** of the running bill, final bill and receipt: the brief is silent and no task exists. Is it in E15 scope? (QA-9) — Founder
-28. **Restaurant C order-type mapping:** PD proposal is dine-in = pay-after, takeaway = pay-before. (QA-1) — PD proposes, Founder confirms
-29. **KDS handling of restaurant A's unpaid orders** under PAY_BEFORE_PREPARATION, given kitchen release is a separate policy. (QA-3) — CTO
-30. **Provider/sandbox:** does the provider accept Rs 1, and can the sandbox simulate wrong amount, failure, expiry and refund? (QA-6, tied to ROS-E15-T001) — CTO
-31. **Webhook replay window / timestamp tolerance** length for ROS-E15-T026. (QA-8) — CTO
-32. **QA evidence storage path and staging URL.** (QA-12) — CTO with DevOps
-33. **WhatsApp opt-out mechanism** details. The AC was added to T033. (QA-7) — CTO (T002)
+24. **WhatsApp content:** CEO default is a summary + secure link (itemized bill and QR on the linked page), pending Founder override; template limits are a CTO check. — Founder may override
+25. **Tip amounts at Restaurant B (CEO correction):** 5%, 10% and 15%, plus a custom amount capped at 25% of the tip base. The ₹20/₹50/₹100 fallback does not apply to B. — Part H, CEO correction
+26. **Printing scope:** CEO default until the Founder decides is browser-print of the receipt only, with no thermal or hardware printing. Is printing of the running bill, final bill or receipt in E15 scope? — Founder
+27. **Staging and evidence (CTO proposal, being agreed with DevOps):** staging on the `pro-max/release` Vercel preview with its own staging Mongo replica set, Razorpay test keys only and no production data. Evidence goes to a private bucket, one folder per run, 90-day retention, no secrets or raw phone numbers. Any new paid service is a **Founder gate** (approval via CEO). — CTO with DevOps
 
 Rate limits (item 5) and the polling interval remain open as listed above and are also raised by QA-11. UX Q6 is decided in ADR 0007.
+28. **qr_code.closed close reason:** the exact reason value is unverified and must be taken from Razorpay's event docs (ROS-E15-T053). — CTO
 
 UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O), mapped above. Q2 is covered by item 8.
 
@@ -900,7 +940,7 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Affected files:** `app/api/connector/`, `lib/connector-auth.ts`, `device-connector/`, `tests/connector-pairing.test.ts`
 - **Acceptance criteria:**
   - [ ] Connector can pair, heartbeat, poll jobs and ack with no staff cookie
-  - [ ] Handlers still require the connector secret
+  - [ ] Heartbeat, poll, and ack require the connector secret. Pair does not (ADR 0002)
   - [ ] device-connector tests pass (8/8 baseline); USB stays labeled unsupported
   - [ ] Pair acceptance = pairing-code contract; heartbeat/poll/ack = secret contract
   - [ ] Rate limit on pairing-code claims (A spec, K lands)
@@ -1706,7 +1746,7 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Dependencies:** —
 - **Affected files:** — (not named in source docs)
 - **Acceptance criteria:**
-  - [ ] Late payment on SUPERSEDED → MANUAL_REVIEW, never Paid. Late payment on EXPIRED auto-matches only if the bill version is unchanged and the amount matches exactly; otherwise MANUAL_REVIEW
+  - [ ] Late payment on SUPERSEDED → MANUAL_REVIEW, never Paid. Late payment on EXPIRED auto-matches only if the bill version is unchanged and the amount matches exactly; otherwise MANUAL_REVIEW (ADR 0007)
   - [ ] Wrong amount/duplicate → MANUAL_REVIEW; bill Paid once
   - [ ] Ledger stays source of truth
 - **Status:** In Review
@@ -1741,13 +1781,13 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Affected files:** — (not named in source docs)
 - **Acceptance criteria:**
   - [ ] Plan covers FOUNDER_ORDER_2026-11-07.md 'Appendix: Part H' – restaurants A/B/C configs, tests 1–20 and the regression run (POS, Captain, QR, KDS, payment)
-  - [ ] Plan covers FOUNDER_ORDER_2026-11-07.md 'Appendix: Order 1 section 11 tests' (14 demo tests, sandbox amounts Rs 1/20/149/520/1,250) and its 'Section 9 failure cases' (15 items)
+  - [ ] Plan covers FOUNDER_ORDER_2026-11-07.md 'Appendix: Order 1 section 11 tests' (14 demo tests; brief's demo amounts Rs 20/149/520/1,250 plus the configured minimum amount – ₹1 is UNVERIFIED and not promised) and its 'Section 9 failure cases' (15 items)
   - [ ] Every UX_SPEC AC (AC-1.x…AC-5.x) has a test case
 - **Status:** In Review
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
 - **Completion date:** —
-- **Notes:** Draft at ros-pro-max/whatsapp-payments/TEST_PLAN.md; needs committing to docs/whatsapp-payments/ via the CEO's commit path.
+- **Notes:** Draft at ros-pro-max/whatsapp-payments/TEST_PLAN.md; needs committing to docs/whatsapp-payments/ via the CEO's commit path. v2.4: test references updated – Part H #13 runs at B (partials ON); the default-off path runs at A; C mapping confirmed (PD-4). Razorpay test-mode limits (C6): test-mode QRs can't be scanned; use success@razorpay / failure@razorpay for outcomes; a cancelled UPI payment counts as success in test mode, so never use it as a failure test; wrong amount, expiry and refunds use the signed mocked-webhook fixtures (ROS-E15-T053).
 
 #### ROS-E15-T010 — Doc: WHATSAPP_BILLING_ARCHITECTURE.md
 
@@ -1982,7 +2022,9 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
   - [ ] Amount from server bill, never client (test)
   - [ ] Reuse for another order rejected
   - [ ] Bill/tip change supersedes old request and issues new (e.g. 500 → 550)
-  - [ ] §9 payment expires / §11 expired QR: server sets expiry on every request. EXPIRED means time ran out on an unchanged bill and the QR is not re-shown as payable. A late payment auto-matches only if the bill version is unchanged and the amount matches exactly; otherwise MANUAL_REVIEW. A bill-version change is SUPERSEDED, not EXPIRED
+  - [ ] §9 payment expires / §11 expired QR: the request becomes EXPIRED and is not re-shown as payable. A late payment auto-matches only if the bill version is unchanged and the amount matches exactly; otherwise MANUAL_REVIEW. A bill-version change is SUPERSEDED, not EXPIRED (ADR 0007)
+  - [ ] C5: minimum payment amount is configurable (no hardcoded ₹1); its value is set from what succeeds in the first real-money test (ROS-E15-T048)
+  - [ ] Requests below the configured minimum are rejected server-side
 - **Status:** Backlog
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
@@ -1999,6 +2041,7 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Acceptance criteria:**
   - [ ] QR encodes the server request amount
   - [ ] Sandbox only
+  - [ ] C5: minimum payment amount is configurable (no hardcoded ₹1); its value is set from what succeeds in the first real-money test (ROS-E15-T048)
 - **Status:** Blocked
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
@@ -2016,9 +2059,16 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
   - [ ] Invalid signature rejected
   - [ ] Checks merchant, payment ref, order ref, amount, currency, status
   - [ ] Duplicate/delayed webhooks idempotent; wrong amount → MANUAL_REVIEW
-  - [ ] A webhook for a SUPERSEDED request never marks it PAID; it goes to MANUAL_REVIEW. A webhook for an EXPIRED request auto-matches only if the bill version is unchanged and the amount matches exactly; otherwise MANUAL_REVIEW
+  - [ ] A webhook for a SUPERSEDED request never marks it PAID; it goes to MANUAL_REVIEW. A webhook for an EXPIRED request auto-matches only if the bill version is unchanged and the amount matches exactly; otherwise MANUAL_REVIEW (ADR 0007)
   - [ ] §11 payment failure: a verified failure event sets FAILED and the bill stays unpaid
-  - [ ] Replay protection: webhooks outside the configured replay window or with a reused event id are rejected and logged (window length: CTO open question)
+  - [ ] Replay defence (C5): a reused x-razorpay-event-id is processed once via the dedupe table; payment and refund IDs are permanently unique; no timestamp check (Razorpay signs no timestamp)
+  - [ ] C3: unsigned or bad-signature webhook rejected with no side effects (no DB writes besides a security log)
+  - [ ] C3: dedupe table on (provider, eventId) with a unique index and 90-day TTL
+  - [ ] C3/C5: events up to 48h old processed normally (covers Razorpay's 24h retry period)
+  - [ ] C3: older events, or a dedupe miss on a known payment, trigger a provider API fetch and reconcile, otherwise MANUAL_REVIEW
+  - [ ] C5: during secret rotation, signatures verify against both the current and previous webhook secret
+  - [ ] C5: webhook-disabled health alert – Razorpay disables a webhook after 24h of failed retries; the system raises an ops alert when no events arrive or the provider reports it disabled
+  - [ ] C5: a reconciliation poll fetches payments/refunds from the provider API for missed events and reconciles or routes to MANUAL_REVIEW
 - **Status:** Blocked
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
@@ -2033,17 +2083,20 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Dependencies:** ROS-E02-T001, ROS-E02-T007, ROS-E02-T008, ROS-E02-T009, ROS-E15-T001, ROS-E15-T024
 - **Affected files:** `lib/services/order.service.ts`
 - **Acceptance criteria:**
-  - [ ] PaymentRequest statuses are CREATED, ACTIVE, PAID, SUPERSEDED, EXPIRED, CANCELLED, MANUAL_REVIEW, and REFUNDED. PARTIALLY_PAID is a bill aggregate, not a request status
-  - [ ] Late payment on SUPERSEDED → MANUAL_REVIEW, never PAID. Late payment on EXPIRED auto-matches only if the bill version is unchanged and the amount matches exactly
+  - [ ] PaymentRequest statuses are CREATED, ACTIVE, PAID, SUPERSEDED, EXPIRED, CANCELLED, MANUAL_REVIEW, and REFUNDED (ADR 0007). PARTIALLY_PAID is a bill aggregate, not a request status. A payment may still move from FAILED to PAID when the provider later confirms it (ADR 0008)
+  - [ ] Late payment on SUPERSEDED → MANUAL_REVIEW, never PAID. Late payment on EXPIRED auto-matches only if the bill version is unchanged and the amount matches exactly (ADR 0007)
   - [ ] Uncertain → Pending/Manual review
   - [ ] §9 customer pays twice: a second distinct verified payment for an already-paid bill is recorded once in the ledger, bill stays Paid once, payment flagged MANUAL_REVIEW for refund
   - [ ] §9 webhook duplicated: same provider event id never creates a second ledger entry
   - [ ] Concurrent payments on one bill: two verified payments processed at the same time result in a single settlement under version/transaction control; the other goes to MANUAL_REVIEW or partial handling, never a double settle
+  - [ ] C1: bill close is rejected while any payment request is MANUAL_REVIEW, or ACTIVE and not expired
+  - [ ] C1: a verified payment arriving after the bill is closed is recorded as a post-close exception, never silently applied
+  - [ ] C3: unique index on provider payment ID and refund ID in the ledger (permanent); a second insert is rejected
+  - [ ] C5: the state machine allows FAILED → PAID for the same payment; payment.failed then payment.captured ends PAID with exactly one ledger entry
 - **Status:** Backlog
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
 - **Completion date:** —
-- **Notes:** Build gated on Wave 1 merging into pro-max/release. order.service.ts changes are queued to B. PD-1 is confirmed in ADR 0008: the bill cannot close while a PaymentRequest is MANUAL_REVIEW, or ACTIVE and unexpired. A payment after close does not reopen the bill.
 
 #### ROS-E15-T028 — Partial payments with remainder request; overpay guard
 
@@ -2058,6 +2111,8 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
   - [ ] Paid only after remainder verified; no duplicates
   - [ ] §9 customer pays twice / overpayment: any verified amount above the remaining balance is not applied to the bill; the excess is flagged for refund (REFUND_PENDING via ROS-E15-T029) and reconciliation
   - [ ] Concurrent partial payments: simultaneous verified partial payments never push total paid above the bill; the excess is flagged per the §9 overpayment criterion
+  - [ ] D2: partials OFF by default – at restaurant A an underpayment is not accepted as partial and goes to MANUAL_REVIEW
+  - [ ] Restaurant B (partials ON): Order 1's 200 + 300 flow (Part H #13 / TC-013) completes as specified
 - **Status:** Backlog
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
@@ -2092,11 +2147,17 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
   - [ ] Kitchen release separate, not forced
   - [ ] Open orders keep their policy when policy changes
   - [ ] Order/bill/request/collection/verification/receipt kept separate
+  - [ ] C1: Manager/Admin close is blocked while any request is MANUAL_REVIEW or ACTIVE-unexpired (PD-1 confirmed)
+  - [ ] C2: under PAY_BEFORE_PREPARATION unpaid orders sit in a read-only 'Awaiting payment' state with no prep actions
+  - [ ] C2: auto-release only on a verified ledger payment, never on client-side success
+  - [ ] C2: Manager/Admin manual release requires a reason and is audit-logged
+  - [ ] C2: a SUPERSEDED request keeps the order held. An EXPIRED request stays held unless the late payment matches the unchanged bill exactly, or a Manager or Admin releases it (ADR 0007, ADR 0009)
+  - [ ] C2: configurable aging alert, default 10 minutes
+  - [ ] C2: tips never gate release
 - **Status:** Backlog
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO + TRONX FINANCE MANAGER
 - **Completion date:** —
-- **Notes:** Build gated on Wave 1 merging into pro-max/release. PD-1 is confirmed in ADR 0008: the bill cannot close while a PaymentRequest is MANUAL_REVIEW, or ACTIVE and unexpired. A payment after close does not reopen the bill.
 
 #### ROS-E15-T031 — Bill versioning: finalized-only send, new version on item add, no duplicate per version
 
@@ -2127,6 +2188,8 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
   - [ ] Tip separate from food revenue
   - [ ] No tax treatment assumed
   - [ ] Part H #19: reports expose tip totals as a separate line/column from food revenue, per outlet and date range (report change is a queued patch to I5 reports paths)
+  - [ ] Restaurant B stores 5%, 10% and 15% plus a custom amount. Custom is capped at 25% of the tip base. The ₹20/₹50/₹100 fallback is not stored for B
+  - [ ] D-cap: custom tip above 25% of the tip base is rejected server-side
 - **Status:** Backlog
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO + TRONX FINANCE MANAGER
@@ -2147,6 +2210,12 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
   - [ ] §9 invalid customer number: number validated before send; invalid number → no send, logged, staff shown the error, bill remains in POS
   - [ ] §9 template rejected: a rejected/unapproved template blocks send, is logged with the provider reason, and the bill remains in POS/captain
   - [ ] WhatsApp opt-out: a customer opt-out is recorded and honoured; no further bill/receipt messages are sent to that number and staff see 'Opted out'; bill stays available in POS (TEST_PLAN gap; mechanism per CTO)
+  - [ ] WhatsApp message is a summary (restaurant, order/bill reference, payable) plus a secure link; the itemized bill and QR are on the linked page (CEO default)
+  - [ ] C4: STOP/UNSUBSCRIBE/OPT OUT (case-insensitive) and per-org local-language keywords revoke consent, recording org, outlet, hashed+encrypted phone, source, timestamp and inbound message ID
+  - [ ] C4: suppression checked at outbox send time; suppressed sends logged SKIPPED_SUPPRESSED
+  - [ ] C4: one confirmation message after opt-out, then only customer-requested replies within the 24h window
+  - [ ] C4: START re-subscribes with a new consent record
+  - [ ] C4 tests: STOP blocks an already-queued send; START restores sending; consent is isolated per tenant
 - **Status:** Blocked
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
@@ -2181,6 +2250,7 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Acceptance criteria:**
   - [ ] Each fallback covered by an automated test with mock provider
   - [ ] §9 invalid customer number / §9 template rejected fallback: bill stays available in POS and captain with a 'Not delivered' reason, staff can share the payment link or QR by another authorized method, and no payment state changes
+  - [ ] C1 post-close exception: a payment after close creates an exception item routed to reconciliation/MANUAL_REVIEW with an outlet-visible alert; the closed bill is not reopened silently
 - **Status:** Backlog
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
@@ -2200,6 +2270,8 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
   - [ ] Mobile/desktop primary action per AC-1b.7
   - [ ] Receipt only after verified payment
   - [ ] Part H #17 / §11 receipt generation: receipt shows restaurant, outlet, order number, table, date/time, items, quantities, line totals, discounts, coupon, packaging, tax breakdown, tip line (only if a tip was paid), amount paid, payment reference and bill reference, all equal to the server bill and ledger
+  - [ ] Linked page shows the itemized bill and QR (the WhatsApp message carries only summary + secure link); the link is unguessable and scoped to one request
+  - [ ] Printing (CEO default until Founder decides): browser-print of the receipt only; no thermal or hardware print path
 - **Status:** Backlog
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
@@ -2221,6 +2293,8 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
   - [ ] Part H #8: fixed tip adds exactly the fixed amount to the confirmed request
   - [ ] Part H #9: percentage tip (5/10/15% on restaurant B) computed on the D9 tip base and shown before confirmation
   - [ ] Part H #10: custom tip accepted only when custom is enabled; invalid/negative values rejected
+  - [ ] Restaurant B shows 5%, 10% and 15% plus custom. Custom is capped at 25% of the tip base. The ₹20/₹50/₹100 chips are not shown for B
+  - [ ] D-cap: custom tip input rejects values above 25% of the tip base with a clear message
 - **Status:** Backlog
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO + TRONX FINANCE MANAGER
@@ -2237,6 +2311,8 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Acceptance criteria:**
   - [ ] 'Finalize bill first' disabled state
   - [ ] 'Not delivered' note with QR still usable and 'Bill available in POS'
+  - [ ] Staff UI sends the summary + secure-link message only (no itemized bill or QR in WhatsApp)
+  - [ ] C4: staff can mark a number opted out from the UI; the action requires a reason and is audit-logged
 - **Status:** Backlog
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
@@ -2335,7 +2411,7 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Dependencies:** ROS-E15-T003, ROS-E15-T004, ROS-E15-T027
 - **Affected files:** — (not named in source docs)
 - **Acceptance criteria:**
-  - [ ] SUPERSEDED and EXPIRED use different copy. A late SUPERSEDED payment is Manual review everywhere. An EXPIRED payment shows Paid only when the bill version is unchanged and the amount matches exactly (AC-5.1)
+  - [ ] SUPERSEDED and EXPIRED use different copy. A late SUPERSEDED payment is Manual review. An EXPIRED payment shows Paid only when the bill version is unchanged and the amount matches exactly (AC-5.1, ADR 0007)
   - [ ] Duplicate → Manual review, bill Paid once (AC-5.2)
   - [ ] Offline → no transition to Paid, UPI actions disabled (AC-5.3)
 - **Status:** Backlog
@@ -2354,13 +2430,14 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Acceptance criteria:**
   - [ ] Loopback DB only; no real money; no real customer messages
   - [ ] Restaurants A/B/C configured exactly as FOUNDER_ORDER_2026-11-07.md 'Appendix: Part H'
-  - [ ] Demo 'TRONX WHATSAPP PAYMENT DEMO' supports the §11 sandbox amounts Rs 1, 20, 149, 520, 1,250
+  - [ ] Demo 'TRONX WHATSAPP PAYMENT DEMO' supports the §11 amounts Rs 20, 149, 520, 1,250 and the configured minimum amount (₹1 UNVERIFIED, not promised)
   - [ ] All UX_SPEC §10 states reachable in sandbox
+  - [ ] Restaurant A partials OFF (D2 default); restaurant B partials ON, tips 5%, 10% and 15% plus custom capped at 25% of the tip base, with no ₹20/₹50/₹100 fallback; restaurant C dine-in = pay-after, takeaway = pay-before (PD-4, CEO-confirmed)
 - **Status:** Blocked
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
 - **Completion date:** —
-- **Notes:** Blocked: merchant sandbox keys, WhatsApp test number.
+- **Notes:** Blocked: merchant sandbox keys, WhatsApp test number. Razorpay test-mode limits (C6): test-mode QRs can't be scanned; use success@razorpay / failure@razorpay for outcomes; a cancelled UPI payment counts as success in test mode, so never use it as a failure test; wrong amount, expiry and refunds use the signed mocked-webhook fixtures (ROS-E15-T053).
 
 #### ROS-E15-T046 — Execute all scenarios (TEST_PLAN E15-TC-001…078: Part H, §11, §9, UX ACs, regression)
 
@@ -2377,7 +2454,7 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
 - **Completion date:** —
-- **Notes:** Blocked: merchant sandbox keys, WhatsApp test number.
+- **Notes:** Blocked: merchant sandbox keys, WhatsApp test number. Razorpay test-mode limits (C6): test-mode QRs can't be scanned; use success@razorpay / failure@razorpay for outcomes; a cancelled UPI payment counts as success in test mode, so never use it as a failure test; wrong amount, expiry and refunds use the signed mocked-webhook fixtures (ROS-E15-T053).
 
 #### ROS-E15-T047 — Production readiness gate: no live payments before onboarding + production credentials + Founder approval
 
@@ -2406,6 +2483,7 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
   - [ ] Runs only after ROS-E15-T045 and T046 have evidence
   - [ ] Amount, outlet and merchant account recorded; result verified via ledger and provider status
   - [ ] Founder approval (via CEO) – extra approval gate: first real-money test
+  - [ ] Records the smallest amount that succeeds in the real-money run and sets the configured minimum from it (₹1 is UNVERIFIED and not assumed)
 - **Status:** Backlog
 - **Test evidence:** —
 - **Reviewer:** TRONX CEO
@@ -2481,3 +2559,44 @@ UX_SPEC §15 Q1 (task IDs / which epic) is resolved: new Epic ROS-E15 (Stream O)
 - **Test evidence:** —
 - **Reviewer:** TRONX CTO
 - **Completion date:** —
+
+#### ROS-E15-T052 — KDS 'Awaiting payment' lane and manual release (PAY_BEFORE_PREPARATION)
+
+- **Source:** CTO decision C2; TEST_PLAN QA-3
+- **Owner:** TRONX FRONTEND ENGINEER
+- **Objective:** KDS UI for orders held under pay-before.
+- **Dependencies:** ROS-E15-T030, ROS-E05-T004
+- **Affected files:** `components/kitchen/`, `components/admin/KitchenDisplay.tsx`
+- **Acceptance criteria:**
+  - [ ] Unpaid orders appear in a read-only 'Awaiting payment' lane visible to kitchen and cashier, with no prep actions
+  - [ ] Order moves to prep only after the server reports a verified ledger payment
+  - [ ] Manager/Admin release button requires a reason; captain/kitchen don't see it
+  - [ ] Aging alert shown after the configured time (default 10 min)
+  - [ ] Tip status has no effect on release
+- **Status:** Backlog
+- **Test evidence:** —
+- **Reviewer:** TRONX CTO
+- **Completion date:** —
+- **Notes:** KDS paths are Stream E's (PATH_OWNERS); changes are a queued patch to E. Build gated on Wave 1 merging into pro-max/release.
+
+#### ROS-E15-T053 — Version-pinned signed mocked-webhook fixture suite (Razorpay)
+
+- **Source:** CTO decision C6 (Razorpay docs check)
+- **Owner:** TRONX BACKEND ENGINEER
+- **Objective:** Simulate what the Razorpay sandbox can't: wrong amount, expiry, refunds, duplicates, failure→capture, bad signature.
+- **Dependencies:** ROS-E15-T026, ROS-E15-T027
+- **Affected files:** — (not named in source docs)
+- **Acceptance criteria:**
+  - [ ] Fixtures pinned to a recorded Razorpay API/payload version
+  - [ ] Every fixture signed over the raw body with HMAC-SHA256 using the test webhook secret, with a unique x-razorpay-event-id
+  - [ ] Wrong-amount qr_code.credited → MANUAL_REVIEW, no ledger change
+  - [ ] qr_code.closed → request EXPIRED, order held (close-reason field taken from Razorpay's event docs; currently unverified)
+  - [ ] refund.processed full and partial → ledger refund entry with the tip refunded as its own component
+  - [ ] Duplicate event ID → processed once
+  - [ ] payment.failed then payment.captured → PAID with one ledger entry
+  - [ ] Bad signature → 401, no side effects
+- **Status:** Backlog
+- **Test evidence:** —
+- **Reviewer:** TRONX CTO
+- **Completion date:** —
+- **Notes:** Test-only; no live provider calls. Build gated on Wave 1 merging into pro-max/release.
