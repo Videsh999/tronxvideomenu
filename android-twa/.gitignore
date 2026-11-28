@@ -1,0 +1,6 @@
+# Never commit signing material
+*.keystore
+*.jks
+build/
+app-release-*.apk
+app-release-*.aab

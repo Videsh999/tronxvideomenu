@@ -21,7 +21,10 @@
     "demo:seed:cheese:http": "curl -sS -X POST http://localhost:3000/api/dev/seed-cheese",
     "demo:verify:cheese": "node scripts/verify-cheese-enterprise.mjs",
     "demo:verify:reupload": "node scripts/verify-demo-reupload-import.mjs",
-    "bench:menu": "node scripts/load-benchmark-menu.mjs"
+    "bench:menu": "node scripts/load-benchmark-menu.mjs",
+    "pwa:icons": "python3 scripts/generate-pwa-icons.py",
+    "android:init": "npx --yes @bubblewrap/cli init --manifest=https://menu.tronx.co.in/manifest.webmanifest --directory=android-twa/project",
+    "android:build": "cd android-twa/project && npx --yes @bubblewrap/cli build"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",

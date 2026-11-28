@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
+import InstallApp from "@/components/pwa/InstallApp";
 import {
   BookOpen,
   LayoutDashboard,
@@ -212,7 +213,8 @@ export default function AdminSidebar({
           ))}
         </nav>
 
-        <div className="border-t border-neutral-200 p-4">
+        <div className="space-y-1 border-t border-neutral-200 p-4">
+          <InstallApp variant="button" appName="TRONX Admin" />
           <Link
             href={restaurantSlug ? `/menu/${restaurantSlug}` : "/admin/login"}
             target="_blank"

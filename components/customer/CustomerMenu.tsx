@@ -10,6 +10,7 @@ import RestaurantHero from "@/components/customer/RestaurantHero";
 import { api } from "@/lib/api";
 import { AlertTriangle, CalendarDays, Check, ChevronDown, Dices, Minus, Plus, QrCode, Receipt, Search, ShoppingBag, SlidersHorizontal, Trash2, Utensils, Wifi, X } from "lucide-react";
 import SmartImage from "@/components/shared/SmartImage";
+import InstallApp from "@/components/pwa/InstallApp";
 import dynamic from "next/dynamic";
 import FeaturedCarousel from "@/components/customer/FeaturedCarousel";
 import LanguageMenu from "@/components/customer/LanguageMenu";
@@ -747,6 +748,9 @@ export default function CustomerMenu({
               </div>
             </div>
           ) : null}
+        </div>
+        <div className="mx-auto max-w-7xl px-5 pb-6 empty:hidden sm:px-6 lg:px-8">
+          <InstallApp appName={menu.restaurant.name} className="max-w-md" />
         </div>
         <div className="border-t border-[var(--customer-border)]">
           <p className="mx-auto max-w-7xl px-5 pb-28 pt-5 text-xs text-neutral-400 sm:px-6 lg:px-8">{t("poweredBy")} <Link href="/" className="font-semibold text-neutral-600 hover:text-neutral-900">TRONX</Link></p>

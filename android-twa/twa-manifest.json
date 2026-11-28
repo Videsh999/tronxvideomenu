@@ -1,0 +1,30 @@
+{
+  "packageId": "in.co.tronx.menu",
+  "host": "menu.tronx.co.in",
+  "name": "TRONX",
+  "launcherName": "TRONX",
+  "display": "standalone",
+  "themeColor": "#ffffff",
+  "themeColorDark": "#171717",
+  "navigationColor": "#ffffff",
+  "navigationColorDark": "#171717",
+  "backgroundColor": "#ffffff",
+  "enableNotifications": false,
+  "startUrl": "/?source=twa",
+  "iconUrl": "https://menu.tronx.co.in/icons/icon-512.png",
+  "maskableIconUrl": "https://menu.tronx.co.in/icons/icon-maskable-512.png",
+  "webManifestUrl": "https://menu.tronx.co.in/manifest.webmanifest",
+  "appVersionName": "1.0.0",
+  "appVersion": "1",
+  "signingKey": {
+    "path": "./tronx-release.keystore",
+    "alias": "tronx"
+  },
+  "fallbackType": "customtabs",
+  "features": {},
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "orientation": "default",
+  "minSdkVersion": 21,
+  "generatorApp": "bubblewrap-cli"
+}

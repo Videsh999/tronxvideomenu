@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { ExternalLink, LayoutDashboard, Menu, PlusCircle, Store, X } from "lucide-react";
 import LogoutButton from "@/components/shared/LogoutButton";
 import BrandMark from "@/components/shared/BrandMark";
+import InstallApp from "@/components/pwa/InstallApp";
 
 const navItems = [
   { href: "/super-admin", label: "Dashboard", icon: LayoutDashboard, exact: true },
@@ -75,6 +76,7 @@ export default function SuperAdminLayout({
           })}
         </nav>
         <div className="mt-auto space-y-2 border-t border-neutral-200 pt-4">
+          <InstallApp variant="button" appName="TRONX Super Admin" />
           <Link href="/" target="_blank" className="flex items-center justify-between rounded-xl px-3 py-2.5 text-sm text-neutral-500 transition hover:bg-neutral-50 hover:text-neutral-900">
             Public site <ExternalLink className="h-3.5 w-3.5 opacity-60" />
           </Link>
